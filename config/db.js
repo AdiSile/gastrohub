@@ -30,6 +30,7 @@
 const path = require('path');
 const fs   = require('fs');
 const Datastore = require('nedb');
+const Database = require('better-sqlite3');
 
 // ---------------------------------------------------------------------------
 // Path helpers
@@ -161,6 +162,63 @@ const deliveries = new Datastore({
   autoload: true,
   timestampData: false,
 });
+
+// ---------------------------------------------------------------------------
+// SQLite database (better-sqlite3) – pentru modele noi (ex: reservationModel)
+// ---------------------------------------------------------------------------
+
+/**
+ * Conexiune SQLite partajată. Fișierul: <dataDir>/gastrohub.db
+ */
+const sqliteDb = new Database(path.join(dataDir, 'gastrohub.db'));
+
+// Pragmatic: activăm WAL pentru performanță concurentă mai bună
+sqliteDb.pragma('journal_mode = WAL');
+sqliteDb.pragma('foreign_keys = ON');
+
+/**
+ * Asigură existența tabelei de rezervări (SQLite).
+ */
+sqliteDb.exec(`
+  CREATE TABLE IF NOT EXISTS reservations (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    hotelId     TEXT    NOT NULL,
+    guestId     TEXT,
+    guestName   TEXT    NOT NULL,
+    guestPhone  TEXT    DEFAULT '',
+    guestEmail  TEXT    DEFAULT '',
+    checkIn     TEXT    NOT NULL,
+    checkOut    TEXT    NOT NULL,
+    roomId      TEXT,
+    numGuests   INTEGER DEFAULT 1,
+    status      TEXT    DEFAULT 'confirmată',
+    notes       TEXT    DEFAULT '',
+    createdAt   TEXT    DEFAULT (datetime('now')),
+    updatedAt   TEXT    DEFAULT (datetime('now'))
+  );
+`);
+
+/**
+ * Metode expuse pentru compatibilitate cu modelele SQLite:
+ *  - db.run(sql, params)   => returnează { changes, lastInsertRowid }
+ *  - db.get(sql, params)   => returnează primul rând sau undefined
+ *  - db.all(sql, params)   => returnează toate rândurile (Array)
+ */
+
+const run = (sql, params = []) => {
+  const stmt = sqliteDb.prepare(sql);
+  return stmt.run(...params);
+};
+
+const get = (sql, params = []) => {
+  const stmt = sqliteDb.prepare(sql);
+  return stmt.get(...params);
+};
+
+const all = (sql, params = []) => {
+  const stmt = sqliteDb.prepare(sql);
+  return stmt.all(...params);
+};
 
 // ---------------------------------------------------------------------------
 // Indexuri – colecţii existente
@@ -511,4 +569,4 @@ deliveries.ensureIndex({ fieldName: 'tenantId_supplierId', fieldName: ['tenantId
 // Export singleton
 // ---------------------------------------------------------------------------
 
-module.exports = { users, tenants, restaurants, hotels, reservations, inventoryItems, inventoryTransactions, suppliers, deliveries, dataDir };
+module.exports = { users, tenants, restaurants, hotels, reservations, inventoryItems, inventoryTransactions, suppliers, deliveries, dataDir, run, get, all };

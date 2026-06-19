@@ -925,4 +925,638 @@ function applyUsersFilters() {
   const searchInput = document.getElementById('admin-users-search');
   const roleSelect = document.getElementById('admin-users-role');
 
-  AdminState.filters.users.search = search
+  AdminState.filters.users.search = searchInput ? searchInput.value.trim() : '';
+  AdminState.filters.users.role = roleSelect ? roleSelect.value : 'all';
+  AdminState.pagination.users.page = 1;
+
+  loadAdminUsers();
+}
+
+/**
+ * Resetează filtrele pentru utilizatori.
+ */
+function resetUsersFilters() {
+  AdminState.filters.users = { search: '', role: 'all' };
+  AdminState.pagination.users.page = 1;
+
+  const searchInput = document.getElementById('admin-users-search');
+  const roleSelect = document.getElementById('admin-users-role');
+
+  if (searchInput) searchInput.value = '';
+  if (roleSelect) roleSelect.value = 'all';
+
+  loadAdminUsers();
+}
+
+/**
+ * Deschide modalul pentru crearea unui utilizator nou.
+ */
+function showNewUserForm() {
+  const modal = document.getElementById('admin-user-modal');
+  if (!modal) return;
+
+  document.getElementById('user-modal-title').textContent = 'Utilizator Nou';
+  document.getElementById('user-modal-id').value = '';
+  document.getElementById('user-modal-name').value = '';
+  document.getElementById('user-modal-email').value = '';
+  document.getElementById('user-modal-password').value = '';
+  document.getElementById('user-modal-role').value = 'client';
+  document.getElementById('user-modal-tenant').value = '';
+
+  modal.classList.add('modal-overlay--active');
+  modal.style.display = 'flex';
+}
+
+/**
+ * Deschide modalul pentru editarea unui utilizator.
+ *
+ * @param {string} userId - ID-ul utilizatorului
+ */
+async function editAdminUser(userId) {
+  const user = AdminState.users.find(u => (u._id || u.id) === userId);
+  if (!user) {
+    showToast('Utilizatorul nu a fost găsit', 'error');
+    return;
+  }
+
+  const modal = document.getElementById('admin-user-modal');
+  if (!modal) return;
+
+  document.getElementById('user-modal-title').textContent = 'Editează Utilizator';
+  document.getElementById('user-modal-id').value = user._id || user.id || '';
+  document.getElementById('user-modal-name').value = user.name || '';
+  document.getElementById('user-modal-email').value = user.email || '';
+  document.getElementById('user-modal-password').value = '';
+  document.getElementById('user-modal-role').value = user.role || 'client';
+  document.getElementById('user-modal-tenant').value = user.tenantId || '';
+
+  modal.classList.add('modal-overlay--active');
+  modal.style.display = 'flex';
+}
+
+/**
+ * Salvează un utilizator (creare sau actualizare).
+ */
+async function saveAdminUser() {
+  const id = document.getElementById('user-modal-id').value;
+  const formData = {
+    name: document.getElementById('user-modal-name').value.trim(),
+    email: document.getElementById('user-modal-email').value.trim(),
+    password: document.getElementById('user-modal-password').value,
+    role: document.getElementById('user-modal-role').value,
+    tenantId: document.getElementById('user-modal-tenant').value.trim() || undefined,
+  };
+
+  if (!formData.email) {
+    showToast('Email-ul este obligatoriu', 'error');
+    return;
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    showToast('Email-ul nu este valid', 'error');
+    return;
+  }
+
+  if (!id && !formData.password) {
+    showToast('Parola este obligatorie pentru utilizatorii noi', 'error');
+    return;
+  }
+
+  closeModal('admin-user-modal');
+  showLoading(true);
+
+  try {
+    if (id) {
+      const updateData = { ...formData };
+      if (!updateData.password) delete updateData.password;
+      await adminApiRequest(`/users/${id}`, { method: 'PUT', body: updateData });
+      showToast('Utilizator actualizat cu succes!', 'success');
+    } else {
+      await adminApiRequest('/users', { method: 'POST', body: formData });
+      showToast('Utilizator creat cu succes!', 'success');
+    }
+    loadAdminUsers();
+  } catch (error) {
+    showToast(`Eroare la salvarea utilizatorului: ${error.message}`, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+/**
+ * Șterge un utilizator după confirmare.
+ *
+ * @param {string} userId - ID-ul utilizatorului
+ */
+async function deleteAdminUser(userId) {
+  const user = AdminState.users.find(u => (u._id || u.id) === userId);
+  if (!confirm(`Sigur doriți să ștergeți utilizatorul "${user ? (user.name || user.email) : ''}"?\nAceastă acțiune este ireversibilă!`)) {
+    return;
+  }
+
+  showLoading(true);
+  try {
+    await adminApiRequest(`/users/${userId}`, { method: 'DELETE' });
+    showToast('Utilizator șters cu succes!', 'success');
+    loadAdminUsers();
+  } catch (error) {
+    showToast(`Eroare la ștergerea utilizatorului: ${error.message}`, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ===================================================================
+// JURNAL AUDIT
+// ===================================================================
+
+/**
+ * Încarcă jurnalul de audit.
+ */
+async function loadAuditLogs() {
+  showLoading(true);
+  try {
+    const params = new URLSearchParams();
+    const f = AdminState.filters.audit;
+    if (f.search) params.set('search', f.search);
+    if (f.action !== 'all') params.set('action', f.action);
+    if (f.dateFrom) params.set('dateFrom', f.dateFrom);
+    if (f.dateTo) params.set('dateTo', f.dateTo);
+
+    const p = AdminState.pagination.audit;
+    params.set('page', p.page);
+    params.set('perPage', p.perPage);
+
+    const response = await adminApiRequest(`/audit?${params.toString()}`);
+    const data = response.data || response;
+
+    AdminState.auditLogs = data.items || data.logs || [];
+    AdminState.pagination.audit.total = data.total || AdminState.auditLogs.length;
+
+    renderAuditLogsTable();
+    renderAuditLogsPagination();
+  } catch (error) {
+    showToast(`Eroare la încărcarea jurnalului de audit: ${error.message}`, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+/**
+ * Afișează tabelul cu jurnalul de audit.
+ */
+function renderAuditLogsTable() {
+  const tbody = document.getElementById('admin-audit-table-body');
+  if (!tbody) return;
+
+  if (AdminState.auditLogs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center">Nu există înregistrări de audit.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = AdminState.auditLogs.map(log => `
+    <tr>
+      <td>${typeof formatDate === 'function' ? formatDate(log.createdAt || log.timestamp) : (log.createdAt || '-')}</td>
+      <td>
+        <span class="badge badge-${getAuditActionBadge(log.action)}">${escapeHtml(log.action || 'N/A')}</span>
+      </td>
+      <td>${escapeHtml(log.user || log.userEmail || 'Sistem')}</td>
+      <td>${escapeHtml(log.details || log.description || '-')}</td>
+      <td>${escapeHtml(log.tenantId || log.ip || '-')}</td>
+    </tr>
+  `).join('');
+}
+
+/**
+ * Returnează clasa badge-ului pentru o acțiune de audit.
+ *
+ * @param {string} action - Acțiunea
+ * @returns {string} Clasa badge
+ */
+function getAuditActionBadge(action) {
+  const map = {
+    'create': 'success',
+    'update': 'info',
+    'delete': 'danger',
+    'login': 'info',
+    'logout': 'secondary',
+    'error': 'danger',
+    'warning': 'warning',
+  };
+  return map[action] || 'info';
+}
+
+/**
+ * Afișează paginarea pentru jurnalul de audit.
+ */
+function renderAuditLogsPagination() {
+  const container = document.getElementById('admin-audit-pagination');
+  if (!container) return;
+
+  const p = AdminState.pagination.audit;
+  const totalPages = Math.ceil(p.total / p.perPage) || 1;
+
+  if (totalPages <= 1) {
+    container.innerHTML = '';
+    return;
+  }
+
+  let html = '<nav><ul class="pagination pagination-sm">';
+  html += `<li class="page-item ${p.page <= 1 ? 'disabled' : ''}">
+    <button class="page-link" onclick="changeAuditPage(${p.page - 1})">&laquo;</button>
+  </li>`;
+
+  for (let i = 1; i <= totalPages; i++) {
+    html += `<li class="page-item ${i === p.page ? 'active' : ''}">
+      <button class="page-link" onclick="changeAuditPage(${i})">${i}</button>
+    </li>`;
+  }
+
+  html += `<li class="page-item ${p.page >= totalPages ? 'disabled' : ''}">
+    <button class="page-link" onclick="changeAuditPage(${p.page + 1})">&raquo;</button>
+  </li>`;
+  html += '</ul></nav>';
+  container.innerHTML = html;
+}
+
+/**
+ * Schimbă pagina pentru jurnalul de audit.
+ *
+ * @param {number} page - Numărul paginii
+ */
+function changeAuditPage(page) {
+  AdminState.pagination.audit.page = page;
+  loadAuditLogs();
+}
+
+/**
+ * Aplică filtrele pentru jurnalul de audit.
+ */
+function applyAuditFilters() {
+  const searchInput = document.getElementById('admin-audit-search');
+  const actionSelect = document.getElementById('admin-audit-action');
+  const dateFrom = document.getElementById('admin-audit-date-from');
+  const dateTo = document.getElementById('admin-audit-date-to');
+
+  AdminState.filters.audit.search = searchInput ? searchInput.value.trim() : '';
+  AdminState.filters.audit.action = actionSelect ? actionSelect.value : 'all';
+  AdminState.filters.audit.dateFrom = dateFrom ? dateFrom.value : '';
+  AdminState.filters.audit.dateTo = dateTo ? dateTo.value : '';
+  AdminState.pagination.audit.page = 1;
+
+  loadAuditLogs();
+}
+
+/**
+ * Resetează filtrele pentru jurnalul de audit.
+ */
+function resetAuditFilters() {
+  AdminState.filters.audit = { search: '', action: 'all', dateFrom: '', dateTo: '' };
+  AdminState.pagination.audit.page = 1;
+
+  const searchInput = document.getElementById('admin-audit-search');
+  const actionSelect = document.getElementById('admin-audit-action');
+  const dateFrom = document.getElementById('admin-audit-date-from');
+  const dateTo = document.getElementById('admin-audit-date-to');
+
+  if (searchInput) searchInput.value = '';
+  if (actionSelect) actionSelect.value = 'all';
+  if (dateFrom) dateFrom.value = '';
+  if (dateTo) dateTo.value = '';
+
+  loadAuditLogs();
+}
+
+// ===================================================================
+// SETĂRI PLATFORMĂ
+// ===================================================================
+
+/**
+ * Încarcă setările platformei.
+ */
+async function loadPlatformSettings() {
+  showLoading(true);
+  try {
+    const data = await adminApiRequest('/settings');
+    const settings = data.data || data || {};
+
+    // Populează câmpurile cu valorile din setări
+    const fields = {
+      'settings-platform-name': settings.platformName || 'GastroHub',
+      'settings-platform-url': settings.platformUrl || 'https://gastrohub.ro',
+      'settings-platform-email': settings.supportEmail || 'suport@gastrohub.ro',
+      'settings-platform-phone': settings.supportPhone || '+40 731 234 567',
+      'settings-platform-description': settings.description || '',
+      'settings-default-language': settings.defaultLanguage || 'ro',
+      'settings-default-currency': settings.defaultCurrency || 'RON',
+      'settings-timezone': settings.timezone || 'Europe/Bucharest',
+      'settings-date-format': settings.dateFormat || 'DD/MM/YYYY',
+      'settings-max-tenants': settings.maxTenants || 1000,
+      'settings-max-users-per-tenant': settings.maxUsersPerTenant || 500,
+      'settings-trial-days': settings.trialDays || 14,
+      'settings-session-timeout': settings.sessionTimeout || 120,
+      'settings-max-file-size': settings.maxFileSize || 10,
+      'settings-api-rate-limit': settings.apiRateLimit || 60,
+      'settings-billing-cycle': settings.billingCycle || 'monthly',
+      'settings-currency-symbol': settings.currencySymbol || 'lei',
+      'settings-tax-rate': settings.taxRate || 19,
+      'settings-tax-label': settings.taxLabel || 'TVA',
+      'settings-brand-primary-color': settings.brandPrimaryColor || '#6f42c1',
+      'settings-brand-primary-color-hex': settings.brandPrimaryColor || '#6f42c1',
+      'settings-brand-secondary-color': settings.brandSecondaryColor || '#0d1117',
+      'settings-brand-secondary-color-hex': settings.brandSecondaryColor || '#0d1117',
+      'settings-brand-accent-color': settings.brandAccentColor || '#8b5cf6',
+      'settings-brand-accent-color-hex': settings.brandAccentColor || '#8b5cf6',
+      'settings-brand-logo': settings.brandLogo || '/admin/img/logo.png',
+      'settings-brand-favicon': settings.brandFavicon || '/favicon.ico',
+      'settings-brand-footer-text': settings.brandFooterText || '© 2025 GastroHub. Toate drepturile rezervate.',
+      'settings-brand-custom-css': settings.customCss || '',
+      'settings-custom-terms-url': settings.customTermsUrl || '/terms',
+      'settings-custom-privacy-url': settings.customPrivacyUrl || '/privacy',
+      'settings-custom-cookies-url': settings.customCookiesUrl || '/cookies',
+    };
+
+    Object.entries(fields).forEach(([id, value]) => {
+      const el = document.getElementById(id);
+      if (el) {
+        if (el.type === 'checkbox') {
+          el.checked = !!value;
+        } else if (el.type === 'color') {
+          el.value = value || '#000000';
+        } else {
+          el.value = value;
+        }
+      }
+    });
+
+    // Checkbox-uri
+    const checkboxFields = {
+      'settings-tax-enabled': settings.taxEnabled !== false,
+      'settings-auto-invoice': settings.autoInvoice !== false,
+      'settings-feature-self-registration': settings.selfRegistration !== false,
+      'settings-feature-multi-language': settings.multiLanguage !== false,
+      'settings-feature-export-data': settings.exportData !== false,
+      'settings-feature-api-access': settings.apiAccess !== false,
+      'settings-feature-webhooks': !!settings.webhooks,
+      'settings-feature-analytics': settings.analytics !== false,
+    };
+
+    Object.entries(checkboxFields).forEach(([id, checked]) => {
+      const el = document.getElementById(id);
+      if (el) el.checked = checked;
+    });
+
+    // Feature toggles
+    document.querySelectorAll('.feature-toggle').forEach(toggle => {
+      const feature = toggle.getAttribute('data-feature');
+      if (feature && settings.features && settings.features[feature] !== undefined) {
+        toggle.checked = settings.features[feature];
+      }
+    });
+
+  } catch (error) {
+    showToast(`Eroare la încărcarea setărilor: ${error.message}`, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+/**
+ * Salvează setările platformei.
+ */
+async function savePlatformSettings() {
+  const settings = {
+    platformName: document.getElementById('settings-platform-name')?.value,
+    platformUrl: document.getElementById('settings-platform-url')?.value,
+    supportEmail: document.getElementById('settings-platform-email')?.value,
+    supportPhone: document.getElementById('settings-platform-phone')?.value,
+    description: document.getElementById('settings-platform-description')?.value,
+    defaultLanguage: document.getElementById('settings-default-language')?.value,
+    defaultCurrency: document.getElementById('settings-default-currency')?.value,
+    timezone: document.getElementById('settings-timezone')?.value,
+    dateFormat: document.getElementById('settings-date-format')?.value,
+    maxTenants: parseInt(document.getElementById('settings-max-tenants')?.value) || 0,
+    maxUsersPerTenant: parseInt(document.getElementById('settings-max-users-per-tenant')?.value) || 0,
+    trialDays: parseInt(document.getElementById('settings-trial-days')?.value) || 14,
+    sessionTimeout: parseInt(document.getElementById('settings-session-timeout')?.value) || 120,
+    maxFileSize: parseInt(document.getElementById('settings-max-file-size')?.value) || 10,
+    apiRateLimit: parseInt(document.getElementById('settings-api-rate-limit')?.value) || 60,
+    billingCycle: document.getElementById('settings-billing-cycle')?.value,
+    currencySymbol: document.getElementById('settings-currency-symbol')?.value,
+    taxRate: parseFloat(document.getElementById('settings-tax-rate')?.value) || 0,
+    taxLabel: document.getElementById('settings-tax-label')?.value,
+    taxEnabled: document.getElementById('settings-tax-enabled')?.checked,
+    autoInvoice: document.getElementById('settings-auto-invoice')?.checked,
+    selfRegistration: document.getElementById('settings-feature-self-registration')?.checked,
+    multiLanguage: document.getElementById('settings-feature-multi-language')?.checked,
+    exportData: document.getElementById('settings-feature-export-data')?.checked,
+    apiAccess: document.getElementById('settings-feature-api-access')?.checked,
+    webhooks: document.getElementById('settings-feature-webhooks')?.checked,
+    analytics: document.getElementById('settings-feature-analytics')?.checked,
+    brandPrimaryColor: document.getElementById('settings-brand-primary-color')?.value,
+    brandSecondaryColor: document.getElementById('settings-brand-secondary-color')?.value,
+    brandAccentColor: document.getElementById('settings-brand-accent-color')?.value,
+    brandLogo: document.getElementById('settings-brand-logo')?.value,
+    brandFavicon: document.getElementById('settings-brand-favicon')?.value,
+    brandFooterText: document.getElementById('settings-brand-footer-text')?.value,
+    customCss: document.getElementById('settings-brand-custom-css')?.value,
+    customTermsUrl: document.getElementById('settings-custom-terms-url')?.value,
+    customPrivacyUrl: document.getElementById('settings-custom-privacy-url')?.value,
+    customCookiesUrl: document.getElementById('settings-custom-cookies-url')?.value,
+    features: {},
+  };
+
+  // Colectează feature toggles
+  document.querySelectorAll('.feature-toggle').forEach(toggle => {
+    const feature = toggle.getAttribute('data-feature');
+    if (feature) {
+      settings.features[feature] = toggle.checked;
+    }
+  });
+
+  showLoading(true);
+  try {
+    await adminApiRequest('/settings', { method: 'PUT', body: settings });
+    showToast('Setările au fost salvate cu succes!', 'success');
+  } catch (error) {
+    showToast(`Eroare la salvarea setărilor: ${error.message}`, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+/**
+ * Resetează setările la valorile implicite.
+ */
+async function resetPlatformSettings() {
+  if (!confirm('Sigur doriți să resetați toate setările la valorile implicite?\nAceastă acțiune nu poate fi anulată!')) {
+    return;
+  }
+
+  showLoading(true);
+  try {
+    await adminApiRequest('/settings/reset', { method: 'POST' });
+    showToast('Setările au fost resetate la valorile implicite!', 'success');
+    loadPlatformSettings();
+  } catch (error) {
+    showToast(`Eroare la resetarea setărilor: ${error.message}`, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+/**
+ * Comută între tab-urile de setări.
+ *
+ * @param {string} tabName - Numele tab-ului
+ */
+function switchSettingsTab(tabName) {
+  // Ascunde toate tab-urile
+  document.querySelectorAll('.settings-tab').forEach(el => {
+    el.style.display = 'none';
+  });
+
+  // Afișează tab-ul selectat
+  const targetTab = document.getElementById(`settings-tab-${tabName}`);
+  if (targetTab) {
+    targetTab.style.display = 'block';
+  }
+
+  // Actualizează butoanele active
+  document.querySelectorAll('#settingsTabs .tab').forEach(el => el.classList.remove('active'));
+  const activeTab = document.querySelector(`#settingsTabs .tab[data-tab="${tabName}"]`);
+  if (activeTab) activeTab.classList.add('active');
+}
+
+/**
+ * Comută o funcționalitate on/off.
+ *
+ * @param {HTMLInputElement} checkbox - Elementul checkbox
+ */
+function toggleFeature(checkbox) {
+  const feature = checkbox.getAttribute('data-feature');
+  if (!feature) return;
+  // Actualizarea se face doar vizual; salvarea se face prin savePlatformSettings
+}
+
+// ===================================================================
+// FUNCȚII UTILITARE GLOBALE
+// ===================================================================
+
+/**
+ * Afișează un toast de notificare.
+ *
+ * @param {string} message - Mesajul
+ * @param {string} type - Tipul (success, error, warning, info)
+ */
+function showToast(message, type) {
+  type = type || 'info';
+  const container = document.getElementById('toastContainer');
+  if (!container) {
+    console.warn('Toast container not found');
+    return;
+  }
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+
+  const iconMap = {
+    success: 'fa-check-circle',
+    error: 'fa-exclamation-circle',
+    warning: 'fa-exclamation-triangle',
+    info: 'fa-info-circle',
+  };
+  const icon = iconMap[type] || iconMap.info;
+
+  toast.innerHTML = `<i class="fas ${icon}"></i> ${escapeHtml(message)}`;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.3s ease';
+    setTimeout(() => {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 300);
+  }, 4000);
+}
+
+/**
+ * Afișează sau ascunde overlay-ul de încărcare.
+ *
+ * @param {boolean} show - true pentru afișare, false pentru ascundere
+ */
+function showLoading(show) {
+  const overlay = document.getElementById('loadingOverlay');
+  if (overlay) {
+    overlay.style.display = show ? 'flex' : 'none';
+  }
+}
+
+/**
+ * Închide un modal după ID.
+ *
+ * @param {string} modalId - ID-ul modalului
+ */
+function closeModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (modal) {
+    modal.classList.remove('modal-overlay--active');
+    modal.style.display = 'none';
+  }
+}
+
+/**
+ * Formatează o sumă ca monedă.
+ *
+ * @param {number} amount - Suma
+ * @returns {string} Suma formatată
+ */
+function formatCurrency(amount) {
+  return Number(amount || 0).toFixed(2) + ' lei';
+}
+
+/**
+ * Formatează o dată ISO.
+ *
+ * @param {string} dateStr - Data ISO
+ * @returns {string} Data formatată
+ */
+function formatDate(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('ro-RO', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * Escape pentru HTML.
+ *
+ * @param {string} text - Textul
+ * @returns {string} Textul escapet
+ */
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.appendChild(document.createTextNode(text));
+  return div.innerHTML;
+}
+
+/**
+ * Inițializează toggle-ul sidebar-ului.
+ */
+document.addEventListener('DOMContentLoaded', function () {
+  const sidebarToggle = document.getElementById('sidebarToggle');
+  const sidebar = document.getElementById('adminSidebar');
+
+  if (sidebarToggle && sidebar) {
+    sidebarToggle.addEventListener('click', function () {
+      sidebar.classList.toggle('open');
+    });
+  }
+});

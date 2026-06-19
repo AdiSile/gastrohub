@@ -239,9 +239,79 @@
       "role": "assistant",
       "content": "✅ Pas 1 (tdd-guide): 1 fișiere salvate.\n✅ Pas 2 (tdd-guide): 0 fișiere salvate.\n✅ Pas 3 (tdd-guide): 1 fișiere salvate.\n✅ Pas 4 (tdd-guide): 1 fișiere salvate.\n✅ Pas 5 (tdd-guide): 0 fișiere salvate.\n✅ Pas 6 (tdd-guide): 0 fișiere salvate.\n✅ Pas 7 (tdd-guide): 0 fișiere salvate.\n✅ Pas 8 (tdd-guide): 0 fișiere salvate.\n✅ Pas 9 (tdd-guide): 1 fișiere salvate.\n✅ Pas 10 (tdd-guide): 1 fișiere salvate.\n✅ Pas 11 (tdd-guide): 1 fișiere salvate.\n✅ Pas 12 (tdd-guide): 0 fișiere salvate.\n✅ Pas 13 (tdd-guide): 1 fișiere salvate.",
       "timestamp": 1781894801.471797
+    },
+    {
+      "role": "user",
+      "content": "Scanează TOATE fișierele JavaScript (.js) din proiectul GastroHub și repară orice eroare de sintaxă care împiedică pornirea serverului Node.js, în special:  1. În `models/reservationModel.js` – repară linia incompletă `if (!` și orice altă expresie neterminată. 2. Verifică și repară orice alt fișier care conține linii tăiate, paranteze lipsă sau importuri greșite. 3. Asigură-te că toate fișierele sunt complete, fără erori, și returnează-le pe cele modificate în formatul ### cale/relativă/la/fișier.ext ... ### END.",
+      "timestamp": 1781902654.3600266
+    },
+    {
+      "role": "system",
+      "content": "🚀 Proiect pornit: Proiect: gastrohub-core",
+      "timestamp": 1781902654.3950286
+    },
+    {
+      "role": "assistant",
+      "content": "✅ 0 fișiere generate.",
+      "timestamp": 1781902955.1712468
+    },
+    {
+      "role": "user",
+      "content": "Rescrie complet fișierul models/reservationModel.js din proiectul GastroHub. Fișierul trebuie să fie un model Node.js care folosește SQLite (better-sqlite3) și exportă funcțiile necesare pentru gestionarea rezervărilor hoteliere.  **Structură obligatorie:** - Folosește `const db = require('../config/db');` pentru a accesa baza de date. - Exportă funcțiile: createReservation, getReservationById, getReservationsByHotel, getReservationsByGuest, updateReservationStatus, cancelReservation. - Fiecare funcție trebuie să fie completă, fără linii tăiate sau erori de sintaxă. - Nu folosi `better-sqlite3` direct aici; folosește metodele expuse de `db.js` (presupunem că există `db.run(sql, params)`, `db.get(sql, params)`, `db.all(sql, params)`).  **Nu adăuga alt fișier.** Returnează DOAR `models/reservationModel.js` complet, în formatul ### models/reservationModel.js ... ### END.",
+      "timestamp": 1781903188.1186073
+    },
+    {
+      "role": "system",
+      "content": "🚀 Proiect pornit: Proiect: gastrohub-core",
+      "timestamp": 1781903188.13761
+    },
+    {
+      "role": "system",
+      "content": "🚀 Proiect pornit: Proiect: gastrohub-core",
+      "timestamp": 1781903188.1896846
+    },
+    {
+      "role": "system",
+      "content": "🤖 planner: Planificare proiect",
+      "timestamp": 1781903188.2097635
+    },
+    {
+      "role": "system",
+      "content": "🤖 planner: Ești planificatorul șef. Creează un plan de implementare pentru proiectul descris mai jos.\nDacă proiectul este un singur fișier HTML complex, împarte-l în pași mai mici (structură, CSS, JS) dar NU repeta pași care modifică același fișier de mai multe ori fără un motiv clar.\nPentru FIECARE pas, specifică calea completă a fișierului care va fi creat sau modificat.\n\nProiectul:\nRescrie complet fișierul models/reservationModel.js din proiectul GastroHub. Fișierul trebuie să fie un model Node.js care folosește SQLite (better-sqlite3) și exportă funcțiile necesare pentru gestionarea rezervărilor hoteliere.  **Structură obligatorie:** - Folosește `const db = require('../config/db');` pentru a accesa baza de date. - Exportă funcțiile: createReservation, getReservationById, getReservationsByHotel, getReservationsByGuest, updateReservationStatus, cancelReservation. - Fiecare funcție trebuie să fie completă, fără linii tăiate sau erori de sintaxă. - Nu folosi `better-sqlite3` direct aici; folosește metodele expuse de `db.js` (presupunem că există `db.run(sql, params)`, `db.get(sql, params)`, `db.all(sql, params)`).  **Nu adăuga alt fișier.** Returnează DOAR `models/reservationModel.js` complet, în formatul ### models/reservationModel.js ... ### END.\n\nAgenți disponibili: a11y-architect, architect, build-error-resolver, chief-of-staff, code-architect, code-explorer, code-reviewer, code-simplifier, comment-analyzer, conversation-analyzer, cpp-build-resolver, cpp-reviewer, csharp-reviewer, dart-build-resolver, database-reviewer, django-build-resolver, django-reviewer, doc-updater, docs-lookup, e2e-runner, fastapi-reviewer, flutter-reviewer, fsharp-reviewer, gan-evaluator, gan-generator, gan-planner, go-build-resolver, go-reviewer, harmonyos-app-resolver, harness-optimizer, healthcare-reviewer, homelab-architect, java-build-resolver, java-reviewer, kotlin-build-resolver, kotlin-reviewer, loop-operator, marketing-agent, mle-reviewer, network-architect, network-config-reviewer, network-troubleshooter, opensource-forker, opensource-packager, opensource-sanitizer, performance-optimizer, planner, pr-test-analyzer, python-reviewer, pytorch-build-resolver, react-build-resolver, react-reviewer, refactor-cleaner, rust-build-resolver, rust-reviewer, security-reviewer, seo-specialist, silent-failure-hunter, swift-build-resolver, swift-reviewer, tdd-guide, type-design-analyzer, typescript-reviewer\n\nIMPORTANT: Scrie pașii numerotați EXACT în acest format, fiecare pas pe o linie separată:\n1. cale/completă/la/fișier.ext - descrierea pasului (agent: nume_agent)\n2. altă/cale/fișier.js - alt pas (agent: alt_agent)\nFolosește DOAR nume din lista de agenți. Pentru implementare efectivă, folosește tdd-guide.\nNu adăuga markdown suplimentar, nu adăuga secțiuni, doar pașii numerotați cu calea completă a fișierului.",
+      "timestamp": 1781903188.240762
+    },
+    {
+      "role": "user",
+      "content": "Rescrie complet fișierul models/reservationModel.js din proiectul GastroHub. Fișierul trebuie să fie un model Node.js care folosește SQLite (better-sqlite3) și exportă funcțiile necesare pentru gestionarea rezervărilor hoteliere.  **Structură obligatorie:** - Folosește `const db = require('../config/db');` pentru a accesa baza de date. - Exportă funcțiile: createReservation, getReservationById, getReservationsByHotel, getReservationsByGuest, updateReservationStatus, cancelReservation. - Fiecare funcție trebuie să fie completă, fără linii tăiate sau erori de sintaxă. - Nu folosi `better-sqlite3` direct aici; folosește metodele expuse de `db.js` (presupunem că există `db.run(sql, params)`, `db.get(sql, params)`, `db.all(sql, params)`).  **Nu adăuga alt fișier.** Returnează DOAR `models/reservationModel.js` complet, în formatul ### models/reservationModel.js ... ### END.",
+      "timestamp": 1781903261.229093
+    },
+    {
+      "role": "system",
+      "content": "🚀 Proiect pornit: Proiect: gastrohub-core",
+      "timestamp": 1781903261.2520947
+    },
+    {
+      "role": "assistant",
+      "content": "✅ 1 fișiere generate.",
+      "timestamp": 1781903367.3367999
+    },
+    {
+      "role": "user",
+      "content": "În proiectul GastroHub, repară următoarele erori care împiedică pornirea serverului pe Render:  1. **În `routes/reservations.js`** – variabila `VALID_RESERVATION_TYPES` este folosită la linia 135, dar nu este definită.     - Fie definește o constantă `VALID_RESERVATION_TYPES` la începutul fișierului (ex: `['standard', 'vip', 'group']`), fie import-o dintr-un model sau config.    - Asigură-te că orice altă variabilă globală din acest fișier este definită corect.  2. **Scanează TOATE fișierele `.js`** din proiect pentru variabile care sunt folosite dar nu sunt definite (ex: `VALID_...`, `ROOM_TYPES`, etc.). Dacă găsești, repară-le.  3. **Asigură-te că toate importurile (`require`) corespund cu fișiere existente** și că nu lipsesc module.  Returnează toate fișierele modificate în formatul ### cale/relativă/la/fișier.ext ... ### END.",
+      "timestamp": 1781903557.3111835
+    },
+    {
+      "role": "system",
+      "content": "🚀 Proiect pornit: Proiect: gastrohub-core",
+      "timestamp": 1781903557.3488145
+    },
+    {
+      "role": "assistant",
+      "content": "✅ Pas 1 (tdd-guide): 1 fișiere salvate.\n✅ Pas 2 (tdd-guide): 1 fișiere salvate.",
+      "timestamp": 1781903939.9833634
     }
   ],
-  "cerinta": "Creează nucleul platformei „GastroHub”, un SaaS pentru gestionarea restaurantelor, hotelurilor și serviciilor de catering.  Include: - package.json (dependențe: express, nedb, jsonwebtoken, bcryptjs, cookie-parser, helmet, cors, express-validator) - .env.example și .gitignore - server.js (configurare Express, middleware-uri, montare rute) - config/db.js (inițializare NeDB) - config/tenant.js (funcții helper pentru multi‑tenancy) - middleware/auth.js, roles.js, tenant.js, errorHandler.js - middleware roles.js cu rolurile: super_admin, owner, manager, recepție, ospătar, bucătar, client - rute auth.js (register, login, logout) - models/userModel.js (cu câmp pentru rol) - seed automat: super_admin@gastrohub.io / admin123",
+  "cerinta": "Rescrie complet fișierul models/reservationModel.js din proiectul GastroHub. Fișierul trebuie să fie un model Node.js care folosește SQLite (better-sqlite3) și exportă funcțiile necesare pentru gestionarea rezervărilor hoteliere.  **Structură obligatorie:** - Folosește `const db = require('../config/db');` pentru a accesa baza de date. - Exportă funcțiile: createReservation, getReservationById, getReservationsByHotel, getReservationsByGuest, updateReservationStatus, cancelReservation. - Fiecare funcție trebuie să fie completă, fără linii tăiate sau erori de sintaxă. - Nu folosi `better-sqlite3` direct aici; folosește metodele expuse de `db.js` (presupunem că există `db.run(sql, params)`, `db.get(sql, params)`, `db.all(sql, params)`).  **Nu adăuga alt fișier.** Returnează DOAR `models/reservationModel.js` complet, în formatul ### models/reservationModel.js ... ### END.",
   "tasks": [
     {
       "id": "a979f258",
@@ -1268,24 +1338,48 @@
       "desc": "Fișier: test_inventory.ejs\nRescrie fișierul aproape gol (0 linii utile) cu un test minim funcțional\n\nSkill-uri relevante:\nSkill: agent-payment-x402\n# Agent Payment Execution (x402)\n\nEnable AI agents to make policy-gated payments with built-in spending controls. Uses the x402 HTTP payment protocol and MCP tools so agents can pay for external services, APIs, or other agents without custodial risk.\n\n## When to Use\n\nUse when: your agent needs to pa\n\nSkill: ai-regression-testing\n# AI Regression Testing\n\nTesting patterns specifically designed for AI-assisted development, where the same model writes code and reviews it — creating systematic blind spots that only automated tests can catch.\n\n## When to Activate\n\n- AI agent (Claude Code, Cursor, Codex) has modified API routes or\n\nSkill: bun-runtime\n# Bun Runtime\n\nBun is a fast all-in-one JavaScript runtime and toolkit: runtime, package manager, bundler, and test runner.\n\n## When to Use\n\n- **Prefer Bun** for: new JS/TS projects, scripts where install/run speed matters, Vercel deployments with Bun runtime, and when you want a single toolchain (r\n\nReguli:\n---\npaths:\n  - \"**/*.go\"\n  - \"**/go.mod\"\n  - \"**/go.sum\"\n---\n# Go Coding Style\n> This file extends [common/coding-style.md](../common/coding-style.md) with Go specific content.\n- **gofmt** and **goimports** are mandatory — no style debates\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
       "agent": "tdd-guide",
       "status": "pending"
+    },
+    {
+      "id": "84660ef4",
+      "desc": "Implementează complet cerința: <｜｜DSML｜｜tool_calls>\n<｜｜DSML｜｜invoke name=\"shell_exec\">\n<｜｜DSML｜｜parameter name=\"command\" string=\"true\">powershell -Command \"(Get-Content 'admin/public/js/admin.js').Count; Get-Content 'admin/public/js/admin.js' | Select-Object -Last 15\"</｜｜DSML｜｜parameter>\n</｜｜DSML｜｜invoke>\n<｜｜DSML｜｜invoke name=\"shell_exec\">\n<｜｜DSML｜｜parameter name=\"command\" string=\"true\">powershell -Command \"(Get-Content 'customer/public/js/customer.js').Count; Get-Content 'customer/public/js/customer.js' | Select-Object -Last 15\"</｜｜DSML｜｜parameter>\n</｜｜DSML｜｜invoke>\n<｜｜DSML｜｜invoke name=\"shell_exec\">\n<｜｜DSML｜｜parameter name=\"command\" string=\"true\">powershell -Command \"(Get-Content 'hotel/public/js/hotel.js').Count; Get-Content 'hotel/public/js/hotel.js' | Select-Object -Last 15\"</｜｜DSML｜｜parameter>\n</｜｜DSML｜｜invoke>\n<｜｜DSML｜｜invoke name=\"shell_exec\">\n<｜｜DSML｜｜parameter name=\"command\" string=\"true\">powershell -Command \"(Get-Content 'restaurant/public/js/restaurant.js').Count; Get-Content 'restaurant/public/js/restaurant.js' | Select-Object -Last 15\"</｜｜DSML｜｜parameter>\n</｜｜DSML｜｜invoke>\n</｜｜DSML｜｜tool_calls>. Generează toate fișierele necesare.\n\nIMPORTANT: Returnează fiecare fișier în formatul:\n### cale/fișier.ext\nconținut\n### END\nFolosește DOAR căi relative la proiect, nu absolute.",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "3bc3e7e6",
+      "desc": "Implementează complet cerința: Acum am o imagine clară a proiectului. `config/db.js` folosește NeDB, dar cerința spune să presupunem că expune metode SQLite (`db.run`, `db.get`, `db.all`). Voi rescrie `models/reservationModel.js` ca model curat, cu SQLite, exportând cele 6 funcții cerute.\n\n---\n\n### models/reservationModel.js\n```js\n'use strict';\n\n// ---------------------------------------------------------------------------\n// Model Reservation – GastroHub (SQLite / better-sqlite3 via config/db)\n// ---------------------------------------------------------------------------\n// Gestionează rezervările hoteliere: creare, căutare după ID, hotel, guest,\n// actualizare status și anulare.\n//\n// Presupune existența tabelei:\n//   CREATE TABLE IF NOT EXISTS reservations (\n//     id          INTEGER PRIMARY KEY AUTOINCREMENT,\n//     hotelId     TEXT    NOT NULL,\n//     guestId     TEXT,\n//     guestName   TEXT    NOT NULL,\n//     guestPhone  TEXT    DEFAULT '',\n//     guestEmail  TEXT    DEFAULT '',\n//     checkIn     TEXT    NOT NULL,   -- YYYY-MM-DD\n//     checkOut    TEXT    NOT NULL,   -- YYYY-MM-DD\n//     roomId      TEXT,\n//     numGuests   INTEGER DEFAULT 1,\n//     status      TEXT    DEFAULT 'confirmată',\n//     notes       TEXT    DEFAULT '',\n//     createdAt   TEXT    DEFAULT (datetime('now')),\n//     updatedAt   TEXT    DEFAULT (datetime('now'))\n//   );\n// ---------------------------------------------------------------------------\n\nconst db = require('../config/db');\n\n// ---------------------------------------------------------------------------\n// Statusuri valide\n// ---------------------------------------------------------------------------\nconst VALID_STATUSES = [\n  'confirmată',\n  'în așteptare',\n  'anulată',\n  'finalizată',\n  'neprezentat',\n  'în curs',\n  'check-in',\n  'check-out',\n];\n\n// ---------------------------------------------------------------------------\n// Helpers\n// ---------------------------------------------------------------------------\n\n/**\n * Verifică dacă un șir are lungimea între min și max.\n */\nfunction isValidString(val, min = 1, max = 255) {\n  return typeof val === 'string' && val.trim().length >= min && val.trim().length <= max;\n}\n\n/**\n * Verifică dacă o dată este în format YYYY-MM-DD valid.\n */\nfunction isValidDate(dateStr) {\n  if (typeof dateStr !== 'string') return false;\n  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(dateStr)) return false;\n  const d = new Date(dateStr + 'T00:00:00.000Z');\n  return !isNaN(d.getTime());\n}\n\n/**\n * Verifică dacă un status este permis.\n */\nfunction isValidStatus(status) {\n  return VALID_STATUSES.includes(status);\n}\n\n/**\n * Verifică dacă un email este valid (format simplu).\n */\nfunction isValidEmail(email) {\n  if (typeof email !== 'string') return false;\n  return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email);\n}\n\n/**\n * Verifică dacă un telefon este valid.\n */\nfunction isValidPhone(phone) {\n  if (typeof phone !== 'string') return false;\n  return /^[+]?[\\d\\s\\-./()]{6,20}$/.test(phone.trim());\n}\n\n// ---------------------------------------------------------------------------\n// createReservation\n// ---------------------------------------------------------------------------\n\n/**\n * Creează o rezervare hotelieră nouă.\n *\n * @param {Object} data\n * @param {string} data.hotelId      - ID-ul hotelului (obligatoriu)\n * @param {string} data.guestName    - Numele persoanei (obligatoriu)\n * @param {string} data.checkIn      - Data check-in, YYYY-MM-DD (obligatoriu)\n * @param {string} data.checkOut     - Data check-out, YYYY-MM-DD (obligatoriu)\n * @param {string} [data.guestId]    - ID-ul guest-ului\n * @param {string} [data.guestPhone] - Telefon\n * @param {string} [data.guestEmail] - Email\n * @param {string} [data.roomId]     - ID-ul camerei\n * @param {number} [data.numGuests=1] - Număr persoane\n * @param {string} [data.status='confirmată'] - Status\n * @param {string} [data.notes='']   - Note\n * @returns {Object} Rezervarea creată (cu id)\n */\nfunction createReservation(data) {\n  if (!data || typeof data !== 'object') {\n    throw new Error('Datele rezervării sunt invalide.');\n  }\n\n  const {\n    hotelId,\n    guestId = null,\n    guestName,\n    guestPhone = '',\n    guestEmail = '',\n    checkIn,\n    checkOut,\n    roomId = null,\n    numGuests = 1,\n    status = 'confirmată',\n    notes = '',\n  } = data;\n\n  // --- validări ---\n  if (!hotelId || !isValidString(hotelId, 1, 100)) {\n    throw new Error('ID-ul hotelului este obligatoriu.');\n  }\n\n  if (!guestName || !isValidString(guestName, 2, 200)) {\n    throw new Error('Numele persoanei este obligatoriu (2-200 caractere).');\n  }\n\n  if (!checkIn || !isValidDate(checkIn)) {\n    throw new Error('Data de check-in este obligatorie (YYYY-MM-DD).');\n  }\n\n  if (!checkOut || !isValidDate(checkOut)) {\n    throw new Error('Data de check-out este obligatorie (YYYY-MM-DD).');\n  }\n\n  if (new Date(checkOut) <= new Date(checkIn)) {\n    throw new Error('Data de check-out trebuie să fie după data de check-in.');\n  }\n\n  if (guestPhone && !isValidPhone(guestPhone)) {\n    throw new Error('Numărul de telefon nu este valid.');\n  }\n\n  if (guestEmail && !isValidEmail(guestEmail)) {\n    throw new Error('Adresa de email nu este validă.');\n  }\n\n  if (!Number.isInteger(numGuests) || numGuests < 1 || numGuests > 999) {\n    throw new Error('Numărul de persoane trebuie să fie un întreg între 1 și 999.');\n  }\n\n  if (!isValidStatus(status)) {\n    throw new Error(`Statusul \"${status}\" nu este valid. Permise: ${VALID_STATUSES.join(', ')}.`);\n  }\n\n  const finalNotes = typeof notes === 'string' ? notes : '';\n\n  // --- inserare ---\n  const sql = `\n    INSERT INTO reservations\n      (hotelId, guestId, guestName, guestPhone, guestEmail,\n       checkIn, checkOut, roomId, numGuests, status, notes)\n    VALUES\n      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n  `;\n\n  const info = db.run(sql, [\n    hotelId,\n    guestId,\n    guestName.trim(),\n    guestPhone.trim(),\n    guestEmail.trim().toLowerCase(),\n    checkIn,\n    checkOut,\n    roomId,\n    numGuests,\n    status,\n    finalNotes,\n  ]);\n\n  // returnăm documentul complet\n  return getReservationById(info.lastInsertRowid);\n}\n\n// ---------------------------------------------------------------------------\n// getReservationById\n// ---------------------------------------------------------------------------\n\n/**\n * Găsește o rezervare după ID.\n *\n * @param {number} id\n * @returns {Object|undefined} Rezervarea sau undefined\n */\nfunction getReservationById(id) {\n  if (id === undefined || id === null) {\n    throw new Error('ID-ul rezervării este invalid.');\n  }\n\n  const sql = `SELECT * FROM reservations WHERE id = ?`;\n  return db.get(sql, [id]);\n}\n\n// ---------------------------------------------------------------------------\n// getReservationsByHotel\n// ---------------------------------------------------------------------------\n\n/**\n * Returnează toate rezervările unui hotel, ordonate după checkIn.\n *\n * @param {string} hotelId\n * @returns {Array<Object>}\n */\nfunction getReservationsByHotel(hotelId) {\n  if (!hotelId || !isValidString(hotelId)) {\n    throw new Error('ID-ul hotelului este invalid.');\n  }\n\n  const sql = `\n    SELECT * FROM reservations\n    WHERE hotelId = ?\n    ORDER BY checkIn ASC, id DESC\n  `;\n  return db.all(sql, [hotelId]);\n}\n\n// ---------------------------------------------------------------------------\n// getReservationsByGuest\n// ---------------------------------------------------------------------------\n\n/**\n * Caută rezervări după nume, telefon sau email ale guest-ului.\n *\n * @param {string} guestInfo - Termen de căutare\n * @returns {Array<Object>}\n */\nfunction getReservationsByGuest(guestInfo) {\n  if (!guestInfo || typeof guestInfo !== 'string' || guestInfo.trim().length === 0) {\n    throw new Error('Informațiile despre guest sunt invalide.');\n  }\n\n  const term = `%${guestInfo.trim()}%`;\n\n  const sql = `\n    SELECT * FROM reservations\n    WHERE guestName  LIKE ?\n       OR guestPhone LIKE ?\n       OR guestEmail LIKE ?\n    ORDER BY checkIn DESC, id DESC\n  `;\n\n  return db.all(sql, [term, term, term]);\n}\n\n// ---------------------------------------------------------------------------\n// updateReservationStatus\n// ---------------------------------------------------------------------------\n\n/**\n * Actualizează statusul unei rezervări.\n *\n * @param {number} id     - ID-ul rezervării\n * @param {string} status - Noul status\n * @returns {Object|undefined} Rezervarea actualizată sau undefined dacă nu există\n */\nfunction updateReservationStatus(id, status) {\n  if (id === undefined || id === null) {\n    throw new Error('ID-ul rezervării este invalid.');\n  }\n\n  if (!status || !isValidStatus(status)) {\n    throw new Error(`Statusul \"${status}\" nu este valid. Permise: ${VALID_STATUSES.join(', ')}.`);\n  }\n\n  const existing = getReservationById(id);\n  if (!existing) {\n    return undefined;\n  }\n\n  const sql = `\n    UPDATE reservations\n    SET status    = ?,\n        updatedAt = datetime('now')\n    WHERE id = ?\n  `;\n\n  db.run(sql, [status, id]);\n\n  return getReservationById(id);\n}\n\n// ---------------------------------------------------------------------------\n// cancelReservation\n// ---------------------------------------------------------------------------\n\n/**\n * Anulează o rezervare (setează status = 'anulată').\n *\n * @param {number} id - ID-ul rezervării\n * @returns {Object|undefined} Rezervarea actualizată sau undefined\n * @throws {Error} Dacă rezervarea este deja anulată sau finalizată\n */\nfunction cancelReservation(id) {\n  if (id === undefined || id === null) {\n    throw new Error('ID-ul rezervării este invalid.');\n  }\n\n  const existing = getReservationById(id);\n  if (!existing) {\n    return undefined;\n  }\n\n  if (existing.status === 'anulată') {\n    throw new Error('Rezervarea este deja anulată.');\n  }\n\n  if (existing.status === 'finalizată' || existing.status === 'check-out') {\n    throw new Error('Rezervările finalizate nu pot fi anulate.');\n  }\n\n  const sql = `\n    UPDATE reservations\n    SET status    = 'anulată',\n        updatedAt = datetime('now')\n    WHERE id = ?\n  `;\n\n  db.run(sql, [id]);\n\n  return getReservationById(id);\n}\n\n// ---------------------------------------------------------------------------\n// Export\n// ---------------------------------------------------------------------------\n\nmodule.exports = {\n  createReservation,\n  getReservationById,\n  getReservationsByHotel,\n  getReservationsByGuest,\n  updateReservationStatus,\n  cancelReservation,\n  VALID_STATUSES,\n};\n```\n\n### END. Generează toate fișierele necesare.\n\nIMPORTANT: Returnează fiecare fișier în formatul:\n### cale/fișier.ext\nconținut\n### END\nFolosește DOAR căi relative la proiect, nu absolute.",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "2a2025fd",
+      "desc": "Fișier: models/reservationModel.js\nAdaugă constantele lipsă (VALID_RESERVATION_TYPES, VALID_RESERVATION_STATUSES, VALID_BILLING_STATUSES) și rescrie complet modelul pentru a folosi colecția NeDB `reservations` din config/db.js, implementând toate funcțiile așteptate de routes/reservations.js\n\nSkill-uri relevante:\nSkill: accessibility\n# Accessibility (WCAG 2.2)\n\nThis skill ensures that digital interfaces are Perceivable, Operable, Understandable, and Robust (POUR) for all users, including those using screen readers, switch controls, or keyboard navigation. It focuses on the technical implementation of WCAG 2.2 success criteria.\n\n\n\nSkill: agent-architecture-audit\n# Agent Architecture Audit\n\nA diagnostic workflow for agent systems that hide failures behind wrapper layers, stale memory, retry loops, or transport/rendering mutations.\n\n## When to Activate\n\n**MANDATORY for:**\n- Releasing any agent or LLM-powered application to production\n- Shipping features with \n\nSkill: agent-eval\n# Agent Eval Skill\n\nA lightweight CLI tool for comparing coding agents head-to-head on reproducible tasks. Every \"which coding agent is best?\" comparison runs on vibes — this tool systematizes it.\n\n## When to Activate\n\n- Comparing coding agents (Claude Code, Aider, Codex, etc.) on your own codebase\n\n\nReguli:\n---\npaths:\n  - \"**/*.component.ts\"\n  - \"**/*.component.html\"\n  - \"**/*.service.ts\"\n  - \"**/*.directive.ts\"\n  - \"**/*.pipe.ts\"\n  - \"**/*.guard.ts\"\n  - \"**/*.resolver.ts\"\n  - \"**/*.module.ts\"\n---\n# Angular Coding Style\n> This file extends [common/coding-style.md](../common/coding-style.md) with Angular specific content.\nAlways check the project's Angular version before writing code — features differ significantly between versions. Run `ng version` or inspect `package.json`. When creating a new project, do not pin a version unless the user specifies one.\n---\npaths:\n  - \"**/*.ets\"\n  - \"**/*.ts\"\n  - \"**/module.json5\"\n  - \"**/oh-package.json5\"\n  - \"**/build-profile.json5\"\n---\n# HarmonyOS / ArkTS Coding Style\n> This file extends [common/coding-style.md](../common/coding-style.md) with HarmonyOS and ArkTS-specific content.\n## ArkTS Language Constraints\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "0898e51e",
+      "desc": "Fișier: models/supplierModel.js\nAdaugă funcțiile lipsă: countSuppliersByStatus, searchSuppliersByName, placeSupplierOrder (wrapper), findSupplierOrders (adapter), countSupplierOrders (adapter)\n\nSkill-uri relevante:\nSkill: foundation-models-on-device\n# FoundationModels: On-Device LLM (iOS 26)\n\nPatterns for integrating Apple's on-device language model into apps using the FoundationModels framework. Covers text generation, structured output with `@Generable`, custom tool calling, and snapshot streaming — all running on-device for privacy and offli\n\nSkill: nestjs-patterns\n# NestJS Development Patterns\n\nProduction-grade NestJS patterns for modular TypeScript backends.\n\n## When to Activate\n\n- Building NestJS APIs or services\n- Structuring modules, controllers, and providers\n- Adding DTO validation, guards, interceptors, or exception filters\n- Configuring environment-aw\n\nSkill: nextjs-turbopack\n# Next.js and Turbopack\n\nNext.js 16+ uses Turbopack by default for local development: an incremental bundler written in Rust that significantly speeds up dev startup and hot updates.\n\n## When to Use\n\n- **Turbopack (default dev)**: Use for day-to-day development. Faster cold start and HMR, especially\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
     }
   ],
   "plan": [],
   "status": "completed",
   "checkpoint": {
-    "step": 13,
+    "step": 2,
     "files": {
       ".env.example": "f60215253048f074b62bba0b4e631c66",
-      ".gitignore": "efb9e600a4ae01a0739d7c5a8bda7498",
+      ".gitignore": "2a1e88efdb92d6e7649810a46232befa",
       "full_auth.txt": "91a894a6ed1c0cc3d38b826f92ae62f9",
       "lines.txt": "5f6e5c32e28b21a75b256b3e8adb274a",
       "out.txt": "14c7325e6bde1d8fbc4c74bbc5d6804e",
       "package-lock.json": "6f0fe615e5ce45537841c1311b4a1423",
-      "package.json": "71ed996ce4e4de185325a1a9def34576",
+      "package.json": "935b67008e76e287deb3bf757a58ad83",
       "plan.md": "ba296c8c45624b41148cc0d569688fc4",
       "README.md": "b48b43402c6b77d7d1d06c12d91d6520",
       "server.js": "1323af87a4f096f2b26e27d51a526b4a",
-      "state.json": "207346e81e408159149f1ec24c5bb81d",
+      "state.json": "bbeabb8f7cb9dafd1612141a5cc86212",
       "temp_hr_prefix.txt": "a6e792e9e879f0c1f85a475f1b7e099c",
       "temp_part1.txt": "e575aced791ae4886290f6ccd8309512",
       "temp_part2.txt": "8a6ea20764bdac5ff45ebd0cdc4ec000",
@@ -1293,17 +1387,17 @@
       "test_inventory.ejs": "514c0f9513982b3483fd94ac1ed65f15",
       "_temp_server_check.txt": "1323af87a4f096f2b26e27d51a526b4a",
       "admin\\routes.js": "159dcf90ca45cfef0202b44463315b21",
-      "admin\\public\\js\\admin.js": "c83c3cc1988f8cee4280083e4f780ad6",
+      "admin\\public\\js\\admin.js": "e85880ddd6b5013fc7b08a187036c004",
       "admin\\views\\dashboard.ejs": "b5ae0683fc93a465d7bdcfe5381acc74",
       "admin\\views\\layout.ejs": "84bdef158eb3442e8afc25d57e967954",
       "admin\\views\\login.ejs": "626e98b0604faa14b559e7156ed55819",
       "admin\\views\\settings.ejs": "458854d9343f7d4b0e5871ab83b7cb70",
       "admin\\views\\tenants.ejs": "2841dfb71852cc7d416a06abbdb7fde4",
-      "config\\db.js": "76b410803d2a12b3ec33a258f0fadbcb",
+      "config\\db.js": "1e8c5e3a218bad259dda31a5f1f1e195",
       "config\\tenant.js": "96ff4168cf4e7e412f5f537d22d9aecb",
       "customer\\routes.js": "7e2507737a7b1f3496c0f1ba308e8da8",
       "customer\\public\\css\\customer.css": "c574c5a60f1aec7b710a2de78c23c190",
-      "customer\\public\\js\\customer.js": "6c5244875fadc9608bc41cf680236ebc",
+      "customer\\public\\js\\customer.js": "0181a35ac1ec41213de2cf541b5ab47e",
       "customer\\views\\layout.ejs": "8f9c03d3bb8e1526d225eb671e97d8de",
       "customer\\views\\loyalty.ejs": "c9a1b24f9376f8251d87f89defd60938",
       "customer\\views\\orders.ejs": "6ab47a75e92a0e3a21233d7b250d6af0",
@@ -1324,7 +1418,7 @@
       "data\\users.db": "5b5933d25c0b9190421e23b795cd9b83",
       "hotel\\routes.js": "0119b19a028bb58ccddb786377e68a54",
       "hotel\\public\\css\\hotel.css": "65692cd81a368a1ae244b69b9a2ea152",
-      "hotel\\public\\js\\hotel.js": "23746a63eeb267cd196872c80949a9b5",
+      "hotel\\public\\js\\hotel.js": "0aa1e2a23b6b144bef7f37f81fbaf4ef",
       "hotel\\views\\dashboard.ejs": "b2d6d841c928408a3b321c5cf42f88bc",
       "hotel\\views\\deliveries.ejs": "2e6725ee3ab63cdd09bf331e1dcb9ef0",
       "hotel\\views\\guests.ejs": "c51bfa14795e35a7f399e622b7283d19",
@@ -1347,10 +1441,10 @@
       "models\\loyaltyModel.js": "bbf22626ccbcfcf1237c5360abee0f73",
       "models\\menuItemModel.js": "ffd024c47c671be678b4495de9409b2d",
       "models\\orderModel.js": "4986ad3a71243dab7d348997f9bfa29c",
-      "models\\reservationModel.js": "ebd27729018e22825f17dd62dc9b25d6",
+      "models\\reservationModel.js": "d4ad09c0f3a56714e3849f1e8fc1e1c6",
       "models\\restaurantModel.js": "de10733de3702352900e72dafb316d86",
       "models\\roomModel.js": "e5a01d9b6d72701aaf06ae6705970bff",
-      "models\\supplierModel.js": "814dd932f362c5aecb4d7570732a812f",
+      "models\\supplierModel.js": "c2bd99f5449a65029907f8c79a5e0812",
       "models\\userModel.js": "23d293481c3e28c78579c775b966a3a0",
       "public\\index.html": "35bb4cb11eaeb52b7df715b82f7094df",
       "pwa\\manifest.json": "6078117229858ded7ebc67ba180230f0",
@@ -1381,5 +1475,5 @@
     }
   },
   "modified_files": {},
-  "updated": 1781894801.4478004
+  "updated": 1781903939.9633634
 }

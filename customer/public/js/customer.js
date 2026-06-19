@@ -997,4 +997,479 @@
         method: 'POST',
         body: JSON.stringify({ userId: customerId, tenantId: tenantId }),
       });
-      if
+      if (data && data.success) {
+        showToast('Contul de loialitate a fost creat cu succes!', 'success');
+        setTimeout(function () {
+          window.location.reload();
+        }, 1000);
+      }
+    } catch (err) {
+      showToast('Eroare la crearea contului de loialitate.', 'error');
+    }
+  }
+
+  async function generateCoupon() {
+    try {
+      var customerId = getCustomerId() || getUserId();
+      var tenantId = getTenantId();
+      var pointsToUse = parseInt(
+        document.getElementById('pointsToUse')?.value || '100',
+        10
+      );
+
+      if (isNaN(pointsToUse) || pointsToUse < CONFIG.MIN_POINTS_FOR_COUPON) {
+        showToast(
+          'Ai nevoie de minimum ' +
+            CONFIG.MIN_POINTS_FOR_COUPON +
+            ' puncte pentru a genera un cupon.',
+          'warning'
+        );
+        return;
+      }
+
+      var data = await apiFetch('/api/loyalty/coupons/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          userId: customerId,
+          tenantId: tenantId,
+          points: pointsToUse,
+        }),
+      });
+
+      if (data && data.success) {
+        showToast('Cuponul a fost generat cu succes!', 'success');
+        setTimeout(function () {
+          window.location.reload();
+        }, 1000);
+      }
+    } catch (err) {
+      showToast('Eroare la generarea cuponului.', 'error');
+    }
+  }
+
+  async function useCoupon(couponCode) {
+    state.currentCouponCode = couponCode;
+    var modal = document.getElementById('useCouponModal');
+    if (modal) {
+      document.getElementById('couponCodeDisplay').textContent = couponCode;
+      modal.style.display = 'flex';
+    }
+  }
+
+  async function confirmUseCoupon() {
+    if (!state.currentCouponCode) return;
+
+    try {
+      var orderId = document.getElementById('couponOrderId')?.value || '';
+      var tenantId = getTenantId();
+      var data = await apiFetch('/api/loyalty/coupons/validate', {
+        method: 'POST',
+        body: JSON.stringify({
+          code: state.currentCouponCode,
+          tenantId: tenantId,
+          orderId: orderId || undefined,
+        }),
+      });
+
+      if (data && data.success) {
+        var discount = data.data?.discount || 0;
+        showToast(
+          'Cupon aplicat! Discount: ' + formatCurrency(discount),
+          'success'
+        );
+        closeModal('useCouponModal');
+        state.currentCouponCode = null;
+        setTimeout(function () {
+          window.location.reload();
+        }, 1500);
+      }
+    } catch (err) {
+      showToast('Eroare la aplicarea cuponului.', 'error');
+    }
+  }
+
+  async function cancelCoupon(couponId) {
+    if (!confirm('Ești sigur că vrei să anulezi acest cupon?')) return;
+
+    try {
+      var tenantId = getTenantId();
+      var data = await apiFetch('/api/loyalty/coupons/' + couponId + '/cancel', {
+        method: 'PUT',
+        body: JSON.stringify({ tenantId: tenantId }),
+      });
+
+      if (data && data.success) {
+        showToast('Cuponul a fost anulat și punctele returnate.', 'success');
+        setTimeout(function () {
+          window.location.reload();
+        }, 1000);
+      }
+    } catch (err) {
+      showToast('Eroare la anularea cuponului.', 'error');
+    }
+  }
+
+  function previewDiscount() {
+    var orderAmountEl = document.getElementById('orderAmount');
+    var pointsEl = document.getElementById('pointsToUse');
+    var previewEl = document.getElementById('discountPreview');
+
+    if (!orderAmountEl || !pointsEl || !previewEl) return;
+
+    var amount = parseFloat(orderAmountEl.value) || 0;
+    var points = parseInt(pointsEl.value, 10) || 0;
+
+    if (amount <= 0 || points < CONFIG.MIN_POINTS_FOR_COUPON) {
+      previewEl.textContent = '—';
+      return;
+    }
+
+    var discountPercent = Math.min(Math.floor(points / 100) * 5, 30);
+    var discountValue = (amount * discountPercent) / 100;
+    previewEl.textContent =
+      discountPercent + '% (' + formatCurrency(discountValue) + ')';
+  }
+
+  // ============================================================
+  // PROFILE PAGE
+  // ============================================================
+  function initProfilePage(page) {
+    var form = document.getElementById('profileForm');
+    if (form) {
+      form.addEventListener('submit', handleProfileSubmit);
+    }
+
+    window.handleProfileSubmit = handleProfileSubmit;
+  }
+
+  async function handleProfileSubmit(e) {
+    e.preventDefault();
+
+    if (state.isSubmitting) return;
+    state.isSubmitting = true;
+
+    var submitBtn = document.getElementById('profileSubmitBtn');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.querySelector('span').textContent = 'Se salvează…';
+    }
+
+    var nameEl = document.getElementById('profileName');
+    var phoneEl = document.getElementById('profilePhone');
+    var customerId = getCustomerId() || getUserId();
+    var tenantId = getTenantId();
+
+    var payload = {
+      name: nameEl?.value?.trim() || undefined,
+      phone: phoneEl?.value?.trim() || undefined,
+      tenantId: tenantId,
+    };
+
+    try {
+      var data = await apiFetch('/api/customers/' + customerId, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+
+      if (data && data.success) {
+        showToast('Profilul a fost actualizat cu succes!', 'success');
+      }
+    } catch (err) {
+      showToast('Eroare la actualizarea profilului.', 'error');
+    } finally {
+      state.isSubmitting = false;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.querySelector('span').textContent = 'Salvează modificările';
+      }
+    }
+  }
+
+  // ============================================================
+  // ADDRESSES PAGE
+  // ============================================================
+  function initAddressesPage(page) {
+    window.addAddress = addAddress;
+    window.editAddress = editAddress;
+    window.deleteAddress = deleteAddress;
+    window.saveAddress = saveAddress;
+  }
+
+  function openAddressModal(addressId) {
+    var modal = document.getElementById('addressModal');
+    if (!modal) return;
+
+    if (addressId) {
+      document.getElementById('addressModalTitle').textContent =
+        'Editează adresa';
+      document.getElementById('addressId').value = addressId;
+      // Populate fields from state or fetch
+      var addr = (state.currentAddresses || []).find(function (a) {
+        return a._id === addressId;
+      });
+      if (addr) {
+        document.getElementById('addressLabel').value = addr.label || '';
+        document.getElementById('addressStreet').value = addr.street || '';
+        document.getElementById('addressCity').value = addr.city || '';
+        document.getElementById('addressPostalCode').value =
+          addr.postalCode || '';
+        document.getElementById('addressPhone').value = addr.phone || '';
+        document.getElementById('addressDefault').checked =
+          addr.isDefault || false;
+      }
+    } else {
+      document.getElementById('addressModalTitle').textContent =
+        'Adaugă adresă nouă';
+      document.getElementById('addressId').value = '';
+      document.getElementById('addressLabel').value = '';
+      document.getElementById('addressStreet').value = '';
+      document.getElementById('addressCity').value = '';
+      document.getElementById('addressPostalCode').value = '';
+      document.getElementById('addressPhone').value = '';
+      document.getElementById('addressDefault').checked = false;
+    }
+
+    modal.style.display = 'flex';
+  }
+
+  function addAddress() {
+    openAddressModal(null);
+  }
+
+  function editAddress(addressId) {
+    openAddressModal(addressId);
+  }
+
+  async function deleteAddress(addressId) {
+    if (!confirm('Ești sigur că vrei să ștergi această adresă?')) return;
+
+    try {
+      var customerId = getCustomerId() || getUserId();
+      var tenantId = getTenantId();
+      var data = await apiFetch(
+        '/api/customers/' + customerId + '/addresses/' + addressId,
+        {
+          method: 'DELETE',
+          body: JSON.stringify({ tenantId: tenantId }),
+        }
+      );
+
+      if (data && data.success) {
+        showToast('Adresa a fost ștearsă.', 'success');
+        setTimeout(function () {
+          window.location.reload();
+        }, 1000);
+      }
+    } catch (err) {
+      showToast('Eroare la ștergerea adresei.', 'error');
+    }
+  }
+
+  async function saveAddress() {
+    var addressId = document.getElementById('addressId')?.value;
+    var label = document.getElementById('addressLabel')?.value?.trim();
+    var street = document.getElementById('addressStreet')?.value?.trim();
+    var city = document.getElementById('addressCity')?.value?.trim();
+    var postalCode = document.getElementById('addressPostalCode')?.value?.trim();
+    var phone = document.getElementById('addressPhone')?.value?.trim();
+    var isDefault = document.getElementById('addressDefault')?.checked;
+
+    if (!label || !street || !city) {
+      showToast(
+        'Eticheta, strada și orașul sunt obligatorii.',
+        'error'
+      );
+      return;
+    }
+
+    var customerId = getCustomerId() || getUserId();
+    var tenantId = getTenantId();
+    var payload = {
+      label: label,
+      street: street,
+      city: city,
+      postalCode: postalCode || undefined,
+      phone: phone || undefined,
+      isDefault: !!isDefault,
+      tenantId: tenantId,
+    };
+
+    try {
+      var url = addressId
+        ? '/api/customers/' + customerId + '/addresses/' + addressId
+        : '/api/customers/' + customerId + '/addresses';
+      var method = addressId ? 'PUT' : 'POST';
+
+      var data = await apiFetch(url, {
+        method: method,
+        body: JSON.stringify(payload),
+      });
+
+      if (data && data.success) {
+        showToast(
+          addressId
+            ? 'Adresa a fost actualizată.'
+            : 'Adresa a fost adăugată cu succes!',
+          'success'
+        );
+        closeModal('addressModal');
+        setTimeout(function () {
+          window.location.reload();
+        }, 1000);
+      }
+    } catch (err) {
+      showToast('Eroare la salvarea adresei.', 'error');
+    }
+  }
+
+  // ============================================================
+  // FAVORITES PAGE
+  // ============================================================
+  function initFavoritesPage(page) {
+    window.removeFavorite = removeFavorite;
+    window.addFavorite = addFavorite;
+  }
+
+  async function removeFavorite(restaurantId) {
+    if (!confirm('Ești sigur că vrei să elimini acest restaurant din favorite?'))
+      return;
+
+    try {
+      var customerId = getCustomerId() || getUserId();
+      var tenantId = getTenantId();
+      var data = await apiFetch(
+        '/api/customers/' + customerId + '/favorites/' + restaurantId,
+        {
+          method: 'DELETE',
+          body: JSON.stringify({ tenantId: tenantId }),
+        }
+      );
+
+      if (data && data.success) {
+        showToast('Restaurantul a fost eliminat din favorite.', 'success');
+        setTimeout(function () {
+          window.location.reload();
+        }, 1000);
+      }
+    } catch (err) {
+      showToast('Eroare la eliminarea din favorite.', 'error');
+    }
+  }
+
+  async function addFavorite(restaurantId) {
+    try {
+      var customerId = getCustomerId() || getUserId();
+      var tenantId = getTenantId();
+      var data = await apiFetch(
+        '/api/customers/' + customerId + '/favorites',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            restaurantId: restaurantId,
+            tenantId: tenantId,
+          }),
+        }
+      );
+
+      if (data && data.success) {
+        showToast('Restaurantul a fost adăugat la favorite!', 'success');
+        setTimeout(function () {
+          window.location.reload();
+        }, 1000);
+      }
+    } catch (err) {
+      showToast('Eroare la adăugarea la favorite.', 'error');
+    }
+  }
+
+  // ============================================================
+  // DASHBOARD PAGE
+  // ============================================================
+  function initDashboardPage(page) {
+    loadCustomerDashboard();
+    window.loadCustomerDashboard = loadCustomerDashboard;
+  }
+
+  async function loadCustomerDashboard() {
+    try {
+      var customerId = getCustomerId() || getUserId();
+      var tenantId = getTenantId();
+      var data = await apiFetch(
+        '/api/customers/' + customerId + '/dashboard?tenantId=' + tenantId
+      );
+
+      if (data && data.success) {
+        var stats = data.data || {};
+
+        // Update stat cards
+        var totalOrders = document.getElementById('cust-stat-orders');
+        var totalPoints = document.getElementById('cust-stat-points');
+        var activeCoupons = document.getElementById('cust-stat-coupons');
+        var recentActivity = document.getElementById('cust-stat-activity');
+
+        if (totalOrders)
+          totalOrders.textContent = stats.totalOrders || 0;
+        if (totalPoints)
+          totalPoints.textContent = stats.loyaltyPoints || 0;
+        if (activeCoupons)
+          activeCoupons.textContent = stats.activeCoupons || 0;
+
+        // Render recent orders
+        if (stats.recentOrders && stats.recentOrders.length > 0) {
+          var recentContainer = document.getElementById(
+            'cust-recent-orders'
+          );
+          if (recentContainer) {
+            recentContainer.innerHTML = stats.recentOrders
+              .map(function (order) {
+                return (
+                  '<div class="activity-item">' +
+                  '<div class="activity-icon order">' +
+                  '<i class="fas fa-receipt"></i>' +
+                  '</div>' +
+                  '<div class="activity-content">' +
+                  '<div class="activity-text">Comandă #' +
+                  (order._id || '').substring(0, 8) +
+                  '</div>' +
+                  '<div class="activity-time">' +
+                  formatDate(order.createdAt) +
+                  ' • ' +
+                  formatCurrency(order.total || 0) +
+                  '</div>' +
+                  '</div>' +
+                  '</div>'
+                );
+              })
+              .join('');
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Eroare la încărcarea dashboard-ului client:', err);
+    }
+  }
+
+  // ============================================================
+  // EXPOSE PUBLIC API
+  // ============================================================
+  window.formatCurrency = formatCurrency;
+  window.formatDate = formatDate;
+  window.formatShortDate = formatShortDate;
+  window.formatStatus = formatStatus;
+  window.formatStatusLabel = formatStatusLabel;
+  window.escapeHtml = escapeHtml;
+  window.openModal = openModal;
+  window.closeModal = closeModal;
+  window.closeAllModals = closeAllModals;
+  window.addAddress = addAddress;
+  window.editAddress = editAddress;
+  window.deleteAddress = deleteAddress;
+  window.saveAddress = saveAddress;
+  window.removeFavorite = removeFavorite;
+  window.addFavorite = addFavorite;
+
+  // ============================================================
+  // INIT ON DOM READY (already called above, this ensures
+  // event listeners are registered)
+  // ============================================================
+})();

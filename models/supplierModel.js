@@ -1015,6 +1015,100 @@ function countSuppliersByTenant(tenantId) {
   });
 }
 
+/**
+ * Obține numărul de furnizori după status.
+ * @param {string} status - Statusul furnizorilor
+ * @param {string} [tenantId] - Opțional, filtrează și după tenant
+ * @returns {Promise<number>}
+ */
+function countSuppliersByStatus(status, tenantId) {
+  return new Promise((resolve, reject) => {
+    if (!status || !isValidStatus(status)) {
+      return reject(new AppError(
+        `Statusul "${status}" nu este valid. Statusuri permise: ${VALID_STATUSES.join(', ')}.`,
+        400,
+        'INVALID_STATUS'
+      ));
+    }
+
+    const suppliers = getSuppliersDb();
+    const filter = { status };
+
+    if (tenantId) {
+      filter.tenantId = tenantId;
+    }
+
+    suppliers.count(filter, (err, count) => {
+      if (err) {
+        return reject(new AppError(
+          `Eroare la numărarea furnizorilor după status: ${err.message}`,
+          500,
+          'DB_QUERY_ERROR'
+        ));
+      }
+
+      resolve(count);
+    });
+  });
+}
+
+/**
+ * Caută furnizori după nume (potrivire parțială, case-insensitive).
+ * @param {string} query - Șirul de căutare (minim 1 caracter)
+ * @param {string} [tenantId] - Opțional, filtrează și după tenant
+ * @param {Object} [options={}] - Opțiuni suplimentare (sort, limit, skip)
+ * @returns {Promise<Array>} Lista de furnizori găsiți
+ */
+function searchSuppliersByName(query, tenantId, options = {}) {
+  return new Promise((resolve, reject) => {
+    if (!query || typeof query !== 'string' || query.trim().length < 1) {
+      return reject(new AppError(
+        'Termenul de căutare trebuie să aibă cel puțin un caracter.',
+        400,
+        'INVALID_SEARCH_QUERY'
+      ));
+    }
+
+    const suppliers = getSuppliersDb();
+    const escapedQuery = query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const nameRegex = new RegExp(escapedQuery, 'i');
+
+    const filter = { name: nameRegex };
+
+    if (tenantId) {
+      filter.tenantId = tenantId;
+    }
+
+    let dbQuery = suppliers.find(filter);
+
+    if (options.sort) {
+      dbQuery = dbQuery.sort(options.sort);
+    } else {
+      dbQuery = dbQuery.sort({ name: 1 });
+    }
+
+    if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
+      dbQuery = dbQuery.limit(options.limit);
+    }
+
+    if (options.skip && Number.isInteger(options.skip) && options.skip > 0) {
+      dbQuery = dbQuery.skip(options.skip);
+    }
+
+    dbQuery.exec((err, supplierList) => {
+      if (err) {
+        return reject(new AppError(
+          `Eroare la căutarea furnizorilor după nume: ${err.message}`,
+          500,
+          'DB_QUERY_ERROR'
+        ));
+      }
+
+      resolve(supplierList || []);
+    });
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Operații CRUD – Supplier Orders
 // ---------------------------------------------------------------------------
@@ -1141,6 +1235,90 @@ function createSupplierOrder(orderData) {
       }
 
       resolve(newOrder);
+    });
+  });
+}
+
+/**
+ * Plasează o comandă la furnizor (wrapper peste createSupplierOrder).
+ * Verifică existența furnizorului înainte de a crea comanda și se asigură
+ * că tenantId-ul comenzii corespunde cu cel al furnizorului.
+ *
+ * @param {Object} orderData - Datele comenzii
+ * @param {string} orderData.supplierId - ID-ul furnizorului (obligatoriu)
+ * @param {string} orderData.tenantId - ID-ul tenant-ului (obligatoriu)
+ * @param {string} orderData.orderNumber - Numărul unic al comenzii (obligatoriu)
+ * @param {Array} [orderData.items=[]] - Lista de articole comandate
+ * @param {string} [orderData.status='draft'] - Statusul comenzii
+ * @param {string} [orderData.notes=''] - Note adiționale
+ * @param {string} [orderData.deliveryDate=null] - Data estimată de livrare
+ * @returns {Promise<Object>} Documentul comenzii create
+ */
+function placeSupplierOrder(orderData) {
+  return new Promise((resolve, reject) => {
+    if (!orderData || typeof orderData !== 'object') {
+      return reject(new AppError('Datele comenzii sunt invalide.', 400, 'INVALID_ORDER_DATA'));
+    }
+
+    const { supplierId, tenantId } = orderData;
+
+    if (!supplierId || typeof supplierId !== 'string') {
+      return reject(new AppError(
+        'ID-ul furnizorului este obligatoriu.',
+        400,
+        'MISSING_SUPPLIER_ID'
+      ));
+    }
+
+    if (!tenantId) {
+      return reject(new AppError(
+        'ID-ul tenant-ului este obligatoriu.',
+        400,
+        'MISSING_TENANT_ID'
+      ));
+    }
+
+    // Verificăm existența furnizorului
+    const suppliers = getSuppliersDb();
+    suppliers.findOne({ _id: supplierId }, (err, supplier) => {
+      if (err) {
+        return reject(new AppError(
+          `Eroare la verificarea furnizorului: ${err.message}`,
+          500,
+          'DB_QUERY_ERROR'
+        ));
+      }
+
+      if (!supplier) {
+        return reject(new AppError(
+          'Furnizorul nu a fost găsit.',
+          404,
+          'SUPPLIER_NOT_FOUND'
+        ));
+      }
+
+      // Verificăm că tenantId-ul furnizorului corespunde
+      if (supplier.tenantId !== tenantId) {
+        return reject(new AppError(
+          'Furnizorul nu aparține acestui tenant.',
+          403,
+          'TENANT_MISMATCH'
+        ));
+      }
+
+      // Verificăm că furnizorul nu este blacklisted sau inactive (opțional – doar avertizare; se permite comanda)
+      if (supplier.status === 'blacklisted') {
+        return reject(new AppError(
+          'Nu se pot plasa comenzi la un furnizor blacklisted.',
+          400,
+          'SUPPLIER_BLACKLISTED'
+        ));
+      }
+
+      // Creăm comanda efectivă
+      createSupplierOrder(orderData)
+        .then(resolve)
+        .catch(reject);
     });
   });
 }
@@ -1451,6 +1629,193 @@ function countOrdersBySupplier(supplierId) {
   });
 }
 
+/**
+ * Găsește comenzi la furnizori pe baza unor filtre flexibile (adapter).
+ *
+ * @param {Object} filters - Criterii de filtrare
+ * @param {string} [filters.supplierId] - ID-ul furnizorului
+ * @param {string} [filters.tenantId] - ID-ul tenant-ului
+ * @param {string} [filters.status] - Statusul comenzii
+ * @param {string} [filters.search] - Termen de căutare în orderNumber
+ * @param {string} [filters.dateFrom] - Dată minimă createdAt (ISO)
+ * @param {string} [filters.dateTo] - Dată maximă createdAt (ISO)
+ * @param {Object} [filters.options] - Opțiuni (sort, limit, skip)
+ * @returns {Promise<Array>} Lista de comenzi găsite
+ */
+function findSupplierOrders(filters = {}) {
+  return new Promise((resolve, reject) => {
+    const ordersDb = getSupplierOrdersDb();
+    const queryFilter = {};
+
+    // Filtru după supplierId
+    if (filters.supplierId) {
+      queryFilter.supplierId = filters.supplierId;
+    }
+
+    // Filtru după tenantId
+    if (filters.tenantId) {
+      queryFilter.tenantId = filters.tenantId;
+    }
+
+    // Filtru după status
+    if (filters.status) {
+      if (!isValidOrderStatus(filters.status)) {
+        return reject(new AppError(
+          `Statusul "${filters.status}" nu este valid. Statusuri permise: ${VALID_ORDER_STATUSES.join(', ')}.`,
+          400,
+          'INVALID_ORDER_STATUS'
+        ));
+      }
+      queryFilter.status = filters.status;
+    }
+
+    // Filtru după search (orderNumber)
+    if (filters.search && typeof filters.search === 'string' && filters.search.trim().length > 0) {
+      const escapedSearch = filters.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      queryFilter.orderNumber = new RegExp(escapedSearch, 'i');
+    }
+
+    // Filtru după interval de date
+    if (filters.dateFrom || filters.dateTo) {
+      queryFilter.createdAt = {};
+
+      if (filters.dateFrom) {
+        const fromDate = new Date(filters.dateFrom);
+        if (isNaN(fromDate.getTime())) {
+          return reject(new AppError(
+            'Data de început (dateFrom) este invalidă.',
+            400,
+            'INVALID_DATE_FROM'
+          ));
+        }
+        queryFilter.createdAt.$gte = fromDate.toISOString();
+      }
+
+      if (filters.dateTo) {
+        const toDate = new Date(filters.dateTo);
+        if (isNaN(toDate.getTime())) {
+          return reject(new AppError(
+            'Data de sfârșit (dateTo) este invalidă.',
+            400,
+            'INVALID_DATE_TO'
+          ));
+        }
+        queryFilter.createdAt.$lte = toDate.toISOString();
+      }
+    }
+
+    const options = filters.options || {};
+    let dbQuery = ordersDb.find(queryFilter);
+
+    if (options.sort) {
+      dbQuery = dbQuery.sort(options.sort);
+    } else {
+      dbQuery = dbQuery.sort({ createdAt: -1 });
+    }
+
+    if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
+      dbQuery = dbQuery.limit(options.limit);
+    }
+
+    if (options.skip && Number.isInteger(options.skip) && options.skip > 0) {
+      dbQuery = dbQuery.skip(options.skip);
+    }
+
+    dbQuery.exec((err, orders) => {
+      if (err) {
+        return reject(new AppError(
+          `Eroare la căutarea comenzilor: ${err.message}`,
+          500,
+          'DB_QUERY_ERROR'
+        ));
+      }
+
+      resolve(orders || []);
+    });
+  });
+}
+
+/**
+ * Numără comenzi la furnizori pe baza unor filtre flexibile (adapter).
+ *
+ * @param {Object} filters - Criterii de filtrare
+ * @param {string} [filters.supplierId] - ID-ul furnizorului
+ * @param {string} [filters.tenantId] - ID-ul tenant-ului
+ * @param {string} [filters.status] - Statusul comenzii
+ * @param {string} [filters.dateFrom] - Dată minimă createdAt (ISO)
+ * @param {string} [filters.dateTo] - Dată maximă createdAt (ISO)
+ * @returns {Promise<number>} Numărul de comenzi
+ */
+function countSupplierOrders(filters = {}) {
+  return new Promise((resolve, reject) => {
+    const ordersDb = getSupplierOrdersDb();
+    const queryFilter = {};
+
+    // Filtru după supplierId
+    if (filters.supplierId) {
+      queryFilter.supplierId = filters.supplierId;
+    }
+
+    // Filtru după tenantId
+    if (filters.tenantId) {
+      queryFilter.tenantId = filters.tenantId;
+    }
+
+    // Filtru după status
+    if (filters.status) {
+      if (!isValidOrderStatus(filters.status)) {
+        return reject(new AppError(
+          `Statusul "${filters.status}" nu este valid. Statusuri permise: ${VALID_ORDER_STATUSES.join(', ')}.`,
+          400,
+          'INVALID_ORDER_STATUS'
+        ));
+      }
+      queryFilter.status = filters.status;
+    }
+
+    // Filtru după interval de date
+    if (filters.dateFrom || filters.dateTo) {
+      queryFilter.createdAt = {};
+
+      if (filters.dateFrom) {
+        const fromDate = new Date(filters.dateFrom);
+        if (isNaN(fromDate.getTime())) {
+          return reject(new AppError(
+            'Data de început (dateFrom) este invalidă.',
+            400,
+            'INVALID_DATE_FROM'
+          ));
+        }
+        queryFilter.createdAt.$gte = fromDate.toISOString();
+      }
+
+      if (filters.dateTo) {
+        const toDate = new Date(filters.dateTo);
+        if (isNaN(toDate.getTime())) {
+          return reject(new AppError(
+            'Data de sfârșit (dateTo) este invalidă.',
+            400,
+            'INVALID_DATE_TO'
+          ));
+        }
+        queryFilter.createdAt.$lte = toDate.toISOString();
+      }
+    }
+
+    ordersDb.count(queryFilter, (err, count) => {
+      if (err) {
+        return reject(new AppError(
+          `Eroare la numărarea comenzilor: ${err.message}`,
+          500,
+          'DB_QUERY_ERROR'
+        ));
+      }
+
+      resolve(count);
+    });
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Exporturi
 // ---------------------------------------------------------------------------
@@ -1489,14 +1854,19 @@ module.exports = {
   removeSupplierProduct,
   deleteSupplier,
   countSuppliersByTenant,
+  countSuppliersByStatus,
+  searchSuppliersByName,
 
   // CRUD Supplier Orders
   createSupplierOrder,
+  placeSupplierOrder,
   findSupplierOrderById,
   findOrdersBySupplier,
   findOrdersByTenant,
+  findSupplierOrders,
   updateSupplierOrder,
   updateOrderStatus,
   deleteSupplierOrder,
   countOrdersBySupplier,
+  countSupplierOrders,
 };
