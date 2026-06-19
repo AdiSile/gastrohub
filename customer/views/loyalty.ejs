@@ -1,0 +1,989 @@
+<%
+  // ============================================================
+  // customer/views/loyalty.ejs
+  // Vizualizare puncte loialitate, cupoane active și istoric
+  // ============================================================
+
+  const user = locals.user || {};
+  const customer = locals.customer || user || {};
+  const account = locals.account || {};
+  const coupons = locals.coupons || [];
+  const activeCoupons = locals.activeCoupons || [];
+  const error = locals.error || null;
+%>
+
+<style>
+  /* ============================================================
+     LOYALTY PAGE STYLES
+     ============================================================ */
+  .loyalty-page .page-intro {
+    margin-bottom: 24px;
+  }
+
+  .loyalty-page .page-intro h1 {
+    font-size: 24px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .loyalty-page .page-intro h1 i {
+    color: var(--color-primary);
+  }
+
+  .loyalty-page .page-intro p {
+    color: var(--color-text-muted);
+    margin-top: 4px;
+    font-size: 14px;
+  }
+
+  /* ============================================================
+     POINTS SUMMARY CARD
+     ============================================================ */
+  .points-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  .points-summary .points-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    text-align: center;
+    transition: all 0.2s ease;
+  }
+
+  .points-summary .points-card:hover {
+    box-shadow: var(--shadow-sm);
+  }
+
+  .points-summary .points-card .points-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 10px;
+    font-size: 20px;
+  }
+
+  .points-summary .points-card .points-icon.primary {
+    background: #e8f0fe;
+    color: var(--color-primary);
+  }
+
+  .points-summary .points-card .points-icon.success {
+    background: #e6f4ea;
+    color: var(--color-success);
+  }
+
+  .points-summary .points-card .points-icon.warning {
+    background: #fff3cd;
+    color: #664d03;
+  }
+
+  .points-summary .points-card .points-icon.info {
+    background: #cff4fc;
+    color: #055160;
+  }
+
+  .points-summary .points-card .points-value {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .points-summary .points-card .points-label {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    font-weight: 500;
+    margin-top: 4px;
+  }
+
+  .points-summary .points-card .points-action {
+    display: inline-block;
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--color-primary);
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .points-summary .points-card .points-action:hover {
+    text-decoration: underline;
+  }
+
+  /* ============================================================
+     ACTIVE COUPONS SECTION
+     ============================================================ */
+  .coupons-section {
+    margin-bottom: 28px;
+  }
+
+  .coupons-section .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .coupons-section .section-header h2 {
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .coupons-section .section-header h2 i {
+    color: var(--color-primary);
+  }
+
+  .coupons-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+  }
+
+  .coupon-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 18px;
+    position: relative;
+    transition: all 0.2s ease;
+    overflow: hidden;
+  }
+
+  .coupon-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--color-primary), var(--color-primary-light));
+  }
+
+  .coupon-card:hover {
+    box-shadow: var(--shadow-sm);
+    border-color: var(--color-primary-light);
+  }
+
+  .coupon-card .coupon-code {
+    font-family: 'Courier New', monospace;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--color-primary);
+    margin-bottom: 6px;
+  }
+
+  .coupon-card .coupon-discount {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin-bottom: 4px;
+  }
+
+  .coupon-card .coupon-discount small {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-text-muted);
+  }
+
+  .coupon-card .coupon-expiry {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  .coupon-card .coupon-expiry i {
+    font-size: 11px;
+  }
+
+  .coupon-card .coupon-status {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 12px;
+  }
+
+  .coupon-card .coupon-status.active {
+    background: #e6f4ea;
+    color: #1e8e3e;
+  }
+
+  .coupon-card .coupon-status.used {
+    background: #f1f3f4;
+    color: #5f6368;
+  }
+
+  .coupon-card .coupon-status.expired {
+    background: #fce8e6;
+    color: #d93025;
+  }
+
+  .coupon-card .coupon-status.cancelled {
+    background: #f1f3f4;
+    color: #5f6368;
+  }
+
+  .coupon-card .coupon-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .coupon-card .coupon-actions .btn-sm {
+    font-size: 12px;
+    padding: 5px 10px;
+  }
+
+  /* ============================================================
+     COUPON HISTORY / ALL COUPONS
+     ============================================================ */
+  .coupon-history {
+    margin-top: 28px;
+  }
+
+  .coupon-history .history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .coupon-history .history-table th {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 2px solid var(--color-border);
+    background: var(--color-bg);
+  }
+
+  .coupon-history .history-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .coupon-history .history-table tr:hover td {
+    background: rgba(13, 110, 253, 0.03);
+  }
+
+  /* ============================================================
+     GENERATE COUPON SECTION
+     ============================================================ */
+  .generate-coupon-section {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    margin-bottom: 28px;
+  }
+
+  .generate-coupon-section h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .generate-coupon-section h3 i {
+    color: var(--color-primary);
+  }
+
+  .generate-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+  }
+
+  .generate-form .form-group {
+    flex: 1;
+    min-width: 150px;
+    margin-bottom: 0;
+  }
+
+  .generate-form .form-group label {
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+
+  .generate-form .form-group input,
+  .generate-form .form-group select {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .generate-form .btn {
+    white-space: nowrap;
+  }
+
+  /* ============================================================
+     POINTS HISTORY TABLE
+     ============================================================ */
+  .points-history-section {
+    margin-top: 28px;
+  }
+
+  .points-history-section .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .points-history-section .section-header h2 {
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .points-history-section .section-header h2 i {
+    color: var(--color-success);
+  }
+
+  /* ============================================================
+     EMPTY STATE / ERROR
+     ============================================================ */
+  .loyalty-empty {
+    text-align: center;
+    padding: 60px 20px;
+  }
+
+  .loyalty-empty i {
+    font-size: 56px;
+    opacity: 0.2;
+    color: var(--color-text-muted);
+    margin-bottom: 16px;
+  }
+
+  .loyalty-empty h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .loyalty-empty p {
+    color: var(--color-text-muted);
+    font-size: 14px;
+    margin-bottom: 16px;
+  }
+
+  .loyalty-error {
+    background: #fce8e6;
+    color: #d93025;
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* ============================================================
+     RESPONSIVE
+     ============================================================ */
+  @media (max-width: 768px) {
+    .points-summary {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .coupons-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .generate-form {
+      flex-direction: column;
+    }
+
+    .generate-form .form-group {
+      min-width: 100%;
+    }
+
+    .coupon-history .history-table {
+      font-size: 12px;
+    }
+
+    .coupon-history .history-table th,
+    .coupon-history .history-table td {
+      padding: 8px 10px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .points-summary {
+      grid-template-columns: 1fr;
+    }
+
+    .loyalty-page .page-intro h1 {
+      font-size: 20px;
+    }
+  }
+</style>
+
+<!-- ============================================================
+     LOYALTY PAGE
+     ============================================================ -->
+<div class="loyalty-page" data-page="loyalty" data-customer-id="<%= customer._id || '' %>" data-tenant-id="<%= customer.tenantId || '' %>">
+
+  <!-- Page intro -->
+  <div class="page-intro">
+    <h1>
+      <i class="fas fa-gem"></i>
+      Programul de loialitate
+    </h1>
+    <p>Acumulează puncte la fiecare comandă sau sejur și transformă-le în cupoane de reducere.</p>
+  </div>
+
+  <!-- Flash/error messages -->
+  <% if (error) { %>
+    <div class="loyalty-error">
+      <i class="fas fa-exclamation-circle"></i>
+      <%= error %>
+    </div>
+  <% } %>
+
+  <% if (locals.flash && flash.message) { %>
+    <div class="loyalty-error" style="background:<%= flash.type === 'success' ? '#e6f4ea' : '#fce8e6' %>;color:<%= flash.type === 'success' ? '#1e8e3e' : '#d93025' %>;">
+      <i class="fas fa-<%= flash.type === 'success' ? 'check-circle' : 'exclamation-circle' %>"></i>
+      <%= flash.message %>
+    </div>
+  <% } %>
+
+  <% if (locals.noAccount) { %>
+    <!-- ============================================================
+         NO ACCOUNT STATE — Prompt to create
+         ============================================================ -->
+    <div class="loyalty-empty">
+      <i class="fas fa-gem"></i>
+      <h3>Nu ai încă un cont de loialitate</h3>
+      <p>Creează-ți contul și începe să acumulezi puncte la fiecare achiziție!</p>
+      <button class="btn btn-primary" onclick="createLoyaltyAccount()">
+        <i class="fas fa-plus"></i> Creează cont de loialitate
+      </button>
+    </div>
+  <% } else { %>
+
+    <!-- ============================================================
+         POINTS SUMMARY
+         ============================================================ -->
+    <div class="points-summary">
+      <div class="points-card">
+        <div class="points-icon primary">
+          <i class="fas fa-star"></i>
+        </div>
+        <div class="points-value" id="totalPoints">
+          <%= account.totalPoints || 0 %>
+        </div>
+        <div class="points-label">Puncte disponibile</div>
+      </div>
+
+      <div class="points-card">
+        <div class="points-icon success">
+          <i class="fas fa-history"></i>
+        </div>
+        <div class="points-value" id="lifetimePoints">
+          <%= account.lifetimePoints || 0 %>
+        </div>
+        <div class="points-label">Puncte totale (lifetime)</div>
+      </div>
+
+      <div class="points-card">
+        <div class="points-icon warning">
+          <i class="fas fa-ticket-alt"></i>
+        </div>
+        <div class="points-value" id="activeCouponsCount">
+          <%= account.activeCoupons || 0 %>
+        </div>
+        <div class="points-label">Cupoane active</div>
+        <a class="points-action" href="#active-coupons"><i class="fas fa-arrow-down"></i> Vezi cupoanele</a>
+      </div>
+
+      <div class="points-card">
+        <div class="points-icon info">
+          <i class="fas fa-calculator"></i>
+        </div>
+        <div class="points-value">
+          <%= LOYALTY_CONFIG ? LOYALTY_CONFIG.PUNCTE_PER_VALOARE : 10 %>
+        </div>
+        <div class="points-label">Unități = 1 punct</div>
+        <span class="points-action" style="cursor:default;font-size:12px;color:var(--color-text-muted);">
+          <i class="fas fa-coins"></i> Minim <%= LOYALTY_CONFIG ? LOYALTY_CONFIG.PUNCTE_MINIME_FOR_CUPON : 100 %> puncte/cupon
+        </span>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         GENERATE COUPON SECTION
+         ============================================================ -->
+    <div class="generate-coupon-section" id="generate-coupon">
+      <h3>
+        <i class="fas fa-gift"></i>
+        Creează un cupon de reducere
+      </h3>
+      <%
+        var minPoints = LOYALTY_CONFIG ? LOYALTY_CONFIG.PUNCTE_MINIME_FOR_CUPON : 100;
+        var maxActive = LOYALTY_CONFIG ? LOYALTY_CONFIG.MAX_CUPOANE_ACTIVE : 5;
+        var canGenerate = (account.totalPoints || 0) >= minPoints && (account.activeCoupons || 0) < maxActive;
+      %>
+      <% if (canGenerate) { %>
+        <form class="generate-form" id="generateCouponForm" onsubmit="return generateCoupon(event)">
+          <div class="form-group">
+            <label for="discountPercent">Discount (%)</label>
+            <select id="discountPercent" name="discountPercent">
+              <% var defaults = [5, 10, 15, 20, 25, 30]; %>
+              <% for (var i = 0; i < defaults.length; i++) { %>
+                <option value="<%= defaults[i] %>" <%= defaults[i] === 10 ? 'selected' : '' %>>
+                  <%= defaults[i] %>% reducere
+                </option>
+              <% } %>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="pointsCost">Cost puncte</label>
+            <input type="number" id="pointsCost" name="pointsCost" min="<%= minPoints %>" value="<%= minPoints %>" step="10" />
+          </div>
+          <button type="submit" class="btn btn-primary" id="generateBtn">
+            <i class="fas fa-ticket-alt"></i> Creează cupon
+          </button>
+        </form>
+      <% } else { %>
+        <p style="color:var(--color-text-muted);font-size:14px;">
+          <% if ((account.totalPoints || 0) < minPoints) { %>
+            <i class="fas fa-info-circle"></i> Ai nevoie de minim <strong><%= minPoints %></strong> puncte pentru a genera un cupon. Ai doar <strong><%= account.totalPoints || 0 %></strong> puncte.
+          <% } else if ((account.activeCoupons || 0) >= maxActive) { %>
+            <i class="fas fa-info-circle"></i> Ai atins numărul maxim de cupoane active (<strong><%= maxActive %></strong>). Folosește sau anulează un cupon existent.
+          <% } %>
+        </p>
+      <% } %>
+    </div>
+
+    <!-- ============================================================
+         ACTIVE COUPONS
+         ============================================================ -->
+    <div class="coupons-section" id="active-coupons">
+      <div class="section-header">
+        <h2>
+          <i class="fas fa-ticket-alt"></i>
+          Cupoane active (<span id="activeCount"><%= activeCoupons.length %></span>)
+        </h2>
+        <button class="btn btn-sm btn-secondary" onclick="refreshCoupons()" title="Reîmprospătează">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+      </div>
+
+      <% if (activeCoupons.length === 0) { %>
+        <div class="loyalty-empty" style="padding:30px 20px;">
+          <i class="fas fa-ticket-alt" style="font-size:32px;"></i>
+          <h3>Niciun cupon activ</h3>
+          <p>Generează un cupon de reducere folosind punctele tale de loialitate.</p>
+          <a href="#generate-coupon" class="btn btn-primary btn-sm">
+            <i class="fas fa-plus"></i> Creează cupon
+          </a>
+        </div>
+      <% } else { %>
+        <div class="coupons-grid" id="activeCouponsGrid">
+          <% activeCoupons.forEach(function(c) { %>
+            <div class="coupon-card" data-coupon-id="<%= c.id || c._id %>">
+              <div class="coupon-status active">Activ</div>
+              <div class="coupon-code"><%= c.code %></div>
+              <div class="coupon-discount">
+                <%= c.discountPercent %>% <small>reducere</small>
+              </div>
+              <div class="coupon-expiry">
+                <i class="far fa-clock"></i>
+                Expiră: <%= c.expiresAt ? formatDate(c.expiresAt) : '—' %>
+              </div>
+              <div class="coupon-actions">
+                <button class="btn btn-sm btn-primary" onclick="useCoupon('<%= c.code %>')">
+                  <i class="fas fa-check"></i> Folosește
+                </button>
+                <button class="btn btn-sm btn-secondary" onclick="cancelCoupon('<%= c.code %>')">
+                  <i class="fas fa-ban"></i> Anulează
+                </button>
+              </div>
+            </div>
+          <% }); %>
+        </div>
+      <% } %>
+    </div>
+
+    <!-- ============================================================
+         ALL COUPONS HISTORY
+         ============================================================ -->
+    <div class="coupon-history">
+      <div class="section-header">
+        <h2>
+          <i class="fas fa-history"></i>
+          Istoric cupoane (<%= coupons.length %>)
+        </h2>
+        <button class="btn btn-sm btn-secondary" onclick="loadAllCoupons()" title="Reîmprospătează">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+      </div>
+
+      <% if (coupons.length === 0) { %>
+        <div class="loyalty-empty" style="padding:30px 20px;">
+          <i class="fas fa-history" style="font-size:32px;"></i>
+          <h3>Niciun cupon în istoric</h3>
+          <p>Cupoanele tale generate vor apărea aici.</p>
+        </div>
+      <% } else { %>
+        <div class="table-wrapper">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Cod</th>
+                <th>Discount</th>
+                <th>Status</th>
+                <th>Creeat</th>
+                <th>Expiră</th>
+                <th>Folosit</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% coupons.forEach(function(c) { %>
+                <tr>
+                  <td style="font-family:monospace;font-weight:600;"><%= c.code %></td>
+                  <td><%= c.discountPercent %>%</td>
+                  <td>
+                    <%
+                      var statusClass = c.status || 'unknown';
+                      var statusLabel = c.status || 'Necunoscut';
+                      if (statusClass === 'active') statusLabel = 'Activ';
+                      else if (statusClass === 'used') statusLabel = 'Folosit';
+                      else if (statusClass === 'expired') statusLabel = 'Expirat';
+                      else if (statusClass === 'cancelled') statusLabel = 'Anulat';
+                    %>
+                    <span class="coupon-status <%= statusClass %>"><%= statusLabel %></span>
+                  </td>
+                  <td><%= c.createdAt ? formatShortDate(c.createdAt) : '—' %></td>
+                  <td><%= c.expiresAt ? formatShortDate(c.expiresAt) : '—' %></td>
+                  <td><%= c.usedAt ? formatShortDate(c.usedAt) : '—' %></td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+
+    <!-- ============================================================
+         POINTS HISTORY (placeholder)
+         ============================================================ -->
+    <div class="points-history-section">
+      <div class="section-header">
+        <h2>
+          <i class="fas fa-chart-line"></i>
+          Activitate puncte
+        </h2>
+      </div>
+      <div class="card" style="padding:20px;">
+        <p style="color:var(--color-text-muted);font-size:14px;text-align:center;">
+          <i class="fas fa-info-circle"></i>
+          Istoricul detaliat al tranzacțiilor cu puncte va fi disponibil într-o versiune viitoare.
+          <br>Total puncte acumulate (lifetime): <strong><%= account.lifetimePoints || 0 %></strong>
+        </p>
+      </div>
+    </div>
+
+  <% } /* end else noAccount */ %>
+</div>
+
+<!-- ============================================================
+     USE COUPON MODAL
+     ============================================================ -->
+<div class="modal-overlay" id="useCouponModal" style="display:none;">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header">
+      <h2><i class="fas fa-ticket-alt"></i> Folosește cupon</h2>
+      <button class="modal-close" onclick="closeUseCouponModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom:16px;color:var(--color-text-muted);font-size:14px;">
+        Cod cupon: <strong id="useCouponCode" style="font-family:monospace;"></strong>
+      </p>
+      <div class="form-group">
+        <label for="orderAmount">Valoarea comenzii (lei)</label>
+        <input type="number" id="orderAmount" min="0.01" step="0.01" placeholder="Ex: 120.00" required />
+      </div>
+      <div class="form-group">
+        <label for="orderId">ID comandă (opțional)</label>
+        <input type="text" id="orderId" placeholder="ID-ul comenzii" />
+      </div>
+      <div id="discountPreview" style="display:none;margin-top:10px;padding:12px;background:#e8f0fe;border-radius:8px;font-size:14px;">
+        <strong>Sumar discount:</strong><br>
+        Valoare inițială: <span id="previewOriginal"></span><br>
+        Discount (<span id="previewPercent"></span>%): -<span id="previewDiscount"></span><br>
+        <strong>Total final: <span id="previewFinal"></span></strong>
+      </div>
+    </div>
+    <div class="modal-footer" style="padding-top:16px;border-top:1px solid var(--color-border);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-secondary" onclick="closeUseCouponModal()">Anulează</button>
+      <button class="btn btn-primary" id="confirmUseCouponBtn" onclick="confirmUseCoupon()">
+        <i class="fas fa-check"></i> Confirmă utilizarea
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCRIPTS
+     ============================================================ -->
+<script>
+  (function() {
+    'use strict';
+
+    // ============================================================
+    // State
+    // ============================================================
+    var customerId = '<%= customer._id || "" %>';
+    var tenantId = '<%= customer.tenantId || "" %>';
+    var currentCouponCode = null;
+    var isGenerating = false;
+
+    // ============================================================
+    // Create loyalty account
+    // ============================================================
+    window.createLoyaltyAccount = async function() {
+      try {
+        var data = await apiFetch('/api/loyalty/account', {
+          method: 'POST',
+          body: JSON.stringify({ userId: customerId, tenantId: tenantId })
+        });
+        if (data && data.success) {
+          showToast('Contul de loialitate a fost creat cu succes!', 'success');
+          setTimeout(function() { window.location.reload(); }, 1500);
+        }
+      } catch (err) {
+        showToast('Eroare la crearea contului de loialitate.', 'error');
+      }
+    };
+
+    // ============================================================
+    // Generate coupon
+    // ============================================================
+    window.generateCoupon = async function(e) {
+      e.preventDefault();
+      if (isGenerating) return false;
+
+      var discountPercent = parseInt(document.getElementById('discountPercent').value, 10);
+      var pointsCost = parseInt(document.getElementById('pointsCost').value, 10);
+
+      if (!discountPercent || discountPercent < 1 || discountPercent > 100) {
+        showToast('Procentajul de discount trebuie să fie între 1 și 100.', 'error');
+        return false;
+      }
+
+      if (!pointsCost || pointsCost < 10) {
+        showToast('Costul în puncte trebuie să fie de minim 10.', 'error');
+        return false;
+      }
+
+      isGenerating = true;
+      var btn = document.getElementById('generateBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Se creează…';
+
+      try {
+        var data = await apiFetch('/api/loyalty/coupons/generate', {
+          method: 'POST',
+          body: JSON.stringify({
+            userId: customerId,
+            discountPercent: discountPercent,
+            pointsCost: pointsCost,
+            tenantId: tenantId
+          })
+        });
+
+        if (data && data.success) {
+          showToast('Cuponul a fost generat cu succes: ' + data.data.coupon.code, 'success');
+          setTimeout(function() { window.location.reload(); }, 1500);
+        }
+      } catch (err) {
+        showToast('Eroare la generarea cuponului.', 'error');
+      } finally {
+        isGenerating = false;
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-ticket-alt"></i> Creează cupon';
+      }
+
+      return false;
+    };
+
+    // ============================================================
+    // Use coupon (open modal)
+    // ============================================================
+    window.useCoupon = function(code) {
+      currentCouponCode = code;
+      document.getElementById('useCouponCode').textContent = code;
+      document.getElementById('orderAmount').value = '';
+      document.getElementById('orderId').value = '';
+      document.getElementById('discountPreview').style.display = 'none';
+      document.getElementById('useCouponModal').style.display = 'flex';
+    };
+
+    window.closeUseCouponModal = function() {
+      document.getElementById('useCouponModal').style.display = 'none';
+      currentCouponCode = null;
+    };
+
+    // Preview discount
+    document.addEventListener('DOMContentLoaded', function() {
+      var orderAmountInput = document.getElementById('orderAmount');
+      if (orderAmountInput) {
+        orderAmountInput.addEventListener('input', function() {
+          previewDiscount();
+        });
+      }
+    });
+
+    async function previewDiscount() {
+      var amount = parseFloat(document.getElementById('orderAmount').value);
+      if (!amount || amount <= 0) {
+        document.getElementById('discountPreview').style.display = 'none';
+        return;
+      }
+
+      try {
+        var data = await apiFetch('/api/loyalty/discount/calculate', {
+          method: 'POST',
+          body: JSON.stringify({
+            couponCode: currentCouponCode,
+            orderAmount: amount,
+            userId: customerId,
+            tenantId: tenantId
+          })
+        });
+
+        if (data && data.success && data.data) {
+          var d = data.data;
+          document.getElementById('previewOriginal').textContent = formatCurrency(d.originalAmount);
+          document.getElementById('previewPercent').textContent = d.discountPercent;
+          document.getElementById('previewDiscount').textContent = formatCurrency(d.discountAmount);
+          document.getElementById('previewFinal').textContent = formatCurrency(d.finalAmount);
+          document.getElementById('discountPreview').style.display = 'block';
+        }
+      } catch (err) {
+        document.getElementById('discountPreview').style.display = 'none';
+      }
+    }
+
+    // ============================================================
+    // Confirm use coupon
+    // ============================================================
+    window.confirmUseCoupon = async function() {
+      if (!currentCouponCode) return;
+
+      var orderAmount = parseFloat(document.getElementById('orderAmount').value);
+      if (!orderAmount || orderAmount <= 0) {
+        showToast('Introdu o valoare validă a comenzii.', 'error');
+        return;
+      }
+
+      var orderId = document.getElementById('orderId').value || undefined;
+
+      var btn = document.getElementById('confirmUseCouponBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Se procesează…';
+
+      try {
+        var data = await apiFetch('/api/loyalty/coupons/use', {
+          method: 'POST',
+          body: JSON.stringify({
+            code: currentCouponCode,
+            userId: customerId,
+            orderId: orderId,
+            orderAmount: orderAmount,
+            tenantId: tenantId
+          })
+        });
+
+        if (data && data.success) {
+          var discount = data.data.discountDetails;
+          var msg = 'Cupon folosit cu succes!';
+          if (discount) {
+            msg += ' Reducere: ' + formatCurrency(discount.discountAmount) + ' (total: ' + formatCurrency(discount.finalAmount) + ')';
+          }
+          showToast(msg, 'success');
+          closeUseCouponModal();
+          setTimeout(function() { window.location.reload(); }, 1500);
+        }
+      } catch (err) {
+        showToast('Eroare la utilizarea cuponului.', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check"></i> Confirmă utilizarea';
+      }
+    };
+
+    // ============================================================
+    // Cancel coupon
+    // ============================================================
+    window.cancelCoupon = async function(code) {
+      if (!confirm('Ești sigur că vrei să anulezi acest cupon? Punctele vor fi returnate.')) return;
+
+      try {
+        var data = await apiFetch('/api/loyalty/coupons/cancel', {
+          method: 'POST',
+          body: JSON.stringify({ code: code, userId: customerId, tenantId: tenantId })
+        });
+
+        if (data && data.success) {
+          showToast('Cupon anulat. Puncte returnate: ' + data.data.pointsRefunded, 'success');
+          setTimeout(function() { window.location.reload(); }, 1500);
+        }
+      } catch (err) {
+        showToast('Eroare la anularea cuponului.', 'error');
+      }
+    };
+
+    // ============================================================
+    // Refresh coupons
+    // ============================================================
+    window.refreshCoupons = function() {
+      window.location.reload();
+    };
+
+    window.loadAllCoupons = function() {
+      window.location.reload();
+    };
+
+    // ============================================================
+    // Close modal on overlay click
+    // ============================================================
+    var modal = document.getElementById('useCouponModal');
+    if (modal) {
+      modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+          closeUseCouponModal();
+        }
+      });
+    }
+
+  })();
+</script>

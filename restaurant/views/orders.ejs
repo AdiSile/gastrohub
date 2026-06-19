@@ -1,0 +1,1009 @@
+<%
+  // Variabile locale
+  const orders = locals.orders || [];
+  const activeOrders = locals.activeOrders || [];
+  const historyOrders = locals.historyOrders || [];
+  const restaurant = locals.restaurant || null;
+  const currentFilter = locals.currentFilter || 'active';
+  const loading = locals.loading || false;
+  const stats = locals.stats || {};
+%>
+
+<style>
+  /* ============================================================
+     ORDERS PAGE STYLES
+     ============================================================ */
+  .orders-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .orders-header h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .orders-header h1 i {
+    color: var(--color-primary);
+  }
+
+  .orders-header .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--color-text-muted);
+    font-size: 13px;
+  }
+
+  .orders-header .header-meta .resto-name {
+    font-weight: 600;
+    color: var(--color-primary);
+  }
+
+  /* ============================================================
+     FILTER TABS
+     ============================================================ */
+  .filter-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 24px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .filter-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 20px;
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition);
+    border: 1px solid transparent;
+    background: var(--color-bg);
+    color: var(--color-text-muted);
+    text-decoration: none;
+  }
+
+  .filter-tab:hover {
+    background: var(--color-surface);
+    border-color: var(--color-border);
+    color: var(--color-text);
+  }
+
+  .filter-tab.active {
+    background: var(--color-primary);
+    color: #fff;
+    border-color: var(--color-primary);
+    box-shadow: 0 2px 8px rgba(232, 93, 4, 0.3);
+  }
+
+  .filter-tab .count {
+    background: rgba(0,0,0,0.06);
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .filter-tab.active .count {
+    background: rgba(255,255,255,0.25);
+  }
+
+  .filter-tab i {
+    font-size: 14px;
+  }
+
+  /* Status badge colors for tabs */
+  .filter-tab.tab-deschisă { color: #e67e22; }
+  .filter-tab.tab-deschisă.active { background: #e67e22; color: #fff; border-color: #e67e22; }
+
+  .filter-tab.tab-în-preparare { color: #3498db; }
+  .filter-tab.tab-în-preparare.active { background: #3498db; color: #fff; border-color: #3498db; }
+
+  .filter-tab.tab-finalizată { color: #9b59b6; }
+  .filter-tab.tab-finalizată.active { background: #9b59b6; color: #fff; border-color: #9b59b6; }
+
+  .filter-tab.tab-achitată { color: #27ae60; }
+  .filter-tab.tab-achitată.active { background: #27ae60; color: #fff; border-color: #27ae60; }
+
+  .filter-tab.tab-anulată { color: #e74c3c; }
+  .filter-tab.tab-anulată.active { background: #e74c3c; color: #fff; border-color: #e74c3c; }
+
+  .filter-tab.tab-history { color: var(--color-text-muted); }
+  .filter-tab.tab-history.active { background: var(--color-secondary); color: #fff; border-color: var(--color-secondary); }
+
+  /* ============================================================
+     SEARCH BAR
+     ============================================================ */
+  .search-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .search-bar .search-input-wrapper {
+    flex: 1;
+    min-width: 200px;
+    position: relative;
+  }
+
+  .search-bar .search-input-wrapper input {
+    width: 100%;
+    padding: 10px 14px 10px 40px;
+    font-size: 14px;
+    font-family: var(--font-family);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    transition: border-color var(--transition);
+  }
+
+  .search-bar .search-input-wrapper input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(232, 93, 4, 0.12);
+  }
+
+  .search-bar .search-input-wrapper i {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-text-muted);
+    font-size: 14px;
+  }
+
+  .search-bar .search-filters {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .search-bar .search-filters select {
+    padding: 10px 32px 10px 12px;
+    font-size: 13px;
+    font-family: var(--font-family);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23636e72' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+
+  /* ============================================================
+     ACTIVE ORDERS LIST
+     ============================================================ */
+  .orders-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--color-border);
+    overflow: hidden;
+  }
+
+  .orders-card .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--color-border);
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .orders-card .card-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .orders-card .card-header h2 i {
+    color: var(--color-primary);
+  }
+
+  .orders-card .card-header .card-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .orders-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .orders-table thead th {
+    padding: 12px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .orders-table tbody td {
+    padding: 14px 16px;
+    font-size: 14px;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
+  }
+
+  .orders-table tbody tr {
+    transition: background var(--transition);
+    cursor: pointer;
+  }
+
+  .orders-table tbody tr:hover {
+    background: rgba(0,0,0,0.02);
+  }
+
+  .orders-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .orders-table .order-id-cell {
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--color-text-muted);
+    font-family: monospace;
+  }
+
+  .orders-table .order-table-cell {
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .orders-table .order-table-cell .table-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--color-bg);
+    font-size: 13px;
+    border: 2px solid var(--color-border);
+  }
+
+  .orders-table .order-table-cell .table-badge.active {
+    border-color: var(--color-primary);
+    background: rgba(232, 93, 4, 0.08);
+  }
+
+  .orders-table .order-items-cell {
+    max-width: 200px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 13px;
+    color: var(--color-text-muted);
+  }
+
+  .orders-table .order-waiter-cell {
+    font-size: 13px;
+    color: var(--color-text-muted);
+  }
+
+  .orders-table .order-waiter-cell i {
+    margin-right: 4px;
+    font-size: 11px;
+  }
+
+  .orders-table .order-amount-cell {
+    font-weight: 700;
+    color: var(--color-text);
+    white-space: nowrap;
+  }
+
+  .orders-table .order-time-cell {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+
+  .orders-table .order-actions-cell {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .orders-table .order-actions-cell button {
+    padding: 6px 12px;
+    font-size: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: all var(--transition);
+    color: var(--color-text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .orders-table .order-actions-cell button:hover {
+    background: var(--color-bg);
+    color: var(--color-text);
+  }
+
+  .orders-table .order-actions-cell .btn-view {
+    color: var(--color-info);
+    border-color: var(--color-info);
+  }
+
+  .orders-table .order-actions-cell .btn-view:hover {
+    background: #e3f2fd;
+  }
+
+  .orders-table .order-actions-cell .btn-pay {
+    color: var(--color-success);
+    border-color: var(--color-success);
+  }
+
+  .orders-table .order-actions-cell .btn-pay:hover {
+    background: #e8f5e9;
+  }
+
+  .orders-table .order-actions-cell .btn-cancel {
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+  }
+
+  .orders-table .order-actions-cell .btn-cancel:hover {
+    background: #fce4ec;
+  }
+
+  /* ============================================================
+     HISTORY ORDERS LIST
+     ============================================================ */
+  .history-list .history-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--color-border);
+    transition: background var(--transition);
+    cursor: pointer;
+  }
+
+  .history-list .history-item:last-child {
+    border-bottom: none;
+  }
+
+  .history-list .history-item:hover {
+    background: rgba(0,0,0,0.02);
+  }
+
+  .history-list .history-item .history-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--color-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  .history-list .history-item .history-icon.paid {
+    background: #e8f5e9;
+    color: var(--color-success);
+  }
+
+  .history-list .history-item .history-icon.cancelled {
+    background: #fce4ec;
+    color: var(--color-danger);
+  }
+
+  .history-list .history-item .history-icon.done {
+    background: #e3f2fd;
+    color: var(--color-info);
+  }
+
+  .history-list .history-item .history-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .history-list .history-item .history-info .history-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .history-list .history-item .history-info .history-meta .history-id {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .history-list .history-item .history-info .history-meta .history-date {
+    font-size: 11px;
+    color: var(--color-text-muted);
+  }
+
+  .history-list .history-item .history-info .history-summary {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+  }
+
+  .history-list .history-item .history-amount {
+    font-size: 16px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .history-list .history-item .history-status {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 12px;
+  }
+
+  .history-list .history-item .history-status.paid {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  .history-list .history-item .history-status.cancelled {
+    background: #fce4ec;
+    color: #c62828;
+  }
+
+  .history-list .history-item .history-status.done {
+    background: #e3f2fd;
+    color: #1565c0;
+  }
+
+  /* ============================================================
+     PAGINATION
+     ============================================================ */
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .pagination button {
+    padding: 8px 14px;
+    font-size: 13px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: all var(--transition);
+    color: var(--color-text);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .pagination button:hover:not(:disabled) {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .pagination button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .pagination button.active {
+    background: var(--color-primary);
+    color: #fff;
+    border-color: var(--color-primary);
+  }
+
+  .pagination .page-info {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    padding: 0 8px;
+  }
+
+  /* ============================================================
+     EMPTY STATE
+     ============================================================ */
+  .empty-orders {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--color-text-muted);
+  }
+
+  .empty-orders i {
+    font-size: 52px;
+    opacity: 0.2;
+    margin-bottom: 16px;
+  }
+
+  .empty-orders h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--color-text);
+  }
+
+  .empty-orders p {
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+
+  /* ============================================================
+     STATUS BADGES (inline)
+     ============================================================ */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  .status-badge.deschisă {
+    background: #fff3e0;
+    color: #e65100;
+  }
+
+  .status-badge.în-preparare {
+    background: #e3f2fd;
+    color: #1565c0;
+  }
+
+  .status-badge.finalizată {
+    background: #f3e5f5;
+    color: #6a1b9a;
+  }
+
+  .status-badge.livrată {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  .status-badge.achitată {
+    background: #e8f5e9;
+    color: #1b5e20;
+  }
+
+  .status-badge.anulată {
+    background: #fce4ec;
+    color: #b71c1c;
+  }
+
+  /* ============================================================
+     TABLE SUMMARY ROW (stats)
+     ============================================================ */
+  .orders-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    padding: 16px 20px;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .orders-summary .summary-item {
+    text-align: center;
+  }
+
+  .orders-summary .summary-item .summary-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+  }
+
+  .orders-summary .summary-item .summary-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin-top: 2px;
+  }
+
+  .orders-summary .summary-item .summary-value.primary { color: var(--color-primary); }
+  .orders-summary .summary-item .summary-value.success { color: var(--color-success); }
+  .orders-summary .summary-item .summary-value.danger { color: var(--color-danger); }
+  .orders-summary .summary-item .summary-value.info { color: var(--color-info); }
+
+  /* ============================================================
+     RESPONSIVE
+     ============================================================ */
+  @media (max-width: 768px) {
+    .orders-table thead {
+      display: none;
+    }
+
+    .orders-table tbody tr {
+      display: block;
+      padding: 16px;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .orders-table tbody td {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border: none;
+      font-size: 13px;
+    }
+
+    .orders-table tbody td::before {
+      content: attr(data-label);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--color-text-muted);
+      min-width: 80px;
+    }
+
+    .orders-table tbody td.order-actions-cell {
+      justify-content: flex-end;
+      padding-top: 10px;
+      border-top: 1px solid var(--color-border);
+      margin-top: 8px;
+    }
+
+    .orders-table .order-items-cell {
+      max-width: none;
+    }
+
+    .filter-tabs {
+      gap: 4px;
+    }
+
+    .filter-tab {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    .search-bar {
+      flex-direction: column;
+    }
+
+    .search-bar .search-input-wrapper {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .orders-header h1 {
+      font-size: 20px;
+    }
+
+    .orders-table tbody td {
+      font-size: 12px;
+    }
+
+    .orders-summary {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+</style>
+
+<!-- ============================================================
+     ORDERS HEADER
+     ============================================================ -->
+<div class="orders-header">
+  <div>
+    <h1>
+      <i class="fas fa-receipt"></i>
+      Comenzi
+    </h1>
+    <div class="header-meta">
+      <% if (restaurant) { %>
+        <span class="resto-name"><i class="fas fa-store"></i> <%= restaurant.name %></span>
+        <span class="text-muted">•</span>
+      <% } %>
+      <span>
+        <i class="fas fa-clock"></i>
+        <%= currentFilter === 'active' ? 'Comenzi active' : 'Istoric comenzi' %>
+      </span>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <a href="/restaurant/orders/new" class="btn btn-primary btn-sm">
+      <i class="fas fa-plus"></i> Comandă nouă
+    </a>
+    <button class="btn btn-secondary btn-sm" onclick="refreshOrders()">
+      <i class="fas fa-sync-alt"></i> Reîmprospătare
+    </button>
+  </div>
+</div>
+
+<!-- ============================================================
+     ALERT
+     ============================================================ -->
+<% if (locals.alert) { %>
+  <div class="dashboard-alert <%= alert.type || 'info' %>" style="margin-bottom:20px;">
+    <i class="fas fa-<%= alert.type === 'warning' ? 'exclamation-triangle' : alert.type === 'success' ? 'check-circle' : 'info-circle' %>"></i>
+    <%= alert.message %>
+  </div>
+<% } %>
+
+<!-- ============================================================
+     LOADING
+     ============================================================ -->
+<% if (loading) { %>
+  <div class="spinner"></div>
+<% } else { %>
+
+<!-- ============================================================
+     FILTER TABS
+     ============================================================ -->
+<div class="filter-tabs">
+  <a href="?filter=active" class="filter-tab <%= currentFilter === 'active' ? 'active' : '' %>">
+    <i class="fas fa-bolt"></i> Active
+    <span class="count"><%= activeOrders.length %></span>
+  </a>
+
+  <a href="?filter=history" class="filter-tab tab-history <%= currentFilter === 'history' ? 'active' : '' %>">
+    <i class="fas fa-history"></i> Istoric
+    <span class="count"><%= historyOrders.length %></span>
+  </a>
+
+  <!-- Status filters only visible in active view -->
+  <% if (currentFilter === 'active') { %>
+    <a href="?filter=active&status=deschisă" class="filter-tab tab-deschisă">
+      <i class="fas fa-circle" style="font-size:8px;"></i> Deschise
+    </a>
+    <a href="?filter=active&status=în preparare" class="filter-tab tab-în-preparare">
+      <i class="fas fa-spinner"></i> În preparare
+    </a>
+    <a href="?filter=active&status=finalizată" class="filter-tab tab-finalizată">
+      <i class="fas fa-check"></i> Finalizate
+    </a>
+  <% } %>
+
+  <!-- History filters -->
+  <% if (currentFilter === 'history') { %>
+    <a href="?filter=history&status=achitată" class="filter-tab tab-achitată">
+      <i class="fas fa-credit-card"></i> Achitate
+    </a>
+    <a href="?filter=history&status=anulată" class="filter-tab tab-anulată">
+      <i class="fas fa-ban"></i> Anulate
+    </a>
+  <% } %>
+</div>
+
+<!-- ============================================================
+     SEARCH BAR
+     ============================================================ -->
+<div class="search-bar">
+  <div class="search-input-wrapper">
+    <i class="fas fa-search"></i>
+    <input type="text" id="searchInput" placeholder="Caută comandă (ID, masă, ospătar)..." 
+           value="<%= locals.searchQuery || '' %>" onkeyup="filterOrders(event)" />
+  </div>
+  <div class="search-filters">
+    <select id="tableFilter" onchange="filterOrders()">
+      <option value="">Toate mesele</option>
+      <% if (stats.totalTables && stats.totalTables > 0) { %>
+        <% for (var i = 1; i <= stats.totalTables; i++) { %>
+          <option value="<%= i %>" <%= locals.tableFilter == i ? 'selected' : '' %>>Masa <%= i %></option>
+        <% } %>
+      <% } %>
+    </select>
+    <select id="waiterFilter" onchange="filterOrders()">
+      <option value="">Toți ospătarii</option>
+      <% if (locals.availableWaiters && locals.availableWaiters.length > 0) { %>
+        <% locals.availableWaiters.forEach(function(w) { %>
+          <option value="<%= w %>" <%= locals.waiterFilter === w ? 'selected' : '' %>><%= w %></option>
+        <% }); %>
+      <% } %>
+    </select>
+  </div>
+</div>
+
+<!-- ============================================================
+     ACTIVE ORDERS VIEW
+     ============================================================ -->
+<% if (currentFilter === 'active') { %>
+  <% if (activeOrders.length === 0) { %>
+    <div class="empty-orders">
+      <i class="fas fa-check-circle" style="color:var(--color-success);opacity:0.3;"></i>
+      <h3>Nicio comandă activă</h3>
+      <p>Toate comenzile au fost procesate. Poți crea o comandă nouă.</p>
+      <a href="/restaurant/orders/new" class="btn btn-primary">
+        <i class="fas fa-plus"></i> Comandă nouă
+      </a>
+    </div>
+  <% } else { %>
+    <div class="orders-card">
+      <!-- Summary stats -->
+      <div class="orders-summary">
+        <div class="summary-item">
+          <div class="summary-label">Total active</div>
+          <div class="summary-value primary"><%= activeOrders.length %></div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">Valoare totală</div>
+          <div class="summary-value success">
+            <%= formatCurrency(stats.activeTotal || 0) %>
+          </div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">Mese ocupate</div>
+          <div class="summary-value info"><%= stats.occupiedTables || 0 %></div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">Timp mediu</div>
+          <div class="summary-value"><%= stats.avgWaitTime || '—' %></div>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="table-wrapper">
+        <table class="orders-table" id="activeOrdersTable">
+          <thead>
+            <tr>
+              <th>Comandă</th>
+              <th>Masă</th>
+              <th>Status</th>
+              <th>Articole</th>
+              <th>Ospătar</th>
+              <th>Total</th>
+              <th>Creată</th>
+              <th style="text-align:right;">Acțiuni</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% activeOrders.forEach(function(order) { %>
+              <tr onclick="viewOrder('<%= order._id %>')" data-id="<%= order._id %>" data-masa="<%= order.masa %>" data-waiter="<%= order.ospatar %>">
+                <td data-label="Comandă">
+                  <span class="order-id-cell"><%= order._id.substring(0, 8) %>...</span>
+                </td>
+                <td data-label="Masă" class="order-table-cell">
+                  <span class="table-badge <%= order.masa > 0 ? 'active' : '' %>">
+                    <%= order.masa > 0 ? 'M' + order.masa : '★' %>
+                  </span>
+                </td>
+                <td data-label="Status">
+                  <span class="status-badge <%= order.status.replace(/ /g, '-') %>">
+                    <i class="fas fa-<%= order.status === 'deschisă' ? 'circle' : order.status === 'în preparare' ? 'spinner' : order.status === 'finalizată' ? 'check-circle' : 'info-circle' %>"></i>
+                    <%= order.status.charAt(0).toUpperCase() + order.status.slice(1) %>
+                  </span>
+                </td>
+                <td data-label="Articole" class="order-items-cell">
+                  <% if (order.articole && order.articole.length > 0) { %>
+                    <%= order.articole.map(function(a) { return a.cantitate + 'x ' + a.nume; }).join(', ') %>
+                  <% } else { %>
+                    <em>Fără articole</em>
+                  <% } %>
+                </td>
+                <td data-label="Ospătar" class="order-waiter-cell">
+                  <i class="fas fa-user-tie"></i> <%= order.ospatar || '—' %>
+                </td>
+                <td data-label="Total" class="order-amount-cell">
+                  <%= formatCurrency(order.total || 0) %>
+                </td>
+                <td data-label="Creată" class="order-time-cell">
+                  <i class="far fa-clock"></i> <%= formatDate(order.createdAt) %>
+                </td>
+                <td data-label="Acțiuni" class="order-actions-cell" onclick="event.stopPropagation();">
+                  <button class="btn-view" onclick="viewOrder('<%= order._id %>')" title="Vezi detalii">
+                    <i class="fas fa-eye"></i>
+                  </button>
+                  <% if (order.status !== 'achitată' && order.status !== 'anulată') { %>
+                    <button class="btn-pay" onclick="payOrder('<%= order._id %>')" title="Achită comanda">
+                      <i class="fas fa-credit-card"></i>
+                    </button>
+                    <button class="btn-cancel" onclick="cancelOrder('<%= order._id %>')" title="Anulează comanda">
+                      <i class="fas fa-ban"></i>
+                    </button>
+                  <% } %>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="pagination">
+        <button onclick="changePage(-1)" <%= !locals.hasPrevPage ? 'disabled' : '' %>>
+          <i class="fas fa-chevron-left"></i> Anterior
+        </button>
+        <span class="page-info">
+          Pagina <%= locals.currentPage || 1 %> din <%= locals.totalPages || 1 %>
+        </span>
+        <button onclick="changePage(1)" <%= !locals.hasNextPage ? 'disabled' : '' %>>
+          Următor <i class="fas fa-chevron-right"></i>
+        </button>
+      </div>
+    </div>
+  <% } %>
+
+<!-- ============================================================
+     HISTORY VIEW
+     ============================================================ -->
+<% } else if (currentFilter === 'history') { %>
+  <% if (historyOrders.length === 0) { %>
+    <div class="empty-orders">
+      <i class="fas fa-inbox"></i>
+      <h3>Istoric gol</h3>
+      <p>Nu există comenzi finalizate sau anulate în istoric.</p>
+      <a href="?filter=active" class="btn btn-secondary">
+        <i class="fas fa-bolt"></i> Vezi comenzi active
+      </a>
+    </div>
+  <% } else { %>
+    <div class="orders-card">
+      <div class="card-header">
+        <h2>
+          <i class="fas fa-history"></i>
+          Istoric comenzi
+          <span class="badge badge-info" style="margin-left:8px;"><%= historyOrders.length %></span>
+        </h2>
+        <div class="card-actions">
+          <span style="font-size:12px;color:var(--color-text-muted);">
+            <i class="fas fa-filter"></i> 
+            <%= locals.statusFilter ? 'Filtru: ' + locals.statusFilter : 'Toate' %>
+          </span>
+        </div>
+      </div>
+
+      <div class="history-list">
+        <% historyOrders.slice(0, 50).forEach(function(order) { %>
+          <div class="history-item" onclick="viewOrder('<%= order._id %>')" data-id="<%= order._id %>">
+            <div class="history-icon <%= order.status === 'achitată' ? 'paid' : order.status === 'anulată' ? 'cancelled' : 'done' %>">
+              <i class="fas fa-<%= order.status === 'achitată' ? 'credit-card' : order.status === 'anulată' ? 'ban' : 'check' %>"></i>
+            </div>
+            <div class="history-info">
+              <div class="history-meta">
+                <span class="history-id"><%= order._id.substring(0, 10) %>...</span>
+                <span class="history-date">
+                  <i class="far fa-calendar-alt"></i> <%= formatDate(order.updatedAt || order.createdAt) %>
+                </span>
+                <% if (order.masa > 0) { %>
+                  <span class="badge badge-active">Masa <%= order.masa %></span>
+                <% } %>
+              </div>
+              <div class="history-summary">
+                <% if (order.articole && order.articole.length > 0) { %>
+                  <%= order.articole.length %> articole: 
+                  <%= order.articole.slice(0, 3).map(function(a) { return a.cantitate + 'x ' + a.nume; }).join(', ') %>
+                  <% if (order.articole.length > 3) { %> ...<% } %>
+                <% } %>
+                <% if (order.ospatar) { %>
+                  • <i class="fas fa-user-tie"></i> <%= order.ospatar %>
+                <% } %>
+              </div>
+            </div>
+            <div class="history-amount">
+              <%= formatCurrency(order.total || 0) %>
+            </div>
+            <span class="history-status <%= order.status === 'achitată' ? 'paid' : order.status === 'anulată' ? 'cancelled' : 'done' %>">
+              <%= order

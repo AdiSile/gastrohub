@@ -1,0 +1,841 @@
+<%
+  // Hotel Rooms View
+  const hotel = locals.hotel || null;
+  const rooms = locals.rooms || [];
+  const stats = locals.stats || {};
+  const statusFilter = locals.statusFilter || 'all';
+  const loading = locals.loading || false;
+%>
+
+<style>
+  /* ============================================================
+     ROOMS PAGE STYLES
+     ============================================================ */
+  .rooms-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .rooms-header h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .rooms-header h1 i {
+    color: #1abc9c;
+  }
+
+  .rooms-header .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--color-text-muted);
+    font-size: 13px;
+  }
+
+  .rooms-header .header-meta .hotel-name {
+    font-weight: 600;
+    color: #1abc9c;
+  }
+
+  .stats-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .stats-bar .stat-chip {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+    transition: all var(--transition);
+  }
+
+  .stats-bar .stat-chip:hover {
+    border-color: #1abc9c;
+    color: #1abc9c;
+  }
+
+  .stats-bar .stat-chip.active {
+    background: #1abc9c;
+    color: #fff;
+    border-color: #1abc9c;
+  }
+
+  .stats-bar .stat-chip .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .stats-bar .stat-chip .dot.available { background: var(--color-success); }
+  .stats-bar .stat-chip .dot.occupied { background: var(--color-warning); }
+  .stats-bar .stat-chip .dot.maintenance { background: var(--color-danger); }
+  .stats-bar .stat-chip .dot.cleaning { background: #9b59b6; }
+  .stats-bar .stat-chip .dot.reserved { background: #1abc9c; }
+
+  .rooms-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  @media (max-width: 480px) {
+    .rooms-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .room-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    border: 2px solid var(--color-border);
+    overflow: hidden;
+    transition: all var(--transition);
+    position: relative;
+  }
+
+  .room-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+  }
+
+  .room-card .room-header-bar {
+    height: 6px;
+  }
+
+  .room-card .room-header-bar.available { background: var(--color-success); }
+  .room-card .room-header-bar.occupied { background: var(--color-warning); }
+  .room-card .room-header-bar.maintenance { background: var(--color-danger); }
+  .room-card .room-header-bar.cleaning { background: #9b59b6; }
+  .room-card .room-header-bar.reserved { background: #1abc9c; }
+  .room-card .room-header-bar.out-of-order { background: #546e7a; }
+
+  .room-card .room-body {
+    padding: 16px 20px;
+  }
+
+  .room-card .room-number {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .room-card .room-number .room-number-value {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .room-card .room-number .room-number-value i {
+    color: #1abc9c;
+    font-size: 18px;
+  }
+
+  .room-card .room-type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 12px;
+    background: var(--color-bg);
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+  }
+
+  .room-card .room-meta {
+    display: flex;
+    gap: 12px;
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+
+  .room-card .room-meta span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .room-card .room-price {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-primary);
+    margin-top: 8px;
+  }
+
+  .room-card .room-actions {
+    display: flex;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .room-card .room-actions button {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    background: none;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition);
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .room-card .room-actions button:hover {
+    background: rgba(0,0,0,0.02);
+  }
+
+  .room-card .room-actions .btn-view:hover {
+    color: var(--color-info);
+  }
+
+  .room-card .room-actions .btn-checkin:hover {
+    color: var(--color-success);
+  }
+
+  .room-card .room-actions .btn-checkout:hover {
+    color: var(--color-warning);
+  }
+
+  .room-card .room-actions .btn-maintenance:hover {
+    color: var(--color-danger);
+  }
+
+  .room-card .room-actions button + button {
+    border-left: 1px solid var(--color-border);
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--color-text-muted);
+  }
+
+  .empty-state i {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.4;
+  }
+
+  .empty-state h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--color-text);
+  }
+
+  .room-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .room-detail-item {
+    padding: 10px;
+    background: var(--color-bg);
+    border-radius: var(--radius-sm);
+  }
+
+  .room-detail-item .detail-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    margin-bottom: 4px;
+  }
+
+  .room-detail-item .detail-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .seasonal-prices {
+    margin-top: 12px;
+  }
+
+  .seasonal-prices table {
+    width: 100%;
+    font-size: 13px;
+  }
+
+  .seasonal-prices table th {
+    font-size: 11px;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    padding: 6px 8px;
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .seasonal-prices table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  /* ============================================================
+     ROOM TYPE CONFIG & SEASONAL PRICES - EXTRA STYLES
+     ============================================================ */
+  .config-section {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    padding: 20px 24px;
+    margin-bottom: 24px;
+  }
+
+  .config-section h2 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .config-section h2 i {
+    color: #1abc9c;
+  }
+
+  .config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+
+  .config-card {
+    background: var(--color-bg);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    padding: 12px 16px;
+    transition: all var(--transition);
+    cursor: pointer;
+  }
+
+  .config-card:hover {
+    border-color: #1abc9c;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .config-card .config-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .config-card .config-card-title .badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #1abc9c;
+    color: #fff;
+    font-weight: 700;
+  }
+
+  .config-card .config-card-meta {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-top: 4px;
+  }
+
+  .season-manager {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .season-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--color-bg);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+  }
+
+  .season-row .season-name {
+    font-weight: 600;
+    font-size: 13px;
+    min-width: 100px;
+    color: var(--color-text);
+  }
+
+  .season-row .season-price {
+    font-size: 13px;
+    color: var(--color-primary);
+    font-weight: 700;
+  }
+
+  .season-row .season-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+  }
+
+  .season-row .season-actions button {
+    padding: 4px 8px;
+    font-size: 11px;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all var(--transition);
+    background: transparent;
+    color: var(--color-text-muted);
+  }
+
+  .season-row .season-actions button:hover {
+    background: rgba(0,0,0,0.05);
+    color: var(--color-danger);
+  }
+
+  .season-row .season-actions .btn-edit-price:hover {
+    color: var(--color-info);
+  }
+
+  .price-history-entry {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    padding: 2px 0;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .price-history-entry .old-price {
+    text-decoration: line-through;
+    color: var(--color-danger);
+  }
+
+  .price-history-entry .new-price {
+    color: var(--color-success);
+    font-weight: 600;
+  }
+</style>
+
+<!-- ============================================================
+     HEADER
+     ============================================================ -->
+<div class="rooms-header">
+  <div>
+    <h1>
+      <i class="fas fa-door-open"></i>
+      Camere Hotel
+    </h1>
+    <div class="header-meta">
+      <% if (hotel) { %>
+        <span class="hotel-name"><i class="fas fa-building"></i> <%= hotel.nume %></span>
+        <span class="text-muted">•</span>
+      <% } %>
+      <span>
+        <strong><%= rooms.length %></strong> camere afișate
+        <% if (stats.totalRooms && stats.totalRooms !== rooms.length) { %>
+          din <strong><%= stats.totalRooms %></strong>
+        <% } %>
+      </span>
+    </div>
+  </div>
+  <div class="hotel-actions-bar">
+    <% if (locals.hotels && hotels.length > 1) { %>
+      <div class="hotel-selector" style="position:relative;">
+        <select id="hotelSelect" onchange="switchHotel(this.value)" style="padding:6px 28px 6px 10px;font-size:12px;font-family:var(--font-family);border:1px solid var(--color-border);border-radius:var(--radius-sm);background:var(--color-surface);color:var(--color-text);cursor:pointer;appearance:none;-webkit-appearance:none;background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%2712%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%23636e72%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3E%3Cpolyline points=%276 9 12 15 18 9%27%3E%3C/polyline%3E%3C/svg%3E');background-repeat:no-repeat;background-position:right 8px center;">
+          <% hotels.forEach(function(h) { %>
+            <option value="<%= h._id %>" <%= hotel && hotel._id === h._id ? 'selected' : '' %>>
+              <%= h.nume %>
+            </option>
+          <% }); %>
+        </select>
+      </div>
+    <% } %>
+    <button class="btn btn-primary btn-sm" onclick="openAddRoomModal()">
+      <i class="fas fa-plus"></i> Cameră nouă
+    </button>
+    <button class="btn btn-secondary btn-sm" onclick="location.reload()">
+      <i class="fas fa-sync-alt"></i>
+    </button>
+  </div>
+</div>
+
+<% if (loading) { %>
+  <div class="spinner"></div>
+<% } else { %>
+
+<!-- ============================================================
+     FILTER CHIPS
+     ============================================================ -->
+<div class="stats-bar">
+  <a href="?hotelId=<%= hotel ? hotel._id : '' %>" class="stat-chip <%= statusFilter === 'all' ? 'active' : '' %>">
+    Toate <strong><%= stats.totalRooms || 0 %></strong>
+  </a>
+  <a href="?hotelId=<%= hotel ? hotel._id : '' %>&status=available" class="stat-chip <%= statusFilter === 'available' ? 'active' : '' %>">
+    <span class="dot available"></span> Disponibile <strong><%= stats.availableRooms || 0 %></strong>
+  </a>
+  <a href="?hotelId=<%= hotel ? hotel._id : '' %>&status=occupied" class="stat-chip <%= statusFilter === 'occupied' ? 'active' : '' %>">
+    <span class="dot occupied"></span> Ocupate <strong><%= stats.occupiedRooms || 0 %></strong>
+  </a>
+  <a href="?hotelId=<%= hotel ? hotel._id : '' %>&status=reserved" class="stat-chip <%= statusFilter === 'reserved' ? 'active' : '' %>">
+    <span class="dot reserved"></span> Rezervate <strong><%= stats.reservedRooms || 0 %></strong>
+  </a>
+  <a href="?hotelId=<%= hotel ? hotel._id : '' %>&status=cleaning" class="stat-chip <%= statusFilter === 'cleaning' ? 'active' : '' %>">
+    <span class="dot cleaning"></span> Curățenie <strong><%= stats.cleaningRooms || 0 %></strong>
+  </a>
+  <a href="?hotelId=<%= hotel ? hotel._id : '' %>&status=maintenance" class="stat-chip <%= statusFilter === 'maintenance' ? 'active' : '' %>">
+    <span class="dot maintenance"></span> Mentenanță <strong><%= stats.maintenanceRooms || 0 %></strong>
+  </a>
+</div>
+
+<!-- ============================================================
+     ROOMS GRID
+     ============================================================ -->
+<% if (!hotel) { %>
+  <div class="empty-state">
+    <i class="fas fa-hotel"></i>
+    <h3>Selectează un hotel</h3>
+    <p>Nu există niciun hotel selectat. Alege un hotel pentru a vedea camerele.</p>
+  </div>
+<% } else if (rooms.length === 0) { %>
+  <div class="empty-state">
+    <i class="fas fa-door-open"></i>
+    <h3>Nicio cameră disponibilă</h3>
+    <p>
+      <% if (statusFilter !== 'all') { %>
+        Nu există camere cu statusul "<%= statusFilter %>". 
+        <a href="?hotelId=<%= hotel._id %>" style="color:var(--color-primary);font-weight:600;">Vezi toate camerele</a>.
+      <% } else { %>
+        Acest hotel nu are camere configurate. Adaugă prima cameră!
+      <% } %>
+    </p>
+    <% if (statusFilter === 'all') { %>
+      <button class="btn btn-primary btn-sm mt-2" onclick="openAddRoomModal()">
+        <i class="fas fa-plus"></i> Adaugă cameră
+      </button>
+    <% } %>
+  </div>
+<% } else { %>
+  <div class="rooms-grid">
+    <% rooms.forEach(function(room) { %>
+      <% 
+        var statusClass = room.status === 'available' ? 'available' : 
+                          room.status === 'occupied' ? 'occupied' : 
+                          room.status === 'maintenance' ? 'maintenance' : 
+                          room.status === 'cleaning' ? 'cleaning' : 
+                          room.status === 'reserved' ? 'reserved' : 'out-of-order';
+        var statusLabel = room.status === 'available' ? 'Disponibilă' : 
+                          room.status === 'occupied' ? 'Ocupată' : 
+                          room.status === 'maintenance' ? 'Mentenanță' : 
+                          room.status === 'cleaning' ? 'Curățenie' : 
+                          room.status === 'reserved' ? 'Rezervată' : 'Indisponibilă';
+        var iconClass = 'bed';
+        if (room.tip === 'single') iconClass = 'user';
+        else if (room.tip === 'double' || room.tip === 'twin') iconClass = 'users';
+        else if (room.tip === 'suite' || room.tip === 'penthouse' || room.tip === 'junior suite') iconClass = 'crown';
+        else if (room.tip === 'family room') iconClass = 'people-arrows';
+      %>
+      <div class="room-card">
+        <div class="room-header-bar <%= statusClass %>"></div>
+        <div class="room-body">
+          <div class="room-number">
+            <div class="room-number-value">
+              <i class="fas fa-<%= iconClass %>"></i>
+              Camera <%= room.număr %>
+            </div>
+            <span class="room-status-badge <%= statusClass %>">
+              <i class="fas fa-circle" style="font-size:6px;"></i> <%= statusLabel %>
+            </span>
+          </div>
+          <div class="room-meta">
+            <span><i class="fas fa-tag"></i> <%= room.tip ? room.tip.charAt(0).toUpperCase() + room.tip.slice(1) : 'Nespecificat' %></span>
+            <% if (room.prețuriSezoniere && room.prețuriSezoniere.length > 0) { %>
+              <span><i class="fas fa-euro-sign"></i> De la <%= room.prețuriSezoniere[0].preț.toFixed(2) %> lei</span>
+            <% } %>
+          </div>
+        </div>
+        <div class="room-actions">
+          <button class="btn-view" onclick="viewRoomDetails('<%= room._id %>')" title="Vezi detalii">
+            <i class="fas fa-eye"></i> Detalii
+          </button>
+          <% if (room.status === 'available' || room.status === 'reserved') { %>
+            <button class="btn-checkin" onclick="checkinRoom('<%= room._id %>')" title="Check-in">
+              <i class="fas fa-sign-in-alt"></i> Check-in
+            </button>
+          <% } %>
+          <% if (room.status === 'occupied') { %>
+            <button class="btn-checkout" onclick="checkoutRoom('<%= room._id %>')" title="Check-out">
+              <i class="fas fa-sign-out-alt"></i> Check-out
+            </button>
+          <% } %>
+          <% if (room.status !== 'maintenance') { %>
+            <button class="btn-maintenance" onclick="setMaintenance('<%= room._id %>')" title="Mentenanță">
+              <i class="fas fa-tools"></i> Mentenanță
+            </button>
+          <% } %>
+        </div>
+      </div>
+    <% }); %>
+  </div>
+<% } %>
+
+<% } /* end loading */ %>
+
+<!-- ============================================================
+     ROOM TYPE CONFIGURATION SECTION
+     ============================================================ -->
+<% if (hotel) { %>
+<div class="config-section">
+  <h2><i class="fas fa-tags"></i> Configurare Tipuri Cameră & Prețuri Sezoniere</h2>
+  <div class="config-grid">
+    <% var roomTypes = ['single','double','twin','triple','suite','junior suite','penthouse','family room','apartament']; %>
+    <% roomTypes.forEach(function(type) { %>
+      <% var count = rooms.filter(function(r) { return r.tip === type; }).length; %>
+      <div class="config-card" onclick="openRoomTypeConfig('<%= type %>')">
+        <div class="config-card-title">
+          <span><%= type.charAt(0).toUpperCase() + type.slice(1) %></span>
+          <span class="badge"><%= count %></span>
+        </div>
+        <div class="config-card-meta">
+          <% var typeRooms = rooms.filter(function(r) { return r.tip === type; }); %>
+          <% if (typeRooms.length > 0) { %>
+            <% var minPrice = Math.min.apply(null, typeRooms.map(function(r) { return r.prețuriSezoniere && r.prețuriSezoniere.length > 0 ? r.prețuriSezoniere[0].preț : Infinity; })); %>
+            <% var maxPrice = Math.max.apply(null, typeRooms.map(function(r) { return r.prețuriSezoniere && r.prețuriSezoniere.length > 0 ? r.prețuriSezoniere[0].preț : -Infinity; })); %>
+            <% if (isFinite(minPrice)) { %>
+              Prețuri: <%= minPrice.toFixed(2) %> – <%= maxPrice.toFixed(2) %> lei
+            <% } else { %>
+              Fără prețuri configurate
+            <% } %>
+          <% } else { %>
+            Nicio cameră de acest tip
+          <% } %>
+        </div>
+      </div>
+    <% }); %>
+  </div>
+</div>
+<% } %>
+
+<!-- ============================================================
+     ADD ROOM MODAL
+     ============================================================ -->
+<script>
+  function openAddRoomModal() {
+    <% if (!hotel) { showToast('Selectează un hotel mai întâi', 'warning'); return; } %>
+    var html = {
+      title: 'Adaugă cameră nouă',
+      body: '<form id="addRoomForm" onsubmit="return false;">' +
+        '<div class="form-group">' +
+          '<label for="roomNumber">Număr cameră</label>' +
+          '<input type="number" id="roomNumber" name="număr" min="1" required placeholder="ex: 101" />' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label for="roomType">Tip cameră</label>' +
+          '<select id="roomType" name="tip" required>' +
+            '<option value="">Selectează tipul</option>' +
+            '<option value="single">Single</option>' +
+            '<option value="double">Double</option>' +
+            '<option value="twin">Twin</option>' +
+            '<option value="triple">Triple</option>' +
+            '<option value="suite">Suite</option>' +
+            '<option value="junior suite">Junior Suite</option>' +
+            '<option value="penthouse">Penthouse</option>' +
+            '<option value="family room">Family Room</option>' +
+            '<option value="apartament">Apartament</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label for="roomPrice">Preț sezon standard (lei)</label>' +
+          '<input type="number" id="roomPrice" name="preț" min="0" step="0.01" placeholder="ex: 250.00" />' +
+        '</div>' +
+        '<div class="form-actions">' +
+          '<button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Anulează</button>' +
+          '<button type="submit" class="btn btn-primary" onclick="submitAddRoom()">Adaugă camera</button>' +
+        '</div>' +
+      '</form>'
+    };
+    openModal(html);
+  }
+
+  async function submitAddRoom() {
+    var număr = document.getElementById('roomNumber').value;
+    var tip = document.getElementById('roomType').value;
+    var preț = document.getElementById('roomPrice').value;
+
+    if (!număr || !tip) {
+      showToast('Completează toate câmpurile obligatorii', 'warning');
+      return;
+    }
+
+    var data = {
+      număr: parseInt(număr),
+      tip: tip,
+      hotelId: '<%= hotel ? hotel._id : "" %>',
+    };
+
+    if (preț) {
+      data.prețuriSezoniere = [{ sezon: 'standard', preț: parseFloat(preț) }];
+    }
+
+    var result = await apiFetch('/api/hotel/rooms', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+
+    if (result && result.success) {
+      showToast('Camera a fost adăugată cu succes!', 'success');
+      setTimeout(function() {
+        location.reload();
+      }, 1000);
+    }
+  }
+
+  async function viewRoomDetails(roomId) {
+    var result = await apiFetch('/api/hotel/rooms/' + roomId);
+    if (!result || !result.success) return;
+
+    var room = result.data.room;
+    var statusLabel = room.status === 'available' ? 'Disponibilă' : 
+                      room.status === 'occupied' ? 'Ocupată' : 
+                      room.status === 'maintenance' ? 'Mentenanță' : 
+                      room.status === 'cleaning' ? 'Curățenie' : 
+                      room.status === 'reserved' ? 'Rezervată' : 'Indisponibilă';
+
+    var pricesHtml = '';
+    if (room.prețuriSezoniere && room.prețuriSezoniere.length > 0) {
+      pricesHtml = '<div class="seasonal-prices">' +
+        '<table>' +
+          '<thead><tr><th>Sezon</th><th>Preț</th></tr></thead>' +
+          '<tbody>';
+      room.prețuriSezoniere.forEach(function(p) {
+        pricesHtml += '<tr><td>' + p.sezon + '</td><td><strong>' + Number(p.preț).toFixed(2) + ' lei</strong></td></tr>';
+      });
+      pricesHtml += '</tbody></table></div>';
+    }
+
+    var html = {
+      title: 'Camera ' + room.număr,
+      body: '<div class="room-detail-grid">' +
+        '<div class="room-detail-item"><div class="detail-label">Status</div><div class="detail-value"><span class="room-status-badge ' + room.status + '">' + statusLabel + '</span></div></div>' +
+        '<div class="room-detail-item"><div class="detail-label">Tip</div><div class="detail-value">' + (room.tip ? room.tip.charAt(0).toUpperCase() + room.tip.slice(1) : 'Nespecificat') + '</div></div>' +
+        '<div class="room-detail-item"><div class="detail-label">Hotel</div><div class="detail-value"><%= hotel ? hotel.nume : "N/A" %></div></div>' +
+        '<div class="room-detail-item"><div class="detail-label">ID Cameră</div><div class="detail-value" style="font-size:12px;font-family:monospace;">' + room._id + '</div></div>' +
+      '</div>' +
+      pricesHtml
+    };
+    openModal(html);
+  }
+
+  async function checkinRoom(roomId) {
+    if (!confirm('Ești sigur că vrei să faci check-in în această cameră?')) return;
+    var result = await apiFetch('/api/hotel/rooms/' + roomId + '/status', {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'occupied' })
+    });
+    if (result && result.success) {
+      showToast('Check-in efectuat cu succes!', 'success');
+      setTimeout(function() { location.reload(); }, 1000);
+    }
+  }
+
+  async function checkoutRoom(roomId) {
+    if (!confirm('Ești sigur că vrei să faci check-out din această cameră?')) return;
+    var result = await apiFetch('/api/hotel/rooms/' + roomId + '/status', {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'cleaning' })
+    });
+    if (result && result.success) {
+      showToast('Check-out efectuat. Camera a fost marcată pentru curățenie.', 'success');
+      setTimeout(function() { location.reload(); }, 1000);
+    }
+  }
+
+  async function setMaintenance(roomId) {
+    if (!confirm('Ești sigur că vrei să pui această cameră în mentenanță?')) return;
+    var result = await apiFetch('/api/hotel/rooms/' + roomId + '/status', {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'maintenance' })
+    });
+    if (result && result.success) {
+      showToast('Camera a fost marcată pentru mentenanță.', 'success');
+      setTimeout(function() { location.reload(); }, 1000);
+    }
+  }
+
+  function switchHotel(hotelId) {
+    if (!hotelId) return;
+    var url = new URL(window.location.href);
+    url.searchParams.set('hotelId', hotelId);
+    url.searchParams.delete('status');
+    window.location.href = url.toString();
+  }
+  window.switchHotel = switchHotel;
+
+  // ============================================================
+  // ROOM TYPE CONFIG FUNCTIONS
+  // ============================================================
+
+  async function openRoomTypeConfig(typeName) {
+    var hotelId = '<%= hotel ? hotel._id : "" %>';
+    if (!hotelId) { showToast('Selectează un hotel mai întâi', 'warning'); return; }
+
+    var result = await apiFetch('/api/hotel/rooms?hotelId=' + hotelId + '&tip=' + encodeURIComponent(typeName));
+    if (!result || !result.success) { showToast('Eroare la încărcarea camerelor', 'error'); return; }
+
+    var typeRooms = result.data.rooms || [];
+    var label = typeName.charAt(0).toUpperCase() + typeName.slice(1);
+
+    var bodyHtml = '<div class="season-manager">';
+
+    if (typeRooms.length === 0) {
+      bodyHtml += '<p style="color:var(--color-text-muted);font-size:13px;">Nu există camere de tip <strong>' + label + '</strong> în acest hotel.</p>';
+    } else {
+      typeRooms.forEach(function(room) {
+        bodyHtml += '<div style="margin-bottom:12px;">';
+        bodyHtml += '<div style="font-size:14px;font-weight:600;margin-bottom:6px;display:flex;justify-content:space-between;">';
+        bodyHtml += '<span><i class="fas fa-door-open" style="color:#1abc9c;"></i> Camera ' + room.număr + '</span>';
+        bodyHtml += '<span class="room-status-badge ' + (room.status || 'available') + '" style="font-size:10px;">' + (room.status === 'available' ? 'Disponibilă' : room.status === 'occupied' ? 'Ocupată' : room.status === 'maintenance' ? 'Mentenanță' : room.status === 'cleaning' ? 'Curățenie' : room.status === 'reserved' ? 'Rezervată' : 'Indisponibilă') + '</span>';
+        bodyHtml += '</div>';
+
+        if (room.prețuriSezoniere && room.prețuriSezoniere.length > 0) {
+          room.prețuriSezoniere.forEach(function(p, idx) {
+            bodyHtml += '<div class="season-row">';
+            bodyHtml += '<span class="season-name">' + (p.sezon || 'standard') + '</span>';
+            bodyHtml += '<span class="season-price">' + Number(p.preț).toFixed(2) + ' lei</span>';
+            bodyHtml += '<div class="season-actions">';
+            bodyHtml += '<button class="btn-edit-price" onclick="editSeasonalPrice(\'' + room._id + '\', \'' + (p.sezon || 'standard') + '\', ' + Number(p.preț) + ')" title="Editează prețul"><i class="fas fa-edit"></i></button>';
+            bodyHtml += '<button onclick="deleteSeasonalPrice(\'' + room._id + '\', \'' + (p.sezon || 'standard') + '\')" title="Șterge sezonul"><i class="fas fa-trash-alt"></i></button>';
+            bodyHtml += '</div>';
+            bodyHtml += '</div>';
+
+            if (p.istoricPrețuri && p.istoricPrețuri

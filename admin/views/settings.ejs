@@ -1,0 +1,571 @@
+<!-- ============================================================
+     VIEW: SETĂRI PLATFORMĂ (Admin)
+     ============================================================ -->
+<div id="admin-view-settings" class="admin-view" style="display: none;">
+
+  <!-- Page Header -->
+  <div class="flex items-center justify-between mb-3">
+    <div>
+      <h2 style="font-size: 22px; font-weight: 700; margin: 0;">Setări Platformă</h2>
+      <p class="text-muted" style="margin-top: 4px; font-size: 14px;">
+        Configurează setările globale ale platformei GastroHub
+      </p>
+    </div>
+    <div class="flex gap-1">
+      <button class="btn btn-outline" onclick="resetPlatformSettings()">
+        <i class="fas fa-undo"></i> Resetează
+      </button>
+      <button class="btn btn-primary" onclick="savePlatformSettings()">
+        <i class="fas fa-save"></i> Salvează setările
+      </button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs" id="settingsTabs">
+    <button class="tab active" data-tab="general" onclick="switchSettingsTab('general')">
+      <i class="fas fa-cog"></i> Generale
+    </button>
+    <button class="tab" data-tab="branding" onclick="switchSettingsTab('branding')">
+      <i class="fas fa-palette"></i> Branding
+    </button>
+    <button class="tab" data-tab="features" onclick="switchSettingsTab('features')">
+      <i class="fas fa-puzzle-piece"></i> Funcționalități
+    </button>
+    <button class="tab" data-tab="notifications" onclick="switchSettingsTab('notifications')">
+      <i class="fas fa-bell"></i> Notificări
+    </button>
+    <button class="tab" data-tab="security" onclick="switchSettingsTab('security')">
+      <i class="fas fa-shield-alt"></i> Securitate
+    </button>
+    <button class="tab" data-tab="integrations" onclick="switchSettingsTab('integrations')">
+      <i class="fas fa-plug"></i> Integrări
+    </button>
+  </div>
+
+  <!-- ============================================================
+       TAB: GENERALE
+       ============================================================ -->
+  <div id="settings-tab-general" class="settings-tab" style="display: block;">
+
+    <div class="card mb-3">
+      <div class="card-header">
+        <div class="card-title">
+          <i class="fas fa-globe"></i> Configurație Platformă
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="settings-platform-name">Nume Platformă</label>
+            <input type="text" id="settings-platform-name" value="GastroHub" placeholder="GastroHub" />
+            <div class="form-hint">Numele afișat în titlurile paginilor și emailuri</div>
+          </div>
+          <div class="form-group">
+            <label for="settings-platform-url">URL Platformă</label>
+            <input type="url" id="settings-platform-url" value="https://gastrohub.ro" placeholder="https://gastrohub.ro" />
+            <div class="form-hint">URL-ul principal al platformei</div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="settings-platform-email">Email Suport</label>
+            <input type="email" id="settings-platform-email" value="suport@gastrohub.ro" placeholder="suport@gastrohub.ro" />
+            <div class="form-hint">Adresa de email pentru suportul general</div>
+          </div>
+          <div class="form-group">
+            <label for="settings-platform-phone">Telefon Suport</label>
+            <input type="text" id="settings-platform-phone" value="+40 731 234 567" placeholder="+40 731 234 567" />
+            <div class="form-hint">Numărul de telefon pentru suport</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="settings-platform-description">Descriere Platformă</label>
+          <textarea id="settings-platform-description" rows="3" placeholder="Scurtă descriere a platformei...">GastroHub - Platformă SaaS pentru gestionarea restaurantelor, hotelurilor și serviciilor de catering</textarea>
+          <div class="form-hint">Folosită în meta descrieri și pagini publice</div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="settings-default-language">Limba Implicită</label>
+            <select id="settings-default-language">
+              <option value="ro" selected>Română</option>
+              <option value="en">English</option>
+              <option value="hu">Magyar</option>
+              <option value="de">Deutsch</option>
+            </select>
+            <div class="form-hint">Limba implicită pentru noii utilizatori</div>
+          </div>
+          <div class="form-group">
+            <label for="settings-default-currency">Moneda Implicită</label>
+            <select id="settings-default-currency">
+              <option value="RON" selected>RON (Lei)</option>
+              <option value="EUR">EUR (Euro)</option>
+              <option value="USD">USD (Dolar)</option>
+              <option value="HUF">HUF (Forint)</option>
+            </select>
+            <div class="form-hint">Moneda implicită pentru tranzacții</div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="settings-timezone">Fus Orar</label>
+            <select id="settings-timezone">
+              <option value="Europe/Bucharest" selected>Europe/Bucharest (UTC+2)</option>
+              <option value="Europe/Budapest">Europe/Budapest (UTC+1)</option>
+              <option value="Europe/Berlin">Europe/Berlin (UTC+1)</option>
+              <option value="Europe/London">Europe/London (UTC+0)</option>
+            </select>
+            <div class="form-hint">Fusul orar implicit al platformei</div>
+          </div>
+          <div class="form-group">
+            <label for="settings-date-format">Format Dată</label>
+            <select id="settings-date-format">
+              <option value="DD/MM/YYYY" selected>DD/MM/YYYY</option>
+              <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+              <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+            </select>
+            <div class="form-hint">Formatul datelor afișate</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header">
+        <div class="card-title">
+          <i class="fas fa-chart-line"></i> Limite și Praguri
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="settings-max-tenants">Număr Maxim Tenanți</label>
+            <input type="number" id="settings-max-tenants" value="1000" min="1" />
+            <div class="form-hint">0 = fără limită</div>
+          </div>
+          <div class="form-group">
+            <label for="settings-max-users-per-tenant">Maxim Utilizatori / Tenant</label>
+            <input type="number" id="settings-max-users-per-tenant" value="500" min="1" />
+            <div class="form-hint">0 = fără limită</div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="settings-trial-days">Zile Perioadă de Test</label>
+            <input type="number" id="settings-trial-days" value="14" min="1" max="365" />
+            <div class="form-hint">Numărul de zile pentru perioada de trial</div>
+          </div>
+          <div class="form-group">
+            <label for="settings-session-timeout">Timeout Sesțiune (minute)</label>
+            <input type="number" id="settings-session-timeout" value="120" min="5" max="1440" />
+            <div class="form-hint">Durata maximă a unei sesiuni inactive</div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="settings-max-file-size">Dimensiune Maximă Fișier (MB)</label>
+            <input type="number" id="settings-max-file-size" value="10" min="1" max="100" />
+            <div class="form-hint">Dimensiunea maximă permisă pentru încărcări</div>
+          </div>
+          <div class="form-group">
+            <label for="settings-api-rate-limit">Limită Rată API (cereri/minut)</label>
+            <input type="number" id="settings-api-rate-limit" value="60" min="1" max="10000" />
+            <div class="form-hint">Numărul maxim de cereri API per minut</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header">
+        <div class="card-title">
+          <i class="fas fa-credit-card"></i> Facturare și Abonamente
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="settings-billing-cycle">Ciclu Facturare Implicit</label>
+            <select id="settings-billing-cycle">
+              <option value="monthly" selected>Lunar</option>
+              <option value="yearly">Anual</option>
+              <option value="quarterly">Trimestrial</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="settings-currency-symbol">Simbol Monedă</label>
+            <input type="text" id="settings-currency-symbol" value="lei" placeholder="lei" maxlength="5" />
+          </div>
+        </div>
+        <div class="form-check">
+          <input type="checkbox" id="settings-tax-enabled" checked />
+          <label for="settings-tax-enabled">Activează calculul automat al taxelor</label>
+        </div>
+        <div class="form-row" id="tax-rate-row">
+          <div class="form-group">
+            <label for="settings-tax-rate">Cota TVA (%)</label>
+            <input type="number" id="settings-tax-rate" value="19" min="0" max="50" step="0.01" />
+            <div class="form-hint">Procentul de TVA aplicat implicit</div>
+          </div>
+          <div class="form-group">
+            <label for="settings-tax-label">Etichetă Taxă</label>
+            <input type="text" id="settings-tax-label" value="TVA" placeholder="TVA" />
+          </div>
+        </div>
+        <div class="form-check">
+          <input type="checkbox" id="settings-auto-invoice" checked />
+          <label for="settings-auto-invoice">Generează facturi automate la sfârșitul ciclului</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       TAB: BRANDING
+       ============================================================ -->
+  <div id="settings-tab-branding" class="settings-tab" style="display: none;">
+
+    <div class="card mb-3">
+      <div class="card-header">
+        <div class="card-title">
+          <i class="fas fa-palette"></i> Personalizare Vizuală
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="settings-brand-primary-color">Culoare Principală</label>
+            <div class="flex gap-1 items-center">
+              <input type="color" id="settings-brand-primary-color" value="#6f42c1" style="width: 48px; height: 40px; padding: 2px; cursor: pointer;" />
+              <input type="text" id="settings-brand-primary-color-hex" value="#6f42c1" placeholder="#6f42c1" maxlength="7" style="flex: 1;" oninput="document.getElementById('settings-brand-primary-color').value = this.value" />
+            </div>
+            <div class="form-hint">Culoarea principală a brandului (butoane, linkuri, accente)</div>
+          </div>
+          <div class="form-group">
+            <label for="settings-brand-secondary-color">Culoare Secundară</label>
+            <div class="flex gap-1 items-center">
+              <input type="color" id="settings-brand-secondary-color" value="#0d1117" style="width: 48px; height: 40px; padding: 2px; cursor: pointer;" />
+              <input type="text" id="settings-brand-secondary-color-hex" value="#0d1117" placeholder="#0d1117" maxlength="7" style="flex: 1;" oninput="document.getElementById('settings-brand-secondary-color').value = this.value" />
+            </div>
+            <div class="form-hint">Culoarea secundară (sidebar, fundaluri întunecate)</div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="settings-brand-accent-color">Culoare Accent</label>
+            <div class="flex gap-1 items-center">
+              <input type="color" id="settings-brand-accent-color" value="#8b5cf6" style="width: 48px; height: 40px; padding: 2px; cursor: pointer;" />
+              <input type="text" id="settings-brand-accent-color-hex" value="#8b5cf6" placeholder="#8b5cf6" maxlength="7" style="flex: 1;" oninput="document.getElementById('settings-brand-accent-color').value = this.value" />
+            </div>
+            <div class="form-hint">Culoarea de accent (hover-uri, elemente evidențiate)</div>
+          </div>
+          <div class="form-group">
+            <label for="settings-brand-logo">URL Logo</label>
+            <input type="text" id="settings-brand-logo" value="/admin/img/logo.png" placeholder="/admin/img/logo.png" />
+            <div class="form-hint">Calea sau URL-ul către logo-ul platformei</div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="settings-brand-favicon">URL Favicon</label>
+            <input type="text" id="settings-brand-favicon" value="/favicon.ico" placeholder="/favicon.ico" />
+            <div class="form-hint">Calea sau URL-ul către favicon</div>
+          </div>
+          <div class="form-group">
+            <label for="settings-brand-footer-text">Text Footer</label>
+            <input type="text" id="settings-brand-footer-text" value="© 2025 GastroHub. Toate drepturile rezervate." placeholder="© 2025 GastroHub" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="settings-brand-custom-css">CSS Personalizat</label>
+          <textarea id="settings-brand-custom-css" rows="4" placeholder="/* Stiluri CSS personalizate */" style="font-family: 'Courier New', monospace; font-size: 13px;"></textarea>
+          <div class="form-hint">CSS adițional care va fi inclus în toate paginile (folosește cu grijă)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header">
+        <div class="card-title">
+          <i class="fas fa-file-alt"></i> Pagini Personalizate
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-group">
+          <label for="settings-custom-terms-url">URL Termeni și Condiții</label>
+          <input type="url" id="settings-custom-terms-url" value="/terms" placeholder="/terms" />
+        </div>
+        <div class="form-group">
+          <label for="settings-custom-privacy-url">URL Politică de Confidențialitate</label>
+          <input type="url" id="settings-custom-privacy-url" value="/privacy" placeholder="/privacy" />
+        </div>
+        <div class="form-group">
+          <label for="settings-custom-cookies-url">URL Politică Cookie-uri</label>
+          <input type="url" id="settings-custom-cookies-url" value="/cookies" placeholder="/cookies" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       TAB: FUNCȚIONALITĂȚI
+       ============================================================ -->
+  <div id="settings-tab-features" class="settings-tab" style="display: none;">
+
+    <div class="card mb-3">
+      <div class="card-header">
+        <div class="card-title">
+          <i class="fas fa-puzzle-piece"></i> Activează / Dezactivează Module
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-info mb-2">
+          <i class="fas fa-info-circle"></i> Modulele dezactivate nu vor fi vizibile pentru tenanți.
+        </div>
+
+        <div class="grid-2">
+          <div class="card card-bordered" style="padding: 16px;">
+            <div class="flex items-center justify-between">
+              <div>
+                <strong><i class="fas fa-utensils" style="color: var(--color-primary);"></i> Restaurante</strong>
+                <div class="text-muted" style="font-size: 12px;">Gestionare restaurante, meniuri, comenzi</div>
+              </div>
+              <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 24px;">
+                <input type="checkbox" class="feature-toggle" data-feature="restaurants" checked onchange="toggleFeature(this)" />
+                <span style="position: absolute; cursor: pointer; inset: 0; background: var(--color-primary); border-radius: 24px; transition: 0.3s;">
+                  <span style="position: absolute; content: ''; height: 20px; width: 20px; border-radius: 50%; background: white; top: 2px; right: 2px; transition: 0.3s;"></span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card card-bordered" style="padding: 16px;">
+            <div class="flex items-center justify-between">
+              <div>
+                <strong><i class="fas fa-hotel" style="color: var(--color-primary);"></i> Hoteluri</strong>
+                <div class="text-muted" style="font-size: 12px;">Gestionare hoteluri, camere, rezervări</div>
+              </div>
+              <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 24px;">
+                <input type="checkbox" class="feature-toggle" data-feature="hotels" checked onchange="toggleFeature(this)" />
+                <span style="position: absolute; cursor: pointer; inset: 0; background: var(--color-primary); border-radius: 24px; transition: 0.3s;">
+                  <span style="position: absolute; content: ''; height: 20px; width: 20px; border-radius: 50%; background: white; top: 2px; right: 2px; transition: 0.3s;"></span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card card-bordered" style="padding: 16px;">
+            <div class="flex items-center justify-between">
+              <div>
+                <strong><i class="fas fa-truck" style="color: var(--color-primary);"></i> Livrări</strong>
+                <div class="text-muted" style="font-size: 12px;">Gestionare livrări, tracking, curieri</div>
+              </div>
+              <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 24px;">
+                <input type="checkbox" class="feature-toggle" data-feature="deliveries" checked onchange="toggleFeature(this)" />
+                <span style="position: absolute; cursor: pointer; inset: 0; background: var(--color-primary); border-radius: 24px; transition: 0.3s;">
+                  <span style="position: absolute; content: ''; height: 20px; width: 20px; border-radius: 50%; background: white; top: 2px; right: 2px; transition: 0.3s;"></span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card card-bordered" style="padding: 16px;">
+            <div class="flex items-center justify-between">
+              <div>
+                <strong><i class="fas fa-star" style="color: var(--color-primary);"></i> Loialitate</strong>
+                <div class="text-muted" style="font-size: 12px;">Program loialitate, puncte, cupoane</div>
+              </div>
+              <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 24px;">
+                <input type="checkbox" class="feature-toggle" data-feature="loyalty" checked onchange="toggleFeature(this)" />
+                <span style="position: absolute; cursor: pointer; inset: 0; background: var(--color-primary); border-radius: 24px; transition: 0.3s;">
+                  <span style="position: absolute; content: ''; height: 20px; width: 20px; border-radius: 50%; background: white; top: 2px; right: 2px; transition: 0.3s;"></span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card card-bordered" style="padding: 16px;">
+            <div class="flex items-center justify-between">
+              <div>
+                <strong><i class="fas fa-boxes" style="color: var(--color-primary);"></i> Inventar</strong>
+                <div class="text-muted" style="font-size: 12px;">Gestionare stocuri, aprovizionare</div>
+              </div>
+              <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 24px;">
+                <input type="checkbox" class="feature-toggle" data-feature="inventory" checked onchange="toggleFeature(this)" />
+                <span style="position: absolute; cursor: pointer; inset: 0; background: var(--color-primary); border-radius: 24px; transition: 0.3s;">
+                  <span style="position: absolute; content: ''; height: 20px; width: 20px; border-radius: 50%; background: white; top: 2px; right: 2px; transition: 0.3s;"></span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card card-bordered" style="padding: 16px;">
+            <div class="flex items-center justify-between">
+              <div>
+                <strong><i class="fas fa-users" style="color: var(--color-primary);"></i> Resurse Umane</strong>
+                <div class="text-muted" style="font-size: 12px;">Gestionare angajați, pontaje, salarii</div>
+              </div>
+              <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 24px;">
+                <input type="checkbox" class="feature-toggle" data-feature="hr" checked onchange="toggleFeature(this)" />
+                <span style="position: absolute; cursor: pointer; inset: 0; background: var(--color-primary); border-radius: 24px; transition: 0.3s;">
+                  <span style="position: absolute; content: ''; height: 20px; width: 20px; border-radius: 50%; background: white; top: 2px; right: 2px; transition: 0.3s;"></span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card card-bordered" style="padding: 16px;">
+            <div class="flex items-center justify-between">
+              <div>
+                <strong><i class="fas fa-truck-loading" style="color: var(--color-primary);"></i> Furnizori</strong>
+                <div class="text-muted" style="font-size: 12px;">Gestionare furnizori, contracte</div>
+              </div>
+              <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 24px;">
+                <input type="checkbox" class="feature-toggle" data-feature="suppliers" checked onchange="toggleFeature(this)" />
+                <span style="position: absolute; cursor: pointer; inset: 0; background: var(--color-primary); border-radius: 24px; transition: 0.3s;">
+                  <span style="position: absolute; content: ''; height: 20px; width: 20px; border-radius: 50%; background: white; top: 2px; right: 2px; transition: 0.3s;"></span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card card-bordered" style="padding: 16px;">
+            <div class="flex items-center justify-between">
+              <div>
+                <strong><i class="fas fa-calendar-alt" style="color: var(--color-primary);"></i> Rezervări</strong>
+                <div class="text-muted" style="font-size: 12px;">Sistem rezervări mese și camere</div>
+              </div>
+              <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 24px;">
+                <input type="checkbox" class="feature-toggle" data-feature="reservations" checked onchange="toggleFeature(this)" />
+                <span style="position: absolute; cursor: pointer; inset: 0; background: var(--color-primary); border-radius: 24px; transition: 0.3s;">
+                  <span style="position: absolute; content: ''; height: 20px; width: 20px; border-radius: 50%; background: white; top: 2px; right: 2px; transition: 0.3s;"></span>
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header">
+        <div class="card-title">
+          <i class="fas fa-sliders-h"></i> Configurare Planuri
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="text-muted mb-2">Configurează modulele disponibile pentru fiecare plan de abonament.</p>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Modul</th>
+                <th>Trial</th>
+                <th>Basic</th>
+                <th>Professional</th>
+                <th>Enterprise</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Restaurante</strong></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="trial" data-feature="restaurants" checked /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="basic" data-feature="restaurants" checked /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="professional" data-feature="restaurants" checked /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="enterprise" data-feature="restaurants" checked /></td>
+              </tr>
+              <tr>
+                <td><strong>Hoteluri</strong></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="trial" data-feature="hotels" /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="basic" data-feature="hotels" /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="professional" data-feature="hotels" checked /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="enterprise" data-feature="hotels" checked /></td>
+              </tr>
+              <tr>
+                <td><strong>Livrări</strong></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="trial" data-feature="deliveries" /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="basic" data-feature="deliveries" checked /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="professional" data-feature="deliveries" checked /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="enterprise" data-feature="deliveries" checked /></td>
+              </tr>
+              <tr>
+                <td><strong>Loialitate</strong></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="trial" data-feature="loyalty" checked /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="basic" data-feature="loyalty" checked /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="professional" data-feature="loyalty" checked /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="enterprise" data-feature="loyalty" checked /></td>
+              </tr>
+              <tr>
+                <td><strong>Inventar</strong></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="trial" data-feature="inventory" /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="basic" data-feature="inventory" /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="professional" data-feature="inventory" checked /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="enterprise" data-feature="inventory" checked /></td>
+              </tr>
+              <tr>
+                <td><strong>Resurse Umane</strong></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="trial" data-feature="hr" /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="basic" data-feature="hr" /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="professional" data-feature="hr" checked /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="enterprise" data-feature="hr" checked /></td>
+              </tr>
+              <tr>
+                <td><strong>Furnizori</strong></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="trial" data-feature="suppliers" /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="basic" data-feature="suppliers" /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="professional" data-feature="suppliers" checked /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="enterprise" data-feature="suppliers" checked /></td>
+              </tr>
+              <tr>
+                <td><strong>Rezervări</strong></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="trial" data-feature="reservations" checked /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="basic" data-feature="reservations" checked /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="professional" data-feature="reservations" checked /></td>
+                <td><input type="checkbox" class="plan-feature" data-plan="enterprise" data-feature="reservations" checked /></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header">
+        <div class="card-title">
+          <i class="fas fa-toggle-on"></i> Setări Generale
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-check">
+          <input type="checkbox" id="settings-feature-self-registration" checked />
+          <label for="settings-feature-self-registration">Permite înregistrarea autonomă a tenanților</label>
+        </div>
+        <div class="form-check">
+          <input type="checkbox" id="settings-feature-multi-language" checked />
+          <label for="settings-feature-multi-language">Activează suportul multilingv</label>
+        </div>
+        <div class="form-check">
+          <input type="checkbox" id="settings-feature-export-data" checked />
+          <label for="settings-feature-export-data">Permite exportul datelor (CSV, Excel)</label>
+        </div>
+        <div class="form-check">
+          <input type="checkbox" id="settings-feature-api-access" checked />
+          <label for="settings-feature-api-access">Activează accesul API extern</label>
+        </div>
+        <div class="form-check">
+          <input type="checkbox" id="settings-feature-webhooks" />
+          <label for="settings-feature-webhooks">Activează webhook-uri</label>
+        </div>
+        <div class="form-check">
+          <input type="checkbox" id="settings-feature-analytics" checked />
+          <label for="settings-feature-analytics">Activează analytics și rapoarte</label>
+        </div>
+        <div class="form-check">

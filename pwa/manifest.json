@@ -1,0 +1,134 @@
+{
+  "name": "GastroHub - Restaurant Management",
+  "short_name": "GastroHub",
+  "description": "Platformă completă de gestiune a restaurantelor",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2c3e50",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "ro-RO",
+  "icons": [
+    {
+      "src": "/icons/icon-48x48.png",
+      "sizes": "48x48",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/dashboard-desktop.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Dashboard - GastroHub"
+    },
+    {
+      "src": "/screenshots/dashboard-mobile.png",
+      "sizes": "750x1334",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Dashboard mobil - GastroHub"
+    }
+  ],
+  "categories": ["business", "food", "productivity"],
+  "iarc_rating_id": "e3e5f5b5-5b5e-5b5e-5b5e-5b5e5b5e5b5e",
+  "prefer_related_applications": false,
+  "related_applications": [],
+  "shortcuts": [
+    {
+      "name": "Comenzi active",
+      "short_name": "Comenzi",
+      "description": "Vezi comenzile active",
+      "url": "/orders",
+      "icons": [
+        {
+          "src": "/icons/shortcut-orders.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Meniu digital",
+      "short_name": "Meniu",
+      "description": "Gestionează meniul restaurantului",
+      "url": "/menu",
+      "icons": [
+        {
+          "src": "/icons/shortcut-menu.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Rezervări",
+      "short_name": "Rezervări",
+      "description": "Vezi și gestionează rezervările",
+      "url": "/reservations",
+      "icons": [
+        {
+          "src": "/icons/shortcut-reservations.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "minimal-ui"
+  ],
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "handle_links": "auto",
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  }
+}

@@ -1,0 +1,881 @@
+<%
+  // Hotel Guests View
+  const hotel = locals.hotel || null;
+  const guests = locals.guests || [];
+  const loading = locals.loading || false;
+%>
+
+<style>
+  /* ============================================================
+     GUESTS PAGE STYLES
+     ============================================================ */
+  .guests-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .guests-header h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .guests-header h1 i {
+    color: #1abc9c;
+  }
+
+  .guests-header .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--color-text-muted);
+    font-size: 13px;
+  }
+
+  .guests-header .header-meta .hotel-name {
+    font-weight: 600;
+    color: #1abc9c;
+  }
+
+  .guest-filters {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .guest-filters .search-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    flex: 1;
+    max-width: 320px;
+  }
+
+  .guest-filters .search-box i {
+    color: var(--color-text-muted);
+    font-size: 13px;
+  }
+
+  .guest-filters .search-box input {
+    border: none;
+    background: none;
+    font-size: 13px;
+    font-family: var(--font-family);
+    color: var(--color-text);
+    width: 100%;
+  }
+
+  .guest-filters .search-box input:focus {
+    outline: none;
+  }
+
+  .guest-filters .filter-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .guest-filters .filter-group select {
+    padding: 6px 10px;
+    font-size: 13px;
+    font-family: var(--font-family);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+
+  .guest-filters .filter-group select:focus {
+    outline: none;
+    border-color: #1abc9c;
+  }
+
+  .guests-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  @media (max-width: 480px) {
+    .guests-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .guest-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    transition: all var(--transition);
+  }
+
+  .guest-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+  }
+
+  .guest-card .guest-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .guest-card .guest-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #1abc9c, #16a085);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+  }
+
+  .guest-card .guest-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .guest-card .guest-info .guest-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .guest-card .guest-info .guest-email {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .guest-card .guest-info .guest-phone {
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+
+  .guest-card .guest-body {
+    padding: 14px 20px;
+  }
+
+  .guest-card .guest-detail {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+    font-size: 13px;
+  }
+
+  .guest-card .guest-detail .detail-label {
+    color: var(--color-text-muted);
+  }
+
+  .guest-card .guest-detail .detail-value {
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .guest-card .guest-detail .detail-value.room-number {
+    font-family: monospace;
+    font-size: 14px;
+  }
+
+  .guest-card .guest-footer {
+    display: flex;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .guest-card .guest-footer button {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    background: none;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition);
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .guest-card .guest-footer button:hover {
+    background: rgba(0,0,0,0.02);
+  }
+
+  .guest-card .guest-footer .btn-checkout:hover {
+    color: var(--color-warning);
+  }
+
+  .guest-card .guest-footer .btn-view:hover {
+    color: var(--color-info);
+  }
+
+  .guest-card .guest-footer .btn-extend:hover {
+    color: var(--color-success);
+  }
+
+  .guest-card .guest-footer button + button {
+    border-left: 1px solid var(--color-border);
+  }
+
+  .guest-status-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+  }
+
+  .guest-status-indicator.checked-in {
+    background: var(--color-success);
+  }
+
+  .guest-status-indicator.checked-out {
+    background: #546e7a;
+  }
+
+  .guest-status-indicator.pending {
+    background: var(--color-warning);
+  }
+
+  .guest-status-indicator.cancelled {
+    background: var(--color-danger);
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 80px 20px;
+    color: var(--color-text-muted);
+  }
+
+  .empty-state i {
+    font-size: 56px;
+    margin-bottom: 16px;
+    opacity: 0.3;
+  }
+
+  .empty-state h3 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--color-text);
+  }
+
+  .quick-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .quick-stat {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    border: 1px solid var(--color-border);
+    text-align: center;
+  }
+
+  .quick-stat .qs-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+  }
+
+  .quick-stat .qs-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin-top: 4px;
+  }
+
+  .quick-stat .qs-value.checked-in { color: var(--color-success); }
+  .quick-stat .qs-value.checked-out { color: #546e7a; }
+  .quick-stat .qs-value.pending { color: var(--color-warning); }
+
+  .guest-modal-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .guest-modal-details .detail-box {
+    padding: 12px;
+    background: var(--color-bg);
+    border-radius: var(--radius-sm);
+  }
+
+  .guest-modal-details .detail-box .box-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    margin-bottom: 4px;
+  }
+
+  .guest-modal-details .detail-box .box-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  @media (max-width: 768px) {
+    .guest-filters {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .guest-filters .search-box {
+      max-width: 100%;
+    }
+  }
+
+  /* ============================================================
+     GUEST PROFILE MODAL / HISTORY / INVOICES
+     ============================================================ */
+  .guest-profile-section {
+    margin-bottom: 20px;
+  }
+
+  .guest-profile-section h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .guest-profile-section h3 i {
+    color: #1abc9c;
+  }
+
+  .guest-history-table,
+  .guest-invoice-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .guest-history-table th,
+  .guest-history-table td,
+  .guest-invoice-table th,
+  .guest-invoice-table td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .guest-history-table th,
+  .guest-invoice-table th {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    background: var(--color-bg);
+  }
+
+  .guest-history-table tr:hover td,
+  .guest-invoice-table tr:hover td {
+    background: rgba(26, 188, 156, 0.04);
+  }
+
+  .guest-invoice-table .invoice-total {
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .guest-invoice-table .invoice-paid {
+    color: var(--color-success);
+    font-weight: 600;
+  }
+
+  .guest-invoice-table .invoice-unpaid {
+    color: var(--color-danger);
+    font-weight: 600;
+  }
+
+  .guest-invoice-table .invoice-pending {
+    color: var(--color-warning);
+    font-weight: 600;
+  }
+</style>
+
+<!-- ============================================================
+     HEADER
+     ============================================================ -->
+<div class="guests-header">
+  <div>
+    <h1>
+      <i class="fas fa-users"></i>
+      Oaspeți
+    </h1>
+    <div class="header-meta">
+      <% if (hotel) { %>
+        <span class="hotel-name"><i class="fas fa-building"></i> <%= hotel.nume %></span>
+        <span class="text-muted">•</span>
+      <% } %>
+      <span>
+        <strong><%= guests.length %></strong> oaspeți
+      </span>
+    </div>
+  </div>
+  <div class="hotel-actions-bar">
+    <% if (locals.hotels && hotels.length > 1) { %>
+      <div class="hotel-selector" style="position:relative;">
+        <select id="hotelSelect" onchange="switchHotel(this.value)" style="padding:6px 28px 6px 10px;font-size:12px;font-family:var(--font-family);border:1px solid var(--color-border);border-radius:var(--radius-sm);background:var(--color-surface);color:var(--color-text);cursor:pointer;appearance:none;-webkit-appearance:none;background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%2712%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%23636e72%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3E%3Cpolyline points=%276 9 12 15 18 9%27%3E%3C/polyline%3E%3C/svg%3E');background-repeat:no-repeat;background-position:right 8px center;">
+          <% hotels.forEach(function(h) { %>
+            <option value="<%= h._id %>" <%= hotel && hotel._id === h._id ? 'selected' : '' %>>
+              <%= h.nume %>
+            </option>
+          <% }); %>
+        </select>
+      </div>
+    <% } %>
+    <button class="btn btn-primary btn-sm" onclick="openAddGuestModal()">
+      <i class="fas fa-user-plus"></i> Oaspete nou
+    </button>
+  </div>
+</div>
+
+<% if (loading) { %>
+  <div class="spinner"></div>
+<% } else if (!hotel) { %>
+  <!-- ============================================================
+       NO HOTEL SELECTED
+       ============================================================ -->
+  <div class="empty-state">
+    <i class="fas fa-hotel"></i>
+    <h3>Selectează un hotel</h3>
+    <p>Nu există niciun hotel selectat. Alege un hotel pentru a vedea oaspeții.</p>
+  </div>
+<% } else { %>
+  <!-- ============================================================
+       QUICK STATS
+       ============================================================ -->
+  <div class="quick-stats">
+    <%
+      var checkedInCount = guests.filter(function(g) { return g.status === 'checked-in'; }).length;
+      var checkedOutCount = guests.filter(function(g) { return g.status === 'checked-out'; }).length;
+      var pendingCount = guests.filter(function(g) { return g.status === 'pending'; }).length;
+    %>
+    <div class="quick-stat">
+      <div class="qs-label">Check-in</div>
+      <div class="qs-value checked-in"><%= checkedInCount %></div>
+    </div>
+    <div class="quick-stat">
+      <div class="qs-label">Check-out</div>
+      <div class="qs-value checked-out"><%= checkedOutCount %></div>
+    </div>
+    <div class="quick-stat">
+      <div class="qs-label">În așteptare</div>
+      <div class="qs-value pending"><%= pendingCount %></div>
+    </div>
+    <div class="quick-stat">
+      <div class="qs-label">Total oaspeți</div>
+      <div class="qs-value"><%= guests.length %></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       FILTERS
+       ============================================================ -->
+  <div class="guest-filters">
+    <div class="search-box">
+      <i class="fas fa-search"></i>
+      <input type="text" id="searchGuest" placeholder="Caută după nume, email sau telefon..." oninput="filterGuests()" />
+    </div>
+    <div class="filter-group">
+      <select id="statusFilter" onchange="filterGuests()">
+        <option value="all">Toate statusurile</option>
+        <option value="checked-in">Check-in</option>
+        <option value="checked-out">Check-out</option>
+        <option value="pending">În așteptare</option>
+        <option value="cancelled">Anulat</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       GUESTS GRID
+       ============================================================ -->
+  <% if (guests.length === 0) { %>
+    <div class="empty-state">
+      <i class="fas fa-users"></i>
+      <h3>Niciun oaspete</h3>
+      <p>Nu există oaspeți înregistrați pentru acest hotel.</p>
+      <button class="btn btn-primary btn-sm mt-2" onclick="openAddGuestModal()">
+        <i class="fas fa-user-plus"></i> Adaugă oaspete
+      </button>
+    </div>
+  <% } else { %>
+    <div class="guests-grid" id="guestsGrid">
+      <% guests.forEach(function(guest) { %>
+        <% 
+          var initials = '';
+          if (guest.nume) {
+            var parts = guest.nume.split(' ');
+            initials = parts.map(function(p) { return p.charAt(0).toUpperCase(); }).join('').substring(0, 2);
+          } else {
+            initials = '?';
+          }
+          var statusClass = guest.status === 'checked-in' ? 'checked-in' : 
+                            guest.status === 'checked-out' ? 'checked-out' : 
+                            guest.status === 'pending' ? 'pending' : 'cancelled';
+          var statusLabel = guest.status === 'checked-in' ? 'Check-in' : 
+                            guest.status === 'checked-out' ? 'Check-out' : 
+                            guest.status === 'pending' ? 'În așteptare' : 'Anulat';
+        %>
+        <div class="guest-card" data-status="<%= guest.status || 'pending' %>" data-name="<%= (guest.nume || '').toLowerCase() %>" data-email="<%= (guest.email || '').toLowerCase() %>" data-phone="<%= (guest.telefon || '').toLowerCase() %>">
+          <div class="guest-header">
+            <div class="guest-avatar"><%= initials %></div>
+            <div class="guest-info">
+              <div class="guest-name"><%= guest.nume || 'Nespecificat' %></div>
+              <div class="guest-email"><%= guest.email || '' %></div>
+              <% if (guest.telefon) { %>
+                <div class="guest-phone"><i class="fas fa-phone"></i> <%= guest.telefon %></div>
+              <% } %>
+            </div>
+          </div>
+          <div class="guest-body">
+            <div class="guest-detail">
+              <span class="detail-label">Status</span>
+              <span class="detail-value">
+                <span class="guest-status-indicator <%= statusClass %>"></span>
+                <span class="guest-status-badge <%= statusClass %>"><%= statusLabel %></span>
+              </span>
+            </div>
+            <% if (guest.cameraNumăr) { %>
+              <div class="guest-detail">
+                <span class="detail-label">Camera</span>
+                <span class="detail-value room-number"><%= guest.cameraNumăr %></span>
+              </div>
+            <% } %>
+            <% if (guest.checkIn) { %>
+              <div class="guest-detail">
+                <span class="detail-label">Check-in</span>
+                <span class="detail-value"><%= new Date(guest.checkIn).toLocaleDateString('ro-RO') %></span>
+              </div>
+            <% } %>
+            <% if (guest.checkOut) { %>
+              <div class="guest-detail">
+                <span class="detail-label">Check-out</span>
+                <span class="detail-value"><%= new Date(guest.checkOut).toLocaleDateString('ro-RO') %></span>
+              </div>
+            <% } %>
+          </div>
+          <div class="guest-footer">
+            <button class="btn-view" onclick="viewGuest('<%= guest._id %>')"><i class="fas fa-eye"></i> Detalii</button>
+            <% if (guest.status === 'checked-in') { %>
+              <button class="btn-checkout" onclick="checkoutGuest('<%= guest._id %>')"><i class="fas fa-sign-out-alt"></i> Check-out</button>
+            <% } %>
+            <% if (guest.status === 'pending') { %>
+              <button class="btn-extend" onclick="checkinGuest('<%= guest._id %>')"><i class="fas fa-sign-in-alt"></i> Check-in</button>
+            <% } %>
+          </div>
+        </div>
+      <% }); %>
+    </div>
+  <% } %>
+
+<% } /* end else */ %>
+
+<!-- ============================================================
+     SCRIPTS
+     ============================================================ -->
+<script>
+  function switchHotel(hotelId) {
+    if (!hotelId) return;
+    var url = new URL(window.location.href);
+    url.searchParams.set('hotelId', hotelId);
+    window.location.href = url.toString();
+  }
+
+  function filterGuests() {
+    var search = document.getElementById('searchGuest').value.toLowerCase();
+    var status = document.getElementById('statusFilter').value;
+    var cards = document.querySelectorAll('.guest-card');
+
+    cards.forEach(function(card) {
+      var show = true;
+
+      // Status filter
+      if (status !== 'all') {
+        var cardStatus = card.getAttribute('data-status');
+        if (cardStatus !== status) show = false;
+      }
+
+      // Search filter
+      if (show && search) {
+        var name = card.getAttribute('data-name') || '';
+        var email = card.getAttribute('data-email') || '';
+        var phone = card.getAttribute('data-phone') || '';
+        if (!name.includes(search) && !email.includes(search) && !phone.includes(search)) {
+          show = false;
+        }
+      }
+
+      card.style.display = show ? '' : 'none';
+    });
+  }
+
+  function openAddGuestModal() {
+    var html = {
+      title: 'Adaugă oaspete nou',
+      body: '<form id="addGuestForm" onsubmit="return false;">' +
+        '<div class="form-group">' +
+          '<label for="guestName">Nume complet</label>' +
+          '<input type="text" id="guestName" required placeholder="Numele complet al oaspetelui" />' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label for="guestEmail">Email</label>' +
+          '<input type="email" id="guestEmail" placeholder="email@exemplu.ro" />' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label for="guestPhone">Telefon</label>' +
+          '<input type="tel" id="guestPhone" placeholder="+40 7XX XXX XXX" />' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label for="guestRoom">Camera</label>' +
+          '<input type="number" id="guestRoom" placeholder="Număr cameră" min="1" />' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+          '<div class="form-group">' +
+            '<label for="guestCheckIn">Check-in</label>' +
+            '<input type="date" id="guestCheckIn" />' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<label for="guestCheckOut">Check-out</label>' +
+            '<input type="date" id="guestCheckOut" />' +
+          '</div>' +
+        '</div>' +
+        '<div class="form-actions">' +
+          '<button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Anulează</button>' +
+          '<button type="submit" class="btn btn-primary" onclick="submitAddGuest()">Adaugă oaspete</button>' +
+        '</div>' +
+      '</form>'
+    };
+    openModal(html);
+  }
+
+  async function submitAddGuest() {
+    var nume = document.getElementById('guestName').value;
+    var email = document.getElementById('guestEmail').value;
+    var telefon = document.getElementById('guestPhone').value;
+
+    if (!nume) {
+      showToast('Numele oaspetelui este obligatoriu', 'warning');
+      return;
+    }
+
+    showToast('Funcționalitatea de adăugare oaspeți va fi disponibilă în curând.', 'info');
+    var modal = document.querySelector('.modal-overlay');
+    if (modal) modal.remove();
+  }
+
+  /**
+   * viewGuest - Deschide un modal cu profilul complet al oaspetelui,
+   * incluzând istoricul sejururilor și facturile asociate.
+   */
+  async function viewGuest(id) {
+    if (!id) {
+      showToast('ID oaspete lipsă', 'warning');
+      return;
+    }
+
+    try {
+      showToast('Se încarcă detaliile oaspetelui...', 'info');
+
+      var response = await fetch('/api/hotel/guest/' + id + '/profile');
+      if (!response.ok) {
+        throw new Error('Eroare la încărcarea profilului');
+      }
+
+      var data = await response.json();
+      var guest = data.guest || {};
+      var history = data.history || [];
+      var invoices = data.invoices || [];
+
+      var initials = '';
+      if (guest.nume) {
+        var parts = guest.nume.split(' ');
+        initials = parts.map(function(p) { return p.charAt(0).toUpperCase(); }).join('').substring(0, 2);
+      } else {
+        initials = '?';
+      }
+
+      var statusClass = guest.status === 'checked-in' ? 'checked-in' : 
+                        guest.status === 'checked-out' ? 'checked-out' : 
+                        guest.status === 'pending' ? 'pending' : 'cancelled';
+      var statusLabel = guest.status === 'checked-in' ? 'Check-in' : 
+                        guest.status === 'checked-out' ? 'Check-out' : 
+                        guest.status === 'pending' ? 'În așteptare' : 'Anulat';
+
+      // Build history rows
+      var historyRows = '';
+      if (history.length === 0) {
+        historyRows = '<tr><td colspan="5" style="text-align:center;color:var(--color-text-muted);padding:20px;">Niciun sejur anterior</td></tr>';
+      } else {
+        history.forEach(function(entry) {
+          var hCheckIn = entry.checkIn ? new Date(entry.checkIn).toLocaleDateString('ro-RO') : '-';
+          var hCheckOut = entry.checkOut ? new Date(entry.checkOut).toLocaleDateString('ro-RO') : '-';
+          var hCamera = entry.cameraNumăr || '-';
+          var hHotel = entry.hotelNume || '-';
+          var hStatus = entry.status || '-';
+          historyRows += '<tr>' +
+            '<td>' + hHotel + '</td>' +
+            '<td>' + hCamera + '</td>' +
+            '<td>' + hCheckIn + '</td>' +
+            '<td>' + hCheckOut + '</td>' +
+            '<td>' + hStatus + '</td>' +
+          '</tr>';
+        });
+      }
+
+      // Build invoice rows
+      var invoiceRows = '';
+      if (invoices.length === 0) {
+        invoiceRows = '<tr><td colspan="4" style="text-align:center;color:var(--color-text-muted);padding:20px;">Nicio factură</td></tr>';
+      } else {
+        invoices.forEach(function(inv) {
+          var invDate = inv.dataEmiterii ? new Date(inv.dataEmiterii).toLocaleDateString('ro-RO') : '-';
+          var invTotal = inv.total ? parseFloat(inv.total).toFixed(2) + ' RON' : '-';
+          var invStatusClass = inv.status === 'paid' ? 'invoice-paid' : inv.status === 'unpaid' ? 'invoice-unpaid' : 'invoice-pending';
+          var invStatusLabel = inv.status === 'paid' ? 'Plătit' : inv.status === 'unpaid' ? 'Neplătit' : 'În așteptare';
+          invoiceRows += '<tr>' +
+            '<td>' + (inv.numărFactură || '-') + '</td>' +
+            '<td>' + invDate + '</td>' +
+            '<td class="invoice-total">' + invTotal + '</td>' +
+            '<td class="' + invStatusClass + '">' + invStatusLabel + '</td>' +
+          '</tr>';
+        });
+      }
+
+      var modalHtml = {
+        title: 'Profil oaspete',
+        body: '<div style="max-height:70vh;overflow-y:auto;">' +
+          '<div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--color-border);">' +
+            '<div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#1abc9c,#16a085);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:#fff;flex-shrink:0;">' + initials + '</div>' +
+            '<div>' +
+              '<div style="font-size:18px;font-weight:700;color:var(--color-text);">' + (guest.nume || 'Nespecificat') + '</div>' +
+              '<div style="font-size:13px;color:var(--color-text-muted);">' + (guest.email || '') + '</div>' +
+              '<div style="font-size:13px;color:var(--color-text-muted);">' + (guest.telefon ? '<i class="fas fa-phone"></i> ' + guest.telefon : '') + '</div>' +
+              '<div style="margin-top:4px;"><span class="guest-status-indicator ' + statusClass + '"></span><span class="guest-status-badge ' + statusClass + '">' + statusLabel + '</span></div>' +
+            '</div>' +
+          '</div>' +
+
+          // Istoric sejururi
+          '<div class="guest-profile-section">' +
+            '<h3><i class="fas fa-history"></i> Istoric sejururi</h3>' +
+            '<table class="guest-history-table">' +
+              '<thead>' +
+                '<tr><th>Hotel</th><th>Camera</th><th>Check-in</th><th>Check-out</th><th>Status</th></tr>' +
+              '</thead>' +
+              '<tbody>' + historyRows + '</tbody>' +
+            '</table>' +
+          '</div>' +
+
+          // Facturi
+          '<div class="guest-profile-section">' +
+            '<h3><i class="fas fa-file-invoice"></i> Facturi</h3>' +
+            '<table class="guest-invoice-table">' +
+              '<thead>' +
+                '<tr><th>Nr. factură</th><th>Data</th><th>Total</th><th>Status</th></tr>' +
+              '</thead>' +
+              '<tbody>' + invoiceRows + '</tbody>' +
+            '</table>' +
+          '</div>' +
+        '</div>' +
+        '<div class="form-actions" style="margin-top:16px;padding-top:12px;border-top:1px solid var(--color-border);">' +
+          '<button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Închide</button>' +
+        '</div>'
+      };
+
+      // Close any existing modal first
+      var existingModal = document.querySelector('.modal-overlay');
+      if (existingModal) existingModal.remove();
+
+      openModal(modalHtml);
+    } catch (err) {
+      showToast('Eroare la încărcarea profilului: ' + err.message, 'error');
+      console.error('viewGuest error:', err);
+    }
+  }
+
+  async function checkinGuest(id) {
+    if (!id) {
+      showToast('ID oaspete lipsă', 'warning');
+      return;
+    }
+    if (!confirm('Ești sigur că vrei să faci check-in pentru acest oaspete?')) return;
+
+    try {
+      var response = await fetch('/api/hotel/guest/' + id + '/checkin', { method: 'POST' });
+      if (!response.ok) {
+        var errData = await response.json().catch(function() { return {}; });
+        throw new Error(errData.message || 'Eroare la check-in');
+      }
+
+      showToast('Check-in efectuat cu succes!', 'success');
+      // Reîncarcă pagina pentru a actualiza datele
+      setTimeout(function() { window.location.reload(); }, 800);
+    } catch (err) {
+      showToast('Eroare: ' + err.message, 'error');
+    }
+  }
+
+  async function checkoutGuest(id) {
+    if (!id) {
+      showToast('ID oaspete lipsă', 'warning');
+      return;
+    }
+    if (!confirm('Ești sigur că vrei să faci check-out pentru acest oaspete?')) return;
+
+    try {
+      var response = await fetch('/api/hotel/guest/' + id + '/checkout', { method: 'POST' });
+      if (!response.ok) {
+        var errData = await response.json().catch(function() { return {}; });
+        throw new Error(errData.message || 'Eroare la check-out');
+      }
+
+      showToast('Check-out efectuat cu succes!', 'success');
+      // Reîncarcă pagina pentru a actualiza datele
+      setTimeout(function() { window.location.reload(); }, 800);
+    } catch (err) {
+      showToast('Eroare: ' + err.message, 'error');
+    }
+  }
+</script>

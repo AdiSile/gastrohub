@@ -1,0 +1,1264 @@
+/* ============================================================
+   HOTEL DASHBOARD - STILIZARE INTERFAȚĂ
+   ============================================================
+   GastroHub - SaaS pentru gestionarea hotelurilor
+   Versiune: 1.0.0
+   ============================================================ */
+
+/* ============================================================
+   HOTEL VARIABILE (supra-scriu variabilele globale)
+   ============================================================ */
+:root {
+  /* Paletă principală Hotel (teal / turcoaz) */
+  --color-hotel: #1abc9c;
+  --color-hotel-dark: #16a085;
+  --color-hotel-light: #a3e4d7;
+  --color-hotel-bg: #e8f8f5;
+
+  /* Hotel functional colors */
+  --color-hotel-available: #27ae60;
+  --color-hotel-occupied: #f39c12;
+  --color-hotel-maintenance: #e74c3c;
+  --color-hotel-cleaning: #9b59b6;
+  --color-hotel-reserved: #1abc9c;
+  --color-hotel-out-of-order: #546e7a;
+}
+
+/* ============================================================
+   HOTEL HEADER / NAVIGAȚIE
+   ============================================================ */
+.hotel-header {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 24px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: var(--shadow-sm);
+}
+
+.hotel-header .header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.hotel-header .header-left .brand {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-hotel);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hotel-header .header-left .brand i {
+  font-size: 1.5rem;
+}
+
+.hotel-header .header-left .hotel-name-badge {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  padding-left: 16px;
+  border-left: 1px solid var(--color-border);
+}
+
+.hotel-header .header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hotel-header .header-right .nav-link {
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  transition: all var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hotel-header .header-right .nav-link:hover {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.hotel-header .header-right .nav-link.active {
+  background: var(--color-hotel-bg);
+  color: var(--color-hotel);
+  font-weight: 600;
+}
+
+.hotel-header .header-right .nav-link i {
+  font-size: 1rem;
+}
+
+/* ============================================================
+   SIDEBAR – SECȚIUNEA HOTEL
+   ============================================================ */
+.sidebar-nav .nav-section.hotel-section {
+  margin-top: 8px;
+  border-top: 1px solid var(--color-border-light);
+  padding-top: 16px;
+}
+
+.sidebar-nav .nav-section.hotel-section .section-title {
+  color: var(--color-hotel);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+  padding: 0 8px;
+}
+
+.sidebar-nav .hotel-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  transition: all var(--transition);
+  cursor: pointer;
+  margin-bottom: 2px;
+  border-left: 3px solid transparent;
+  text-decoration: none;
+}
+
+.sidebar-nav .hotel-nav-item:hover {
+  background: var(--color-hotel-bg);
+  color: var(--color-hotel-dark);
+  border-left-color: var(--color-hotel-light);
+}
+
+.sidebar-nav .hotel-nav-item.active {
+  background: var(--color-hotel-bg);
+  color: var(--color-hotel-dark);
+  font-weight: 600;
+  border-left-color: var(--color-hotel);
+}
+
+.sidebar-nav .hotel-nav-item i {
+  width: 20px;
+  text-align: center;
+  font-size: 1rem;
+  color: var(--color-hotel);
+}
+
+.sidebar-nav .hotel-nav-item .badge {
+  margin-left: auto;
+  background: var(--color-hotel);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 10px;
+  min-width: 20px;
+  text-align: center;
+}
+
+/* Hotel selector in sidebar */
+.hotel-selector-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-hotel-bg);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  margin: 0 12px 12px;
+  border: 1px solid var(--color-border-light);
+}
+
+.hotel-selector-wrapper i {
+  color: var(--color-hotel);
+  font-size: 14px;
+}
+
+.hotel-selector-wrapper select {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  font-size: 13px;
+  font-family: var(--font-family);
+  padding: 4px 0;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.hotel-selector-wrapper select option {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.hotel-selector-wrapper select:focus {
+  outline: none;
+}
+
+/* ============================================================
+   HOTEL PAGE TITLE
+   ============================================================ */
+.page-title.hotel {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.page-title.hotel i {
+  color: var(--color-hotel);
+}
+
+/* ============================================================
+   HOTEL STATS CARDS
+   ============================================================ */
+.hotel-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+@media (max-width: 768px) {
+  .hotel-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .hotel-stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hotel-stat-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border);
+  transition: all var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.hotel-stat-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.hotel-stat-card .stat-icon-bg {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  opacity: 0.12;
+}
+
+.hotel-stat-card .stat-icon-bg i {
+  font-size: 26px;
+}
+
+.hotel-stat-card .stat-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+
+.hotel-stat-card .stat-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.hotel-stat-card .stat-sub {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Left border accent colors for stat cards */
+.hotel-stat-card.border-hotel {
+  border-left: 4px solid var(--color-hotel);
+}
+.hotel-stat-card.border-available {
+  border-left: 4px solid var(--color-hotel-available);
+}
+.hotel-stat-card.border-occupied {
+  border-left: 4px solid var(--color-hotel-occupied);
+}
+.hotel-stat-card.border-maintenance {
+  border-left: 4px solid var(--color-hotel-maintenance);
+}
+.hotel-stat-card.border-cleaning {
+  border-left: 4px solid var(--color-hotel-cleaning);
+}
+.hotel-stat-card.border-reserved {
+  border-left: 4px solid var(--color-hotel-reserved);
+}
+.hotel-stat-card.border-info {
+  border-left: 4px solid var(--color-info);
+}
+
+/* ============================================================
+   ROOM STATUS BADGES
+   ============================================================ */
+.room-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.room-status-badge.available {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.room-status-badge.occupied {
+  background: #fff3e0;
+  color: #e65100;
+}
+.room-status-badge.maintenance {
+  background: #fce4ec;
+  color: #c62828;
+}
+.room-status-badge.cleaning {
+  background: #f3e5f5;
+  color: #6a1b9a;
+}
+.room-status-badge.reserved {
+  background: #e0f2f1;
+  color: #00695c;
+}
+.room-status-badge.out-of-order {
+  background: #eceff1;
+  color: #546e7a;
+}
+
+/* ============================================================
+   GUEST STATUS BADGES
+   ============================================================ */
+.guest-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.guest-status-badge.checked-in {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.guest-status-badge.checked-out {
+  background: #eceff1;
+  color: #546e7a;
+}
+.guest-status-badge.pending {
+  background: #fff8e1;
+  color: #f57f17;
+}
+.guest-status-badge.cancelled {
+  background: #fce4ec;
+  color: #c62828;
+}
+.guest-status-badge.no-show {
+  background: #f3e5f5;
+  color: #6a1b9a;
+}
+
+/* ============================================================
+   RESERVATION STATUS BADGES
+   ============================================================ */
+.reservation-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.reservation-status-badge.confirmed {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.reservation-status-badge.pending {
+  background: #fff8e1;
+  color: #f57f17;
+}
+.reservation-status-badge.checked-in {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+.reservation-status-badge.checked-out {
+  background: #eceff1;
+  color: #546e7a;
+}
+.reservation-status-badge.cancelled {
+  background: #fce4ec;
+  color: #c62828;
+}
+.reservation-status-badge.no-show {
+  background: #f3e5f5;
+  color: #6a1b9a;
+}
+
+/* ============================================================
+   ROOM CARDS GRID
+   ============================================================ */
+.rooms-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+@media (max-width: 480px) {
+  .rooms-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.room-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  border: 2px solid var(--color-border);
+  overflow: hidden;
+  transition: all var(--transition);
+  position: relative;
+}
+
+.room-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.room-card .room-header-bar {
+  height: 6px;
+}
+
+.room-card .room-header-bar.available {
+  background: var(--color-hotel-available);
+}
+.room-card .room-header-bar.occupied {
+  background: var(--color-hotel-occupied);
+}
+.room-card .room-header-bar.maintenance {
+  background: var(--color-hotel-maintenance);
+}
+.room-card .room-header-bar.cleaning {
+  background: var(--color-hotel-cleaning);
+}
+.room-card .room-header-bar.reserved {
+  background: var(--color-hotel-reserved);
+}
+.room-card .room-header-bar.out-of-order {
+  background: var(--color-hotel-out-of-order);
+}
+
+.room-card .room-body {
+  padding: 16px 20px;
+}
+
+.room-card .room-number {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.room-card .room-number .room-number-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.room-card .room-number .room-number-value i {
+  color: var(--color-hotel);
+  font-size: 1.1rem;
+}
+
+.room-card .room-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: 12px;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+}
+
+.room-card .room-meta {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.room-card .room-meta span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.room-card .room-price {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-hotel);
+  margin-top: 8px;
+}
+
+.room-card .room-actions {
+  display: flex;
+  border-top: 1px solid var(--color-border);
+}
+
+.room-card .room-actions button,
+.room-card .room-actions a {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  background: none;
+  font-size: 0.7rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-decoration: none;
+  font-family: var(--font-family);
+}
+
+.room-card .room-actions button:hover,
+.room-card .room-actions a:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.room-card .room-actions .action-view:hover {
+  color: var(--color-info);
+}
+.room-card .room-actions .action-checkin:hover {
+  color: var(--color-hotel-available);
+}
+.room-card .room-actions .action-checkout:hover {
+  color: var(--color-hotel-occupied);
+}
+.room-card .room-actions .action-maintenance:hover {
+  color: var(--color-hotel-maintenance);
+}
+.room-card .room-actions .action-cleaning:hover {
+  color: var(--color-hotel-cleaning);
+}
+
+.room-card .room-actions button + button,
+.room-card .room-actions a + a,
+.room-card .room-actions button + a,
+.room-card .room-actions a + button {
+  border-left: 1px solid var(--color-border);
+}
+
+/* ============================================================
+   FILTER CHIPS / STATS BAR
+   ============================================================ */
+.hotel-filter-chips {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.hotel-filter-chips .chip {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  transition: all var(--transition);
+  cursor: pointer;
+}
+
+.hotel-filter-chips .chip:hover {
+  border-color: var(--color-hotel);
+  color: var(--color-hotel);
+}
+
+.hotel-filter-chips .chip.active {
+  background: var(--color-hotel);
+  color: #fff;
+  border-color: var(--color-hotel);
+}
+
+.hotel-filter-chips .chip .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.hotel-filter-chips .chip .dot.available {
+  background: var(--color-hotel-available);
+}
+.hotel-filter-chips .chip .dot.occupied {
+  background: var(--color-hotel-occupied);
+}
+.hotel-filter-chips .chip .dot.maintenance {
+  background: var(--color-hotel-maintenance);
+}
+.hotel-filter-chips .chip .dot.cleaning {
+  background: var(--color-hotel-cleaning);
+}
+.hotel-filter-chips .chip .dot.reserved {
+  background: var(--color-hotel-reserved);
+}
+
+/* ============================================================
+   GUEST CARDS GRID
+   ============================================================ */
+.guests-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+@media (max-width: 480px) {
+  .guests-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.guest-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: all var(--transition);
+}
+
+.guest-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.guest-card .guest-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.guest-card .guest-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-hotel), var(--color-hotel-dark));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.guest-card .guest-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.guest-card .guest-info .guest-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.guest-card .guest-info .guest-email {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.guest-card .guest-info .guest-phone {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.guest-card .guest-body {
+  padding: 14px 20px;
+}
+
+.guest-card .guest-detail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 0.82rem;
+}
+
+.guest-card .guest-detail .detail-label {
+  color: var(--color-text-muted);
+}
+
+.guest-card .guest-detail .detail-value {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.guest-card .guest-detail .detail-value.room-number {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+
+.guest-card .guest-footer {
+  display: flex;
+  border-top: 1px solid var(--color-border);
+}
+
+.guest-card .guest-footer button {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  background: none;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: var(--font-family);
+}
+
+.guest-card .guest-footer button:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.guest-card .guest-footer .action-checkout:hover {
+  color: var(--color-hotel-occupied);
+}
+.guest-card .guest-footer .action-view:hover {
+  color: var(--color-info);
+}
+.guest-card .guest-footer .action-checkin:hover {
+  color: var(--color-hotel-available);
+}
+.guest-card .guest-footer .action-extend:hover {
+  color: var(--color-hotel);
+}
+
+.guest-card .guest-footer button + button {
+  border-left: 1px solid var(--color-border);
+}
+
+.guest-status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.guest-status-indicator.checked-in {
+  background: var(--color-hotel-available);
+}
+.guest-status-indicator.checked-out {
+  background: var(--color-hotel-out-of-order);
+}
+.guest-status-indicator.pending {
+  background: var(--color-hotel-occupied);
+}
+.guest-status-indicator.cancelled {
+  background: var(--color-hotel-maintenance);
+}
+
+/* ============================================================
+   RESERVATIONS TABLE
+   ============================================================ */
+.hotel-table-wrapper {
+  overflow-x: auto;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.hotel-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.hotel-table thead {
+  background: var(--color-bg);
+}
+
+.hotel-table thead th {
+  padding: 12px 14px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  border-bottom: 2px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.hotel-table tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.hotel-table tbody tr:hover td {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.hotel-table .guest-name {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.hotel-table .guest-email {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+.hotel-table .room-number-cell {
+  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+
+.hotel-table .date-cell {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.hotel-table .date-cell strong {
+  color: var(--color-text);
+}
+
+.hotel-table .amount-cell {
+  font-weight: 700;
+  color: var(--color-hotel);
+}
+
+.hotel-table .actions-cell {
+  white-space: nowrap;
+}
+
+.hotel-table .actions-cell button {
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all var(--transition);
+  color: var(--color-text-muted);
+  font-family: var(--font-family);
+}
+
+.hotel-table .actions-cell button:hover {
+  border-color: var(--color-hotel);
+  color: var(--color-hotel);
+}
+
+.hotel-table .actions-cell button + button {
+  margin-left: 4px;
+}
+
+/* ============================================================
+   RESERVATION FILTERS
+   ============================================================ */
+.hotel-filters-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.hotel-filters-bar .filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hotel-filters-bar .filter-group label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.hotel-filters-bar .filter-group input,
+.hotel-filters-bar .filter-group select {
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  font-family: var(--font-family);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.hotel-filters-bar .filter-group input:focus,
+.hotel-filters-bar .filter-group select:focus {
+  outline: none;
+  border-color: var(--color-hotel);
+  box-shadow: 0 0 0 3px rgba(26, 188, 156, 0.12);
+}
+
+.hotel-filters-bar .search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  flex: 1;
+  max-width: 320px;
+}
+
+.hotel-filters-bar .search-box i {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+}
+
+.hotel-filters-bar .search-box input {
+  border: none;
+  background: none;
+  font-size: 0.82rem;
+  font-family: var(--font-family);
+  color: var(--color-text);
+  width: 100%;
+}
+
+.hotel-filters-bar .search-box input:focus {
+  outline: none;
+}
+
+@media (max-width: 768px) {
+  .hotel-filters-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hotel-filters-bar .search-box {
+    max-width: 100%;
+  }
+}
+
+/* ============================================================
+   HOTEL SECTION CARD
+   ============================================================ */
+.hotel-section-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.hotel-section-card .section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hotel-section-card .section-header h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hotel-section-card .section-header h2 i {
+  color: var(--color-hotel);
+  font-size: 1rem;
+}
+
+.hotel-section-card .section-body {
+  padding: 16px 20px;
+}
+
+.hotel-section-card .section-body.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+}
+
+/* ============================================================
+   QUICK STATS (small stat boxes)
+   ============================================================ */
+.hotel-quick-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.hotel-quick-stat {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  text-align: center;
+}
+
+.hotel-quick-stat .qs-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
+}
+
+.hotel-quick-stat .qs-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-top: 4px;
+}
+
+.hotel-quick-stat .qs-value.confirmed {
+  color: var(--color-hotel-available);
+}
+.hotel-quick-stat .qs-value.pending {
+  color: var(--color-hotel-occupied);
+}
+.hotel-quick-stat .qs-value.cancelled {
+  color: var(--color-hotel-maintenance);
+}
+.hotel-quick-stat .qs-value.active {
+  color: var(--color-info);
+}
+.hotel-quick-stat .qs-value.checked-in {
+  color: var(--color-hotel-available);
+}
+.hotel-quick-stat .qs-value.checked-out {
+  color: var(--color-hotel-out-of-order);
+}
+
+/* ============================================================
+   ROOM TYPE LIST (dashboard distribution)
+   ============================================================ */
+.hotel-room-type-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.hotel-room-type-list .type-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.hotel-room-type-list .type-item:last-child {
+  border-bottom: none;
+}
+
+.hotel-room-type-list .type-item .type-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--color-hotel-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--color-hotel);
+  flex-shrink: 0;
+  border: 2px solid var(--color-border-light);
+}
+
+.hotel-room-type-list .type-item .type-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.hotel-room-type-list .type-item .type-info .type-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.hotel-room-type-list .type-item .type-info .type-count {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.hotel-room-type-list .type-item .type-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 0.75rem;
+}
+
+.hotel-room-type-list .type-item .type-stats span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hotel-room-type-list .type-item .type-stats .free {
+  color: var(--color-hotel-available);
+}
+.hotel-room-type-list .type-item .type-stats .occ {
+  color: var(--color-hotel-occupied);
+}
+
+/* ============================================================
+   OCCUPANCY CHART BARS
+   ============================================================ */
+.hotel-occupancy-chart {
+  width: 100%;
+  height: 200px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 16px 0;
+}
+
+.hotel-occupancy-chart .bar {
+  flex: 1;
+  border-radius: 4px 4px 0 0;
+  transition: height 0.4s ease;
+  min-height: 4px;
+  position: relative;
+}
+
+.hotel-occupancy-chart .bar.available {
+  background: var(--color-hotel-available);
+  opacity: 0.7;
+}
+.hotel-occupancy-chart .bar.occupied {
+  background: var(--color-hotel-occupied);
+  opacity: 0.7;
+}
+.hotel-occupancy-chart .bar.maintenance {
+  background: var(--color-hotel-maintenance);
+  opacity: 0.7;
+}
+.hotel-occupancy-chart .bar.cleaning {
+  background: var(--color-hotel-cleaning);
+  opacity: 0.7;
+}
+.hotel-occupancy-chart .bar.reserved {
+  background: var(--color-hotel-reserved);
+  opacity: 0.7;
+}
+
+/* ============================================================
+   QUICK ACTIONS GRID
+   ============================================================ */
+.hotel-quick-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 480px) {
+  .hotel-quick-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hotel-quick-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: all var(--transition);
+  color: var(--color-text-muted);
+  font-family: var(--font-family);
+  font-size: 0.75rem

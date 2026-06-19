@@ -1,0 +1,1050 @@
+1:<%
+2:  // Variabile locale
+3:  const stats = locals.stats || {};
+4:  const activeOrders = locals.activeOrders || [];
+5:  const recentOrders = locals.recentOrders || [];
+6:  const restaurant = locals.restaurant || null;
+7:  const loading = locals.loading || false;
+8:
+9:  // Inventar
+10:  const inventoryItems = locals.inventoryItems || [];
+11:  const lowStockItems = locals.lowStockItems || [];
+12:
+13:  // Furnizori și comenzi furnizori
+14:  const suppliers = locals.suppliers || [];
+15:  const recentSupplierOrders = locals.recentSupplierOrders || [];
+16:%>
+17:
+18:<style>
+19:  /* ============================================================
+20:     DASHBOARD STYLES
+21:     ============================================================ */
+22:  .dashboard-header {
+23:    display: flex;
+24:    align-items: center;
+25:    justify-content: space-between;
+26:    margin-bottom: 24px;
+27:    flex-wrap: wrap;
+28:    gap: 12px;
+29:  }
+30:
+31:  .dashboard-header h1 {
+32:    font-size: 24px;
+33:    font-weight: 700;
+34:    color: var(--color-text);
+35:  }
+36:
+37:  .dashboard-header .header-meta {
+38:    display: flex;
+39:    align-items: center;
+40:    gap: 12px;
+41:    color: var(--color-text-muted);
+42:    font-size: 13px;
+43:  }
+44:
+45:  .dashboard-header .header-meta .resto-name {
+46:    font-weight: 600;
+47:    color: var(--color-primary);
+48:  }
+49:
+50:  .dashboard-header .header-meta .date-badge {
+51:    background: var(--color-bg);
+52:    padding: 4px 12px;
+53:    border-radius: var(--radius-sm);
+54:    border: 1px solid var(--color-border);
+55:  }
+56:
+57:  /* ============================================================
+58:     STATS CARDS
+59:     ============================================================ */
+60:  .stats-grid {
+61:    display: grid;
+62:    grid-template-columns: repeat(4, 1fr);
+63:    gap: 16px;
+64:    margin-bottom: 28px;
+65:  }
+66:
+67:  @media (max-width: 1024px) {
+68:    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+69:  }
+70:
+71:  @media (max-width: 480px) {
+72:    .stats-grid { grid-template-columns: 1fr; }
+73:  }
+74:
+75:  .stat-card {
+76:    background: var(--color-surface);
+77:    border-radius: var(--radius-md);
+78:    padding: 20px;
+79:    box-shadow: var(--shadow-sm);
+80:    border: 1px solid var(--color-border);
+81:    transition: all var(--transition);
+82:    position: relative;
+83:    overflow: hidden;
+84:  }
+85:
+86:  .stat-card:hover {
+87:    box-shadow: var(--shadow-md);
+88:    transform: translateY(-2px);
+89:  }
+90:
+91:  .stat-card .stat-icon {
+92:    position: absolute;
+93:    top: 16px;
+94:    right: 16px;
+95:    width: 40px;
+96:    height: 40px;
+97:    border-radius: 50%;
+98:    display: flex;
+99:    align-items: center;
+100:    justify-content: center;
+101:    font-size: 18px;
+102:    opacity: 0.15;
+103:  }
+104:
+105:  .stat-card .stat-icon i {
+106:    font-size: 24px;
+107:  }
+108:
+109:  .stat-card .stat-label {
+110:    font-size: 12px;
+111:    font-weight: 600;
+112:    text-transform: uppercase;
+113:    letter-spacing: 0.5px;
+114:    color: var(--color-text-muted);
+115:    margin-bottom: 6px;
+116:  }
+117:
+118:  .stat-card .stat-value {
+119:    font-size: 28px;
+120:    font-weight: 700;
+121:    color: var(--color-text);
+122:    line-height: 1.2;
+123:  }
+124:
+125:  .stat-card .stat-change {
+126:    display: inline-flex;
+127:    align-items: center;
+128:    gap: 4px;
+129:    font-size: 12px;
+130:    font-weight: 500;
+131:    margin-top: 6px;
+132:    padding: 2px 8px;
+133:    border-radius: 12px;
+134:  }
+135:
+136:  .stat-card .stat-change.up {
+137:    color: var(--color-success);
+138:    background: #e8f5e9;
+139:  }
+140:
+141:  .stat-card .stat-change.down {
+142:    color: var(--color-danger);
+143:    background: #fce4ec;
+144:  }
+145:
+146:  .stat-card .stat-change.neutral {
+147:    color: var(--color-text-muted);
+148:    background: var(--color-bg);
+149:  }
+150:
+151:  /* Card colors */
+152:  .stat-card.orders { border-left: 4px solid var(--color-primary); }
+153:  .stat-card.revenue { border-left: 4px solid var(--color-success); }
+154:  .stat-card.active { border-left: 4px solid var(--color-info); }
+155:  .stat-card.tables { border-left: 4px solid var(--color-warning); }
+156:
+157:  /* ============================================================
+158:     DASHBOARD LAYOUT – Two columns
+159:     ============================================================ */
+160:  .dashboard-columns {
+161:    display: grid;
+162:    grid-template-columns: 1fr 1fr;
+163:    gap: 24px;
+164:    margin-bottom: 28px;
+165:  }
+166:
+167:  @media (max-width: 768px) {
+168:    .dashboard-columns {
+169:      grid-template-columns: 1fr;
+170:    }
+171:  }
+172:
+173:  /* ============================================================
+174:     SECTION CARD
+175:     ============================================================ */
+176:  .section-card {
+177:    background: var(--color-surface);
+178:    border-radius: var(--radius-md);
+179:    box-shadow: var(--shadow-sm);
+180:    border: 1px solid var(--color-border);
+181:    overflow: hidden;
+182:  }
+183:
+184:  .section-card .section-header {
+185:    display: flex;
+186:    align-items: center;
+187:    justify-content: space-between;
+188:    padding: 16px 20px;
+189:    border-bottom: 1px solid var(--color-border);
+190:    flex-wrap: wrap;
+191:    gap: 8px;
+192:  }
+193:
+194:  .section-card .section-header h2 {
+195:    font-size: 16px;
+196:    font-weight: 600;
+197:    display: flex;
+198:    align-items: center;
+199:    gap: 8px;
+200:  }
+201:
+202:  .section-card .section-header h2 i {
+203:    color: var(--color-primary);
+204:    font-size: 16px;
+205:  }
+206:
+207:  .section-card .section-header .section-actions {
+208:    display: flex;
+209:    align-items: center;
+210:    gap: 8px;
+211:  }
+212:
+213:  .section-card .section-body {
+214:    padding: 16px 20px;
+215:  }
+216:
+217:  .section-card .section-body.loading {
+218:    display: flex;
+219:    align-items: center;
+220:    justify-content: center;
+221:    min-height: 120px;
+222:  }
+223:
+224:  .section-card .section-footer {
+225:    padding: 12px 20px;
+226:    border-top: 1px solid var(--color-border);
+227:    text-align: center;
+228:  }
+229:
+230:  /* ============================================================
+231:     ORDER LIST
+232:     ============================================================ */
+233:  .order-list {
+234:    list-style: none;
+235:    margin: 0;
+236:    padding: 0;
+237:  }
+238:
+239:  .order-list .order-item {
+240:    display: flex;
+241:    align-items: center;
+242:    gap: 14px;
+243:    padding: 12px 0;
+244:    border-bottom: 1px solid var(--color-border);
+245:    transition: background var(--transition);
+246:    cursor: pointer;
+247:  }
+248:
+249:  .order-list .order-item:last-child {
+250:    border-bottom: none;
+251:  }
+252:
+253:  .order-list .order-item:hover {
+254:    background: rgba(0,0,0,0.02);
+255:    margin: 0 -20px;
+256:    padding-left: 20px;
+257:    padding-right: 20px;
+258:  }
+259:
+260:  .order-list .order-item .order-table {
+261:    width: 44px;
+262:    height: 44px;
+263:    border-radius: 50%;
+264:    background: var(--color-bg);
+265:    display: flex;
+266:    align-items: center;
+267:    justify-content: center;
+268:    font-weight: 700;
+269:    font-size: 14px;
+270:    color: var(--color-text);
+271:    flex-shrink: 0;
+272:    border: 2px solid var(--color-border);
+273:  }
+274:
+275:  .order-list .order-item .order-table.active-table {
+276:    border-color: var(--color-primary);
+277:    background: rgba(232, 93, 4, 0.08);
+278:  }
+279:
+280:  .order-list .order-item .order-info {
+281:    flex: 1;
+282:    min-width: 0;
+283:  }
+284:
+285:  .order-list .order-item .order-info .order-meta {
+286:    display: flex;
+287:    align-items: center;
+288:    gap: 8px;
+289:    flex-wrap: wrap;
+290:  }
+291:
+292:  .order-list .order-item .order-info .order-meta .order-id {
+293:    font-size: 13px;
+294:    font-weight: 600;
+295:    color: var(--color-text);
+296:  }
+297:
+298:  .order-list .order-item .order-info .order-meta .order-time {
+299:    font-size: 11px;
+300:    color: var(--color-text-muted);
+301:  }
+302:
+303:  .order-list .order-item .order-info .order-items-preview {
+304:    font-size: 12px;
+305:    color: var(--color-text-muted);
+306:    margin-top: 2px;
+307:    white-space: nowrap;
+308:    overflow: hidden;
+309:    text-overflow: ellipsis;
+310:    max-width: 220px;
+311:  }
+312:
+313:  .order-list .order-item .order-total {
+314:    font-size: 15px;
+315:    font-weight: 700;
+316:    color: var(--color-text);
+317:    white-space: nowrap;
+318:  }
+319:
+320:  .order-list .order-item .order-waiter {
+321:    font-size: 11px;
+322:    color: var(--color-text-muted);
+323:    display: flex;
+324:    align-items: center;
+325:    gap: 4px;
+326:  }
+327:
+328:  .order-list .order-item .order-waiter i {
+329:    font-size: 10px;
+330:  }
+331:
+332:  /* ============================================================
+333:     TABLE GRID (occupancy)
+334:     ============================================================ */
+335:  .tables-grid {
+336:    display: grid;
+337:    grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+338:    gap: 8px;
+339:    padding: 4px 0;
+340:  }
+341:
+342:  .table-cell {
+343:    width: 100%;
+344:    aspect-ratio: 1;
+345:    border-radius: var(--radius-sm);
+346:    display: flex;
+347:    align-items: center;
+348:    justify-content: center;
+349:    font-size: 12px;
+350:    font-weight: 700;
+351:    cursor: pointer;
+352:    transition: all var(--transition);
+353:    border: 2px solid transparent;
+354:    position: relative;
+355:  }
+356:
+357:  .table-cell.free {
+358:    background: #e8f5e9;
+359:    color: var(--color-success);
+360:    border-color: #c8e6c9;
+361:  }
+362:
+363:  .table-cell.occupied {
+364:    background: #fff3e0;
+365:    color: var(--color-warning);
+366:    border-color: #ffe0b2;
+367:  }
+368:
+369:  .table-cell.busy {
+370:    background: #fce4ec;
+371:    color: var(--color-danger);
+372:    border-color: #f8bbd0;
+373:  }
+374:
+375:  .table-cell:hover {
+376:    transform: scale(1.1);
+377:    z-index: 1;
+378:  }
+379:
+380:  .table-cell .table-tooltip {
+381:    display: none;
+382:    position: absolute;
+383:    bottom: calc(100% + 6px);
+384:    left: 50%;
+385:    transform: translateX(-50%);
+386:    background: var(--color-secondary);
+387:    color: #fff;
+388:    font-size: 11px;
+389:    padding: 4px 10px;
+390:    border-radius: var(--radius-sm);
+391:    white-space: nowrap;
+392:    z-index: 10;
+393:    font-weight: 500;
+394:  }
+395:
+396:  .table-cell:hover .table-tooltip {
+397:    display: block;
+398:  }
+399:
+400:  /* ============================================================
+401:     REVENUE CHART PLACEHOLDER
+402:     ============================================================ */
+403:  .chart-placeholder {
+404:    width: 100%;
+405:    height: 180px;
+406:    background: linear-gradient(180deg, rgba(232, 93, 4, 0.06) 0%, transparent 100%);
+407:    border-radius: var(--radius-sm);
+408:    display: flex;
+409:    align-items: flex-end;
+410:    justify-content: center;
+411:    gap: 6px;
+412:    padding: 16px 8px 0;
+413:    position: relative;
+414:    overflow: hidden;
+415:  }
+416:
+417:  .chart-placeholder .bar {
+418:    width: 8%;
+419:    background: var(--color-primary);
+420:    border-radius: 4px 4px 0 0;
+421:    opacity: 0.7;
+422:    transition: height 0.4s ease;
+423:    min-height: 8px;
+424:  }
+425:
+426:  .chart-placeholder .bar:nth-child(1) { height: 40%; }
+427:  .chart-placeholder .bar:nth-child(2) { height: 55%; }
+428:  .chart-placeholder .bar:nth-child(3) { height: 30%; }
+429:  .chart-placeholder .bar:nth-child(4) { height: 70%; }
+430:  .chart-placeholder .bar:nth-child(5) { height: 50%; }
+431:  .chart-placeholder .bar:nth-child(6) { height: 80%; }
+432:  .chart-placeholder .bar:nth-child(7) { height: 45%; }
+433:  .chart-placeholder .bar:nth-child(8) { height: 65%; }
+434:  .chart-placeholder .bar:nth-child(9) { height: 35%; }
+435:  .chart-placeholder .bar:nth-child(10) { height: 90%; }
+436:  .chart-placeholder .bar:nth-child(11) { height: 60%; }
+437:  .chart-placeholder .bar:nth-child(12) { height: 75%; }
+438:
+439:  /* ============================================================
+440:     QUICK ACTIONS
+441:     ============================================================ */
+442:  .quick-actions {
+443:    display: grid;
+444:    grid-template-columns: 1fr 1fr;
+445:    gap: 10px;
+446:  }
+447:
+448:  .quick-action-btn {
+449:    display: flex;
+450:    flex-direction: column;
+451:    align-items: center;
+452:    justify-content: center;
+453:    gap: 8px;
+454:    padding: 16px 12px;
+455:    border-radius: var(--radius-sm);
+456:    border: 1px solid var(--color-border);
+457:    background: var(--color-surface);
+458:    cursor: pointer;
+459:    transition: all var(--transition);
+460:    text-decoration: none;
+461:    color: var(--color-text);
+462:    font-size: 13px;
+463:    font-weight: 500;
+464:  }
+465:
+466:  .quick-action-btn:hover {
+467:    border-color: var(--color-primary);
+468:    background: rgba(232, 93, 4, 0.04);
+469:    transform: translateY(-1px);
+470:  }
+471:
+472:  .quick-action-btn i {
+473:    font-size: 22px;
+474:    color: var(--color-primary);
+475:  }
+476:
+477:  /* ============================================================
+478:     EMPTY STATE
+479:     ============================================================ */
+480:  .empty-orders {
+481:    text-align: center;
+482:    padding: 32px 16px;
+483:    color: var(--color-text-muted);
+484:  }
+485:
+486:  .empty-orders i {
+487:    font-size: 36px;
+488:    opacity: 0.3;
+489:    margin-bottom: 12px;
+490:  }
+491:
+492:  .empty-orders p {
+493:    font-size: 14px;
+494:    margin: 0;
+495:  }
+496:
+497:  /* ============================================================
+498:     ALERTS & NOTIFICATIONS
+499:     ============================================================ */
+500:  .dashboard-alert {
+501:    padding: 12px 16px;
+502:    border-radius: var(--radius-sm);
+503:    margin-bottom: 20px;
+504:    display: flex;
+505:    align-items: center;
+506:    gap: 10px;
+507:    font-size: 13px;
+508:  }
+509:
+510:  .dashboard-alert.info {
+511:    background: #e3f2fd;
+512:    color: #1565c0;
+513:    border-left: 4px solid var(--color-info);
+514:  }
+515:
+516:  .dashboard-alert.warning {
+517:    background: #fff8e1;
+518:    color: #f57f17;
+519:    border-left: 4px solid var(--color-warning);
+520:  }
+521:
+522:  .dashboard-alert.success {
+523:    background: #e8f5e9;
+524:    color: #2e7d32;
+525:    border-left: 4px solid var(--color-success);
+526:  }
+527:
+528:  /* ============================================================
+529:     INVENTORY SECTION
+530:     ============================================================ */
+531:  .inventory-alert-banner {
+532:    display: flex;
+533:    align-items: center;
+534:    gap: 10px;
+535:    padding: 10px 16px;
+536:    border-radius: var(--radius-sm);
+537:    font-size: 13px;
+538:    font-weight: 500;
+539:    margin-bottom: 12px;
+540:    cursor: pointer;
+541:    transition: all var(--transition);
+542:  }
+543:  .inventory-alert-banner.warning {
+544:    background: #fff8e1;
+545:    color: #f57f17;
+546:    border-left: 4px solid var(--color-warning);
+547:  }
+548:  .inventory-alert-banner.danger {
+549:    background: #fce4ec;
+550:    color: #c62828;
+551:    border-left: 4px solid var(--color-danger);
+552:  }
+553:  .inventory-alert-banner.success {
+554:    background: #e8f5e9;
+555:    color: #2e7d32;
+556:    border-left: 4px solid var(--color-success);
+557:  }
+558:  .inventory-alert-banner i {
+559:    font-size: 18px;
+560:  }
+561:  .inventory-alert-banner .alert-count {
+562:    margin-left: auto;
+563:    background: var(--color-danger);
+564:    color: #fff;
+565:    font-size: 11px;
+566:    font-weight: 700;
+567:    padding: 2px 10px;
+568:    border-radius: 12px;
+569:  }
+570:
+571:  .inventory-mini-list {
+572:    list-style: none;
+573:    margin: 0;
+574:    padding: 0;
+575:  }
+576:  .inventory-mini-list .inv-item {
+577:    display: flex;
+578:    align-items: center;
+579:    gap: 12px;
+580:    padding: 8px 0;
+581:    border-bottom: 1px solid var(--color-border);
+582:  }
+583:  .inventory-mini-list .inv-item:last-child {
+584:    border-bottom: none;
+585:  }
+586:  .inventory-mini-list .inv-item .inv-name {
+587:    flex: 1;
+588:    font-size: 13px;
+589:    font-weight: 500;
+590:    color: var(--color-text);
+591:    min-width: 0;
+592:    overflow: hidden;
+593:    text-overflow: ellipsis;
+594:    white-space: nowrap;
+595:  }
+596:  .inventory-mini-list .inv-item .inv-qty {
+597:    font-size: 13px;
+598:    font-weight: 600;
+599:    padding: 2px 10px;
+600:    border-radius: 12px;
+601:    white-space: nowrap;
+602:  }
+603:  .inventory-mini-list .inv-item .inv-qty.ok {
+604:    background: #e8f5e9;
+605:    color: #2e7d32;
+606:  }
+607:  .inventory-mini-list .inv-item .inv-qty.low {
+608:    background: #fff8e1;
+609:    color: #f57f17;
+610:  }
+611:  .inventory-mini-list .inv-item .inv-qty.critical {
+612:    background: #fce4ec;
+613:    color: #c62828;
+614:  }
+615:  .inventory-mini-list .inv-item .inv-unit {
+616:    font-size: 11px;
+617:    color: var(--color-text-muted);
+618:    margin-left: 2px;
+619:  }
+620:
+621:  /* ============================================================
+622:     SUPPLIER MINI LIST
+623:     ============================================================ */
+624:  .supplier-mini-list {
+625:    list-style: none;
+626:    margin: 0;
+627:    padding: 0;
+628:  }
+629:  .supplier-mini-list .sup-item {
+630:    display: flex;
+631:    align-items: center;
+632:    gap: 10px;
+633:    padding: 8px 0;
+634:    border-bottom: 1px solid var(--color-border);
+635:    cursor: pointer;
+636:    transition: background var(--transition);
+637:  }
+638:  .supplier-mini-list .sup-item:last-child {
+639:    border-bottom: none;
+640:  }
+641:  .supplier-mini-list .sup-item:hover {
+642:    background: rgba(0,0,0,0.02);
+643:    margin: 0 -20px;
+644:    padding-left: 20px;
+645:    padding-right: 20px;
+646:  }
+647:  .supplier-mini-list .sup-item .sup-avatar {
+648:    width: 36px;
+649:    height: 36px;
+650:    border-radius: 50%;
+651:    display: flex;
+652:    align-items: center;
+653:    justify-content: center;
+654:    font-weight: 700;
+655:    font-size: 13px;
+656:    flex-shrink: 0;
+657:    color: #fff;
+658:  }
+659:  .supplier-mini-list .sup-item .sup-avatar.active {
+660:    background: var(--color-success);
+661:  }
+662:  .supplier-mini-list .sup-item .sup-avatar.inactive {
+663:    background: var(--color-text-muted);
+664:  }
+665:  .supplier-mini-list .sup-item .sup-info {
+666:    flex: 1;
+667:    min-width: 0;
+668:  }
+669:  .supplier-mini-list .sup-item .sup-info .sup-name {
+670:    font-size: 13px;
+671:    font-weight: 600;
+672:    color: var(--color-text);
+673:  }
+674:  .supplier-mini-list .sup-item .sup-info .sup-meta {
+675:    font-size: 11px;
+676:    color: var(--color-text-muted);
+677:  }
+678:  .supplier-mini-list .sup-item .sup-actions {
+679:    display: flex;
+680:    gap: 4px;
+681:  }
+682:  .supplier-mini-list .sup-item .sup-actions .btn-icon-sm {
+683:    width: 28px;
+684:    height: 28px;
+685:    border: none;
+686:    border-radius: 50%;
+687:    display: flex;
+688:    align-items: center;
+689:    justify-content: center;
+690:    cursor: pointer;
+691:    font-size: 12px;
+692:    transition: all var(--transition);
+693:  }
+694:  .supplier-mini-list .sup-item .sup-actions .btn-icon-sm:hover {
+695:    background: var(--color-bg);
+696:  }
+697:  .supplier-mini-list .sup-item .sup-actions .btn-order {
+698:    background: var(--color-primary);
+699:    color: #fff;
+700:  }
+701:  .supplier-mini-list .sup-item .sup-actions .btn-order:hover {
+702:    background: var(--color-primary-dark);
+703:  }
+704:
+705:  /* Supplier order mini list */
+706:  .sup-order-mini-list {
+707:    list-style: none;
+708:    margin: 0;
+709:    padding: 0;
+710:  }
+711:  .sup-order-mini-list .so-item {
+712:    display: flex;
+713:    align-items: center;
+714:    gap: 10px;
+715:    padding: 8px 0;
+716:    border-bottom: 1px solid var(--color-border);
+717:  }
+718:  .sup-order-mini-list .so-item:last-child {
+719:    border-bottom: none;
+720:  }
+721:  .sup-order-mini-list .so-item .so-ref {
+722:    font-size: 12px;
+723:    font-weight: 600;
+724:    color: var(--color-text);
+725:    min-width: 80px;
+726:  }
+727:  .sup-order-mini-list .so-item .so-supplier {
+728:    flex: 1;
+729:    font-size: 12px;
+730:    color: var(--color-text-muted);
+731:    min-width: 0;
+732:    overflow: hidden;
+733:    text-overflow: ellipsis;
+734:    white-space: nowrap;
+735:  }
+736:  .sup-order-mini-list .so-item .so-total {
+737:    font-size: 13px;
+738:    font-weight: 600;
+739:    color: var(--color-text);
+740:  }
+741:  .sup-order-mini-list .so-item .so-status {
+742:    font-size: 10px;
+743:    font-weight: 600;
+744:    text-transform: uppercase;
+745:    padding: 2px 8px;
+746:    border-radius: 10px;
+747:  }
+748:  .sup-order-mini-list .so-item .so-status.pending {
+749:    background: #fff8e1;
+750:    color: #f57f17;
+751:  }
+752:  .sup-order-mini-list .so-item .so-status.confirmed {
+753:    background: #e3f2fd;
+754:    color: #1565c0;
+755:  }
+756:  .sup-order-mini-list .so-item .so-status.delivered {
+757:    background: #e8f5e9;
+758:    color: #2e7d32;
+759:  }
+760:  .sup-order-mini-list .so-item .so-status.cancelled {
+761:    background: #fce4ec;
+762:    color: #c62828;
+763:  }
+764:
+765:  /* ============================================================
+766:     RESPONSIVE ADJUSTMENTS
+767:     ============================================================ */
+768:  @media (max-width: 480px) {
+769:    .dashboard-header h1 {
+770:      font-size: 20px;
+771:    }
+772:
+773:    .stat-card .stat-value {
+774:      font-size: 22px;
+775:    }
+776:
+777:    .quick-actions {
+778:      grid-template-columns: 1fr;
+779:    }
+780:
+781:    .order-list .order-item .order-items-preview {
+782:      max-width: 120px;
+783:    }
+784:  }
+785:</style>
+786:
+787:<!-- ============================================================
+788:     DASHBOARD HEADER
+789:     ============================================================ -->
+790:<div class="dashboard-header">
+791:  <div>
+792:    <h1>
+793:      <i class="fas fa-th-large" style="color:var(--color-primary);margin-right:8px;"></i>
+794:      Dashboard
+795:    </h1>
+796:    <div class="header-meta">
+797:      <% if (restaurant) { %>
+798:        <span class="resto-name"><i class="fas fa-store"></i> <%= restaurant.name %></span>
+799:        <span class="text-muted">•</span>
+800:      <% } %>
+801:      <span class="date-badge">
+802:        <i class="far fa-calendar-alt"></i>
+803:        <%= new Date().toLocaleDateString('ro-RO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) %>
+804:      </span>
+805:    </div>
+806:  </div>
+807:  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+808:    <a href="/restaurant/orders/new" class="btn btn-primary btn-sm">
+809:      <i class="fas fa-plus"></i> Comandă nouă
+810:    </a>
+811:    <button class="btn btn-secondary btn-sm" onclick="refreshDashboard()">
+812:      <i class="fas fa-sync-alt"></i> Reîmprospătare
+813:    </button>
+814:  </div>
+815:</div>
+816:
+817:<!-- ============================================================
+818:     LOADING OVERLAY
+819:     ============================================================ -->
+820:<% if (loading) { %>
+821:  <div class="spinner"></div>
+822:<% } else { %>
+823:
+824:<!-- ============================================================
+825:     ALERTS
+826:     ============================================================ -->
+827:<% if (locals.alert) { %>
+828:  <div class="dashboard-alert <%= alert.type || 'info' %>">
+829:    <i class="fas fa-<%= alert.type === 'warning' ? 'exclamation-triangle' : alert.type === 'success' ? 'check-circle' : 'info-circle' %>"></i>
+830:    <%= alert.message %>
+831:  </div>
+832:<% } %>
+833:
+834:<!-- ============================================================
+835:     STATISTICS CARDS
+836:     ============================================================ -->
+837:<div class="stats-grid">
+838:  <!-- Total comenzi azi -->
+839:  <div class="stat-card orders">
+840:    <div class="stat-icon"><i class="fas fa-receipt"></i></div>
+841:    <div class="stat-label">Comenzi azi</div>
+842:    <div class="stat-value"><%= stats.ordersToday || 0 %></div>
+843:    <% if (stats.ordersTrend !== undefined) { %>
+844:      <span class="stat-change <%= stats.ordersTrend > 0 ? 'up' : stats.ordersTrend < 0 ? 'down' : 'neutral' %>">
+845:        <i class="fas fa-<%= stats.ordersTrend > 0 ? 'arrow-up' : stats.ordersTrend < 0 ? 'arrow-down' : 'minus' %>"></i>
+846:        <%= Math.abs(stats.ordersTrend) %>%
+847:      </span>
+848:    <% } %>
+849:  </div>
+850:
+851:  <!-- Venituri azi -->
+852:  <div class="stat-card revenue">
+853:    <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
+854:    <div class="stat-label">Venituri azi</div>
+855:    <div class="stat-value"><%= stats.revenueToday ? stats.revenueToday.toFixed(2) : '0.00' %> lei</div>
+856:    <% if (stats.revenueTrend !== undefined) { %>
+857:      <span class="stat-change <%= stats.revenueTrend > 0 ? 'up' : stats.revenueTrend < 0 ? 'down' : 'neutral' %>">
+858:        <i class="fas fa-<%= stats.revenueTrend > 0 ? 'arrow-up' : stats.revenueTrend < 0 ? 'arrow-down' : 'minus' %>"></i>
+859:        <%= Math.abs(stats.revenueTrend) %>%
+860:      </span>
+861:    <% } %>
+862:  </div>
+863:
+864:  <!-- Comenzi active -->
+865:  <div class="stat-card active">
+866:    <div class="stat-icon"><i class="fas fa-spinner"></i></div>
+867:    <div class="stat-label">Active</div>
+868:    <div class="stat-value"><%= stats.activeOrders || 0 %></div>
+869:    <span class="stat-change neutral">
+870:      <i class="fas fa-clock"></i> În desfășurare
+871:    </span>
+872:  </div>
+873:
+874:  <!-- Mese ocupate -->
+875:  <div class="stat-card tables">
+876:    <div class="stat-icon"><i class="fas fa-chair"></i></div>
+877:    <div class="stat-label">Mese ocupate</div>
+878:    <div class="stat-value"><%= stats.occupiedTables || 0 %> / <%= stats.totalTables || 0 %></div>
+879:    <% if (stats.occupancyPercent !== undefined) { %>
+880:      <span class="stat-change <%= stats.occupancyPercent > 70 ? 'up' : stats.occupancyPercent > 40 ? 'neutral' : 'down' %>">
+881:        <%= stats.occupancyPercent %>%
+882:      </span>
+883:    <% } %>
+884:  </div>
+885:</div>
+886:
+887:<!-- ============================================================
+888:     DASHBOARD COLS: LEFT (Comenzi active) + RIGHT (Mese / Venituri)
+889:     ============================================================ -->
+890:<div class="dashboard-columns">
+891:  <!-- LEFT: Active Orders -->
+892:  <div class="section-card">
+893:    <div class="section-header">
+894:      <h2>
+895:        <i class="fas fa-bolt"></i>
+896:        Comenzi active
+897:        <span class="badge badge-active" style="margin-left:8px;"><%= activeOrders.length %></span>
+898:      </h2>
+899:      <div class="section-actions">
+900:        <a href="/restaurant/orders?status=deschisă" class="btn btn-sm btn-secondary">
+901:          Vezi toate <i class="fas fa-arrow-right"></i>
+902:        </a>
+903:      </div>
+904:    </div>
+905:    <div class="section-body">
+906:      <% if (activeOrders.length === 0) { %>
+907:        <div class="empty-orders">
+908:          <i class="fas fa-check-circle" style="color:var(--color-success);opacity:0.5;"></i>
+909:          <p>Toate comenzile sunt finalizate. <strong>Excelent!</strong></p>
+910:        </div>
+911:      <% } else { %>
+912:        <ul class="order-list">
+913:          <% activeOrders.forEach(function(order) { %>
+914:            <li class="order-item" onclick="window.location.href='/restaurant/orders/<%= order._id %>'" title="Vezi comanda">
+915:              <div class="order-table <%= order.masa > 0 ? 'active-table' : '' %>">
+916:                <%= order.masa > 0 ? 'M' + order.masa : '★' %>
+917:              </div>
+918:              <div class="order-info">
+919:                <div class="order-meta">
+920:                  <span class="order-id"><%= order._id.substring(0, 8) %>...</span>
+921:                  <span class="badge <%= order.status === 'deschisă' ? 'badge-active' : order.status === 'în preparare' ? '' : 'badge-info' %>" 
+922:                        style="<%= order.status === 'în preparare' ? 'background:#fff8e1;color:#f57f17;' : '' %>">
+923:                    <%= order.status %>
+924:                  </span>
+925:                  <span class="order-time">
+926:                    <i class="far fa-clock"></i> 
+927:                    <%= formatDate(order.createdAt) %>
+928:                  </span>
+929:                </div>
+930:                <div class="order-items-preview">
+931:                  <% if (order.articole && order.articole.length > 0) { %>
+932:                    <%= order.articole.map(function(a) { return a.cantitate + 'x ' + a.nume; }).join(', ') %>
+933:                  <% } else { %>
+934:                    <em>Fără articole</em>
+935:                  <% } %>
+936:                </div>
+937:                <% if (order.ospatar) { %>
+938:                  <div class="order-waiter">
+939:                    <i class="fas fa-user-tie"></i> <%= order.ospatar %>
+940:                  </div>
+941:                <% } %>
+942:              </div>
+943:              <div class="order-total">
+944:                <%= formatCurrency(order.total || 0) %>
+945:              </div>
+946:            </li>
+947:          <% }); %>
+948:        </ul>
+949:      <% } %>
+950:    </div>
+951:    <% if (activeOrders.length > 0) { %>
+952:      <div class="section-footer">
+953:        <a href="/restaurant/orders?status=deschisă" style="font-size:13px;font-weight:500;">
+954:          <i class="fas fa-list"></i> Vezi toate comenzile active
+955:        </a>
+956:      </div>
+957:    <% } %>
+958:  </div>
+959:
+960:  <!-- RIGHT: Venituri & Mese -->
+961:  <div>
+962:    <!-- Venituri săptămânale -->
+963:    <div class="section-card" style="margin-bottom:20px;">
+964:      <div class="section-header">
+965:        <h2>
+966:          <i class="fas fa-chart-line"></i>
+967:          Venituri săptămânale
+968:        </h2>
+969:        <div class="section-actions">
+970:          <span class="text-muted" style="font-size:12px;">
+971:            <i class="fas fa-calendar-week"></i> Ultimele 7 zile
+972:          </span>
+973:        </div>
+974:      </div>
+975:      <div class="section-body">
+976:        <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:12px;">
+977:          <div>
+978:            <div style="font-size:11px;color:var(--color-text-muted);font-weight:500;">Total săptămâna</div>
+979:            <div style="font-size:22px;font-weight:700;color:var(--color-text);">
+980:              <%= stats.weeklyRevenue ? stats.weeklyRevenue.toFixed(2) : '0.00' %> lei
+981:            </div>
+982:          </div>
+983:          <% if (stats.weeklyOrders) { %>
+984:            <div style="text-align:right;">
+985:              <div style="font-size:11px;color:var(--color-text-muted);font-weight:500;">Comenzi</div>
+986:              <div style="font-size:18px;font-weight:600;color:var(--color-text);"><%= stats.weeklyOrders %></div>
+987:            </div>
+988:          <% } %>
+989:        </div>
+990:        <div class="chart-placeholder">
+991:          <div class="bar"></div>
+992:          <div class="bar"></div>
+993:          <div class="bar"></div>
+994:          <div class="bar"></div>
+995:          <div class="bar"></div>
+996:          <div class="bar"></div>
+997:          <div class="bar"></div>
+998:          <div class="bar"></div>
+999:          <div class="bar"></div>
+1000:          <div class="bar"></div>
+1001:          <div class="bar"></div>
+1002:          <div class="bar"></div>
+1003:          <div class="bar"></div>
+1004:          <div class="bar"></div>
+1005:        </div>
+1006:      </div>
+1007:    </div>
+1008:
+1009:    <!-- Ocupare mese -->
+1010:    <div class="section-card">
+1011:      <div class="section-header">
+1012:        <h2>
+1013:          <i class="fas fa-th"></i>
+1014:          Ocupare mese
+1015:        </h2>
+1016:        <div class="section-actions">
+1017:          <span style="display:flex;align-items:center;gap:6px;font-size:12px;">
+1018:            <span style="display:inline-block;width:10px;height:10px;background:#e8f5e9;border-radius:2px;border:1px solid #c8e6c9;"></span> Liber
+1019:            <span style="display:inline-block;width:10px;height:10px;background:#fff3e0;border-radius:2px;border:1px solid #ffe0b2;"></span> Ocupat
+1020:          </span>
+1021:        </div>
+1022:      </div>
+1023:      <div class="section-body">
+1024:        <% if (stats.totalTables && stats.totalTables > 0) { %>
+1025:          <div class="tables-grid">
+1026:            <% for (var i = 1; i <= stats.totalTables; i++) { %>
+1027:              <div class="table-cell <%= 'occupied' %>" title="Masa <%= i %>">
+1028:                <%= i %>
+1029:                <span class="table-tooltip">Masa <%= i %> &bull; Ocupată</span>
+1030:              </div>
+1031:            <% } %>
+1032:          </div>
+1033:        <% } else { %>
+1034:          <div class="empty-orders">
+1035:            <i class="fas fa-info-circle"></i>
+1036:            <p>Nu există mese configurate.</p>
+1037:          </div>
+1038:        <% } %>
+1039:      </div>
+1040:    </div>
+1041:  </div>
+1042:</div>
+1043:
+1044:<% } %>
+1045:
+1046:<script>
+1047:  function refreshDashboard() {
+1048:    window.location.reload();
+1049:  }
+1050:</script>

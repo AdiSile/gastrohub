@@ -1,0 +1,967 @@
+<%
+  // Hotel Reservations View
+  const hotel = locals.hotel || null;
+  const reservations = locals.reservations || [];
+  const loading = locals.loading || false;
+  const quickStats = locals.quickStats || {
+    total: 0,
+    confirmed: 0,
+    pending: 0,
+    checkedIn: 0,
+    checkedOut: 0,
+    cancelled: 0,
+    noShow: 0
+  };
+  const statusFilter = locals.statusFilter || 'all';
+  const searchQuery = locals.searchQuery || '';
+  const dateFrom = locals.dateFrom || '';
+  const dateTo = locals.dateTo || '';
+%>
+
+<style>
+  /* ============================================================
+     RESERVATIONS PAGE STYLES
+     ============================================================ */
+  .reservations-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .reservations-header h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .reservations-header h1 i {
+    color: #1abc9c;
+  }
+
+  .reservations-header .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--color-text-muted);
+    font-size: 13px;
+  }
+
+  .reservations-header .header-meta .hotel-name {
+    font-weight: 600;
+    color: #1abc9c;
+  }
+
+  .reservation-filters {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .reservation-filters .filter-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .reservation-filters .filter-group label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+
+  .reservation-filters .filter-group input,
+  .reservation-filters .filter-group select {
+    padding: 6px 10px;
+    font-size: 13px;
+    font-family: var(--font-family);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+
+  .reservation-filters .filter-group input:focus,
+  .reservation-filters .filter-group select:focus {
+    outline: none;
+    border-color: #1abc9c;
+    box-shadow: 0 0 0 3px rgba(26, 188, 156, 0.12);
+  }
+
+  .reservations-table-wrapper {
+    overflow-x: auto;
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .reservations-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .reservations-table th {
+    padding: 12px 14px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    background: var(--color-bg);
+    border-bottom: 2px solid var(--color-border);
+  }
+
+  .reservations-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
+  }
+
+  .reservations-table tr:hover td {
+    background: rgba(0,0,0,0.02);
+  }
+
+  .reservations-table .guest-name {
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .reservations-table .guest-email {
+    font-size: 11px;
+    color: var(--color-text-muted);
+  }
+
+  .reservations-table .room-number {
+    font-weight: 600;
+    font-family: monospace;
+    font-size: 14px;
+  }
+
+  .reservations-table .date-range {
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+
+  .reservations-table .date-range strong {
+    color: var(--color-text);
+  }
+
+  .reservations-table .amount {
+    font-weight: 700;
+    color: var(--color-primary);
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 80px 20px;
+    color: var(--color-text-muted);
+  }
+
+  .empty-state i {
+    font-size: 56px;
+    margin-bottom: 16px;
+    opacity: 0.3;
+  }
+
+  .empty-state h3 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--color-text);
+  }
+
+  .empty-state p {
+    font-size: 14px;
+    max-width: 400px;
+    margin: 0 auto 16px;
+  }
+
+  .reservation-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .reservation-status.confirmed {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  .reservation-status.pending {
+    background: #fff8e1;
+    color: #f57f17;
+  }
+
+  .reservation-status.checked-in {
+    background: #e3f2fd;
+    color: #1565c0;
+  }
+
+  .reservation-status.checked-out {
+    background: #eceff1;
+    color: #546e7a;
+  }
+
+  .reservation-status.cancelled {
+    background: #fce4ec;
+    color: #c62828;
+  }
+
+  .reservation-status.no-show {
+    background: #f3e5f5;
+    color: #6a1b9a;
+  }
+
+  .quick-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .quick-stat {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    border: 1px solid var(--color-border);
+    text-align: center;
+  }
+
+  .quick-stat .qs-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+  }
+
+  .quick-stat .qs-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin-top: 4px;
+  }
+
+  .quick-stat .qs-value.confirmed { color: var(--color-success); }
+  .quick-stat .qs-value.pending { color: var(--color-warning); }
+  .quick-stat .qs-value.cancelled { color: var(--color-danger); }
+  .quick-stat .qs-value.active { color: var(--color-info); }
+
+  .reservation-actions {
+    display: flex;
+    gap: 4px;
+  }
+
+  .reservation-actions button {
+    padding: 4px 8px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all var(--transition);
+    color: var(--color-text-muted);
+  }
+
+  .reservation-actions button:hover {
+    border-color: #1abc9c;
+    color: #1abc9c;
+  }
+
+  .search-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+  }
+
+  .search-box i {
+    color: var(--color-text-muted);
+    font-size: 13px;
+  }
+
+  .search-box input {
+    border: none;
+    background: none;
+    font-size: 13px;
+    font-family: var(--font-family);
+    color: var(--color-text);
+    width: 180px;
+  }
+
+  .search-box input:focus {
+    outline: none;
+  }
+
+  @media (max-width: 768px) {
+    .reservation-filters {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .search-box input {
+      width: 100%;
+    }
+  }
+
+  /* ============================================================
+     CHECK-IN / CHECK-OUT ACTION BUTTONS
+     ============================================================ */
+  .btn-checkin {
+    background: #e3f2fd;
+    color: #1565c0;
+    border: 1px solid #1565c0;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+
+  .btn-checkin:hover {
+    background: #1565c0;
+    color: #fff;
+  }
+
+  .btn-checkout {
+    background: #fff3e0;
+    color: #e65100;
+    border: 1px solid #e65100;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+
+  .btn-checkout:hover {
+    background: #e65100;
+    color: #fff;
+  }
+
+  /* ============================================================
+     CALENDAR VIEW
+     ============================================================ */
+  .calendar-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text);
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+
+  .calendar-toggle:hover {
+    border-color: #1abc9c;
+    color: #1abc9c;
+  }
+
+  .calendar-toggle.active {
+    background: #1abc9c;
+    color: #fff;
+    border-color: #1abc9c;
+  }
+
+  .calendar-view {
+    display: none;
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-sm);
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  .calendar-view.visible {
+    display: block;
+  }
+
+  .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    margin-top: 12px;
+  }
+
+  .calendar-day-header {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    padding: 6px 0;
+  }
+
+  .calendar-day {
+    text-align: center;
+    padding: 8px 4px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    color: var(--color-text);
+    min-height: 60px;
+    cursor: pointer;
+    transition: all var(--transition);
+    border: 1px solid transparent;
+  }
+
+  .calendar-day:hover {
+    border-color: #1abc9c;
+    background: rgba(26, 188, 156, 0.05);
+  }
+
+  .calendar-day.today {
+    background: rgba(26, 188, 156, 0.1);
+    font-weight: 700;
+    border-color: #1abc9c;
+  }
+
+  .calendar-day.has-reservations {
+    background: #e8f5e9;
+    border-color: #a5d6a7;
+  }
+
+  .calendar-day .count-badge {
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    color: #2e7d32;
+    margin-top: 2px;
+  }
+
+  .calendar-day.other-month {
+    opacity: 0.3;
+  }
+
+  .calendar-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .calendar-nav h3 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .calendar-nav button {
+    padding: 4px 10px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all var(--transition);
+    color: var(--color-text);
+  }
+
+  .calendar-nav button:hover {
+    border-color: #1abc9c;
+    color: #1abc9c;
+  }
+
+  /* ============================================================
+     MODAL OVERRIDES
+     ============================================================ */
+  .checkin-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .checkin-form-grid .full-width {
+    grid-column: 1 / -1;
+  }
+
+  .checkin-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--color-border);
+  }
+</style>
+
+<!-- ============================================================
+     HEADER
+     ============================================================ -->
+<div class="reservations-header">
+  <div>
+    <h1>
+      <i class="fas fa-calendar-check"></i>
+      Rezervări Hotel
+    </h1>
+    <div class="header-meta">
+      <% if (hotel) { %>
+        <span class="hotel-name"><i class="fas fa-building"></i> <%= hotel.nume %></span>
+        <span class="text-muted">•</span>
+      <% } %>
+      <span>
+        <strong><%= reservations.length %></strong> rezervări
+      </span>
+    </div>
+  </div>
+  <div class="hotel-actions-bar">
+    <% if (locals.hotels && hotels.length > 1) { %>
+      <div class="hotel-selector" style="position:relative;">
+        <select id="hotelSelect" onchange="switchHotel(this.value)" style="padding:6px 28px 6px 10px;font-size:12px;font-family:var(--font-family);border:1px solid var(--color-border);border-radius:var(--radius-sm);background:var(--color-surface);color:var(--color-text);cursor:pointer;appearance:none;-webkit-appearance:none;background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%2712%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%23636e72%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3E%3Cpolyline points=%276 9 12 15 18 9%27%3E%3C/polyline%3E%3C/svg%3E');background-repeat:no-repeat;background-position:right 8px center;">
+          <% hotels.forEach(function(h) { %>
+            <option value="<%= h._id %>" <%= hotel && hotel._id === h._id ? 'selected' : '' %>>
+              <%= h.nume %>
+            </option>
+          <% }); %>
+        </select>
+      </div>
+    <% } %>
+    <button class="calendar-toggle" id="calendarToggleBtn" onclick="toggleCalendar()">
+      <i class="fas fa-calendar-alt"></i> Calendar
+    </button>
+    <button class="btn btn-primary btn-sm" onclick="openAddReservationModal()">
+      <i class="fas fa-plus"></i> Rezervare nouă
+    </button>
+  </div>
+</div>
+
+<% if (loading) { %>
+  <div class="spinner"></div>
+<% } else if (!hotel) { %>
+  <!-- ============================================================
+       NO HOTEL SELECTED
+       ============================================================ -->
+  <div class="empty-state">
+    <i class="fas fa-hotel"></i>
+    <h3>Selectează un hotel</h3>
+    <p>Nu există niciun hotel selectat. Alege un hotel pentru a vedea rezervările.</p>
+  </div>
+<% } else { %>
+  <!-- ============================================================
+       QUICK STATS
+       ============================================================ -->
+  <div class="quick-stats">
+    <div class="quick-stat">
+      <div class="qs-label">Confirmate</div>
+      <div class="qs-value confirmed"><%= quickStats.confirmed || 0 %></div>
+    </div>
+    <div class="quick-stat">
+      <div class="qs-label">În așteptare</div>
+      <div class="qs-value pending"><%= quickStats.pending || 0 %></div>
+    </div>
+    <div class="quick-stat">
+      <div class="qs-label">Check-in azi</div>
+      <div class="qs-value active"><%= quickStats.checkedIn || 0 %></div>
+    </div>
+    <div class="quick-stat">
+      <div class="qs-label">Check-out azi</div>
+      <div class="qs-value" style="color:var(--color-warning);"><%= quickStats.checkedOut || 0 %></div>
+    </div>
+    <div class="quick-stat">
+      <div class="qs-label">Anulate</div>
+      <div class="qs-value cancelled"><%= quickStats.cancelled || 0 %></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       CALENDAR VIEW
+       ============================================================ -->
+  <div class="calendar-view" id="calendarView">
+    <div class="calendar-nav">
+      <button onclick="changeMonth(-1)"><i class="fas fa-chevron-left"></i></button>
+      <h3 id="calendarMonthLabel"></h3>
+      <button onclick="changeMonth(1)"><i class="fas fa-chevron-right"></i></button>
+    </div>
+    <div class="calendar-grid" id="calendarGrid">
+      <div class="calendar-day-header">Lun</div>
+      <div class="calendar-day-header">Mar</div>
+      <div class="calendar-day-header">Mie</div>
+      <div class="calendar-day-header">Joi</div>
+      <div class="calendar-day-header">Vin</div>
+      <div class="calendar-day-header">Sâm</div>
+      <div class="calendar-day-header">Dum</div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       FILTERS
+       ============================================================ -->
+  <div class="reservation-filters">
+    <div class="filter-group">
+      <label for="statusFilter">Status</label>
+      <select id="statusFilter" onchange="filterReservations()">
+        <option value="all" <%= statusFilter === 'all' ? 'selected' : '' %>>Toate</option>
+        <option value="pending" <%= statusFilter === 'pending' ? 'selected' : '' %>>În așteptare</option>
+        <option value="confirmed" <%= statusFilter === 'confirmed' ? 'selected' : '' %>>Confirmată</option>
+        <option value="checked-in" <%= statusFilter === 'checked-in' ? 'selected' : '' %>>Check-in</option>
+        <option value="checked-out" <%= statusFilter === 'checked-out' ? 'selected' : '' %>>Check-out</option>
+        <option value="cancelled" <%= statusFilter === 'cancelled' ? 'selected' : '' %>>Anulată</option>
+        <option value="no-show" <%= statusFilter === 'no-show' ? 'selected' : '' %>>No-show</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label for="dateFrom">De la</label>
+      <input type="date" id="dateFrom" value="<%= dateFrom %>" onchange="filterReservations()" />
+    </div>
+    <div class="filter-group">
+      <label for="dateTo">Până la</label>
+      <input type="date" id="dateTo" value="<%= dateTo %>" onchange="filterReservations()" />
+    </div>
+    <div class="search-box">
+      <i class="fas fa-search"></i>
+      <input type="text" id="searchReservation" placeholder="Caută după nume oaspete..." value="<%= searchQuery %>" oninput="filterReservations()" />
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="clearFilters()">
+      <i class="fas fa-times"></i> Resetează
+    </button>
+  </div>
+
+  <!-- ============================================================
+       RESERVATIONS TABLE
+       ============================================================ -->
+  <div class="reservations-table-wrapper">
+    <table class="reservations-table">
+      <thead>
+        <tr>
+          <th>Oaspete</th>
+          <th>Camera</th>
+          <th>Check-in</th>
+          <th>Check-out</th>
+          <th>Nopți</th>
+          <th>Total</th>
+          <th>Status</th>
+          <th>Acțiuni</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (reservations.length === 0) { %>
+          <tr>
+            <td colspan="8">
+              <div class="empty-state" style="padding:40px 20px;">
+                <i class="fas fa-calendar-alt" style="font-size:40px;"></i>
+                <h3>Nicio rezervare</h3>
+                <p>Nu există rezervări pentru acest hotel. Creează o rezervare nouă.</p>
+                <button class="btn btn-primary btn-sm" onclick="openAddReservationModal()">
+                  <i class="fas fa-plus"></i> Rezervare nouă
+                </button>
+              </div>
+            </td>
+          </tr>
+        <% } else { %>
+          <% reservations.forEach(function(rez) { %>
+            <tr data-reservation-id="<%= rez._id %>" data-status="<%= rez.status || 'pending' %>" data-guest="<%= (rez.oaspeteNume || '').toLowerCase() %>" data-checkin="<%= rez.checkIn ? new Date(rez.checkIn).toISOString().split('T')[0] : '' %>" data-checkout="<%= rez.checkOut ? new Date(rez.checkOut).toISOString().split('T')[0] : '' %>">
+              <td>
+                <div class="guest-name"><%= rez.oaspeteNume || 'Nespecificat' %></div>
+                <div class="guest-email"><%= rez.oaspeteEmail || '' %></div>
+                <% if (rez.oaspeteTelefon) { %>
+                  <div class="guest-email"><%= rez.oaspeteTelefon %></div>
+                <% } %>
+              </td>
+              <td>
+                <span class="room-number">Camera <%= rez.cameraNumăr || 'N/A' %></span>
+                <div style="font-size:11px;color:var(--color-text-muted);"><%= rez.cameraTip || '' %></div>
+              </td>
+              <td>
+                <div><%= rez.checkIn ? new Date(rez.checkIn).toLocaleDateString('ro-RO') : '-' %></div>
+                <div class="date-range"><%= rez.checkIn ? new Date(rez.checkIn).toLocaleTimeString('ro-RO', {hour:'2-digit',minute:'2-digit'}) : '' %></div>
+              </td>
+              <td>
+                <div><%= rez.checkOut ? new Date(rez.checkOut).toLocaleDateString('ro-RO') : '-' %></div>
+                <div class="date-range"><%= rez.checkOut ? new Date(rez.checkOut).toLocaleTimeString('ro-RO', {hour:'2-digit',minute:'2-digit'}) : '' %></div>
+              </td>
+              <td><strong><%= rez.nopți || 0 %></strong></td>
+              <td><span class="amount"><%= rez.total ? Number(rez.total).toFixed(2) + ' lei' : '-' %></span></td>
+              <td>
+                <span class="reservation-status <%= rez.status || 'pending' %>">
+                  <% if (rez.status === 'confirmed') { %>Confirmată<% }
+                     else if (rez.status === 'pending') { %>În așteptare<% }
+                     else if (rez.status === 'checked-in') { %>Check-in<% }
+                     else if (rez.status === 'checked-out') { %>Check-out<% }
+                     else if (rez.status === 'cancelled') { %>Anulată<% }
+                     else if (rez.status === 'no-show') { %>No-show<% }
+                     else { %><%= rez.status %><% } %>
+                </span>
+              </td>
+              <td>
+                <div class="reservation-actions">
+                  <button onclick="viewReservation('<%= rez._id %>')" title="Vezi detalii"><i class="fas fa-eye"></i></button>
+                  <button onclick="editReservation('<%= rez._id %>')" title="Editează"><i class="fas fa-edit"></i></button>
+                  <% if (rez.status === 'confirmed' || rez.status === 'pending') { %>
+                    <button class="btn-checkin" onclick="performCheckIn('<%= rez._id %>')" title="Check-in">
+                      <i class="fas fa-door-open"></i> Check-in
+                    </button>
+                  <% } %>
+                  <% if (rez.status === 'checked-in') { %>
+                    <button class="btn-checkout" onclick="performCheckOut('<%= rez._id %>')" title="Check-out">
+                      <i class="fas fa-door-closed"></i> Check-out
+                    </button>
+                  <% } %>
+                  <% if (rez.status !== 'cancelled' && rez.status !== 'checked-out' && rez.status !== 'no-show') { %>
+                    <button onclick="cancelReservation('<%= rez._id %>')" title="Anulează"><i class="fas fa-times"></i></button>
+                  <% } %>
+                  <% if (rez.status === 'checked-in' || rez.status === 'confirmed') { %>
+                    <button onclick="markNoShow('<%= rez._id %>')" title="Marcare no-show"><i class="fas fa-user-slash"></i></button>
+                  <% } %>
+                </div>
+              </td>
+            </tr>
+          <% }); %>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+
+<% } /* end else (hotel selectat) */ %>
+
+<!-- ============================================================
+     SCRIPTS
+     ============================================================ -->
+<script>
+  (function() {
+    // State for calendar
+    var calendarVisible = false;
+    var calendarDate = new Date();
+    var reservationsData = <%= JSON.stringify(reservations.map(function(r) {
+      return {
+        _id: r._id,
+        checkIn: r.checkIn ? new Date(r.checkIn).toISOString().split('T')[0] : null,
+        checkOut: r.checkOut ? new Date(r.checkOut).toISOString().split('T')[0] : null,
+        oaspeteNume: r.oaspeteNume || '',
+        cameraNumăr: r.cameraNumăr || '',
+        status: r.status || 'pending'
+      };
+    })) %>;
+
+    window.toggleCalendar = function() {
+      var view = document.getElementById('calendarView');
+      var btn = document.getElementById('calendarToggleBtn');
+      calendarVisible = !calendarVisible;
+      view.classList.toggle('visible', calendarVisible);
+      btn.classList.toggle('active', calendarVisible);
+      if (calendarVisible) {
+        renderCalendar();
+      }
+    };
+
+    window.changeMonth = function(delta) {
+      calendarDate.setMonth(calendarDate.getMonth() + delta);
+      renderCalendar();
+    };
+
+    function renderCalendar() {
+      var year = calendarDate.getFullYear();
+      var month = calendarDate.getMonth();
+      var grid = document.getElementById('calendarGrid');
+      var label = document.getElementById('calendarMonthLabel');
+
+      // Remove old day cells (keep headers)
+      while (grid.children.length > 7) {
+        grid.removeChild(grid.lastChild);
+      }
+
+      var monthNames = ['Ianuarie', 'Februarie', 'Martie', 'Aprilie', 'Mai', 'Iunie',
+                        'Iulie', 'August', 'Septembrie', 'Octombrie', 'Noiembrie', 'Decembrie'];
+      label.textContent = monthNames[month] + ' ' + year;
+
+      var firstDay = new Date(year, month, 1);
+      var lastDay = new Date(year, month + 1, 0);
+      var startDay = firstDay.getDay(); // 0=Sun, 1=Mon...
+      // Adjust to Monday-start (0=Mon, 6=Sun)
+      var startOffset = startDay === 0 ? 6 : startDay - 1;
+
+      var today = new Date();
+      var todayStr = today.toISOString().split('T')[0];
+
+      // Build reservation count map
+      var countMap = {};
+      reservationsData.forEach(function(r) {
+        if (r.checkIn) {
+          countMap[r.checkIn] = (countMap[r.checkIn] || 0) + 1;
+        }
+        if (r.checkOut) {
+          countMap[r.checkOut] = (countMap[r.checkOut] || 0) + 1;
+        }
+      });
+
+      // Previous month days
+      var prevMonthLastDay = new Date(year, month, 0).getDate();
+      for (var i = startOffset - 1; i >= 0; i--) {
+        var day = prevMonthLastDay - i;
+        var cell = document.createElement('div');
+        cell.className = 'calendar-day other-month';
+        cell.textContent = day;
+        grid.appendChild(cell);
+      }
+
+      // Current month days
+      for (var d = 1; d <= lastDay.getDate(); d++) {
+        var dateStr = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+        var cell = document.createElement('div');
+        cell.className = 'calendar-day';
+        if (dateStr === todayStr) {
+          cell.classList.add('today');
+        }
+        if (countMap[dateStr]) {
+          cell.classList.add('has-reservations');
+          var badge = document.createElement('span');
+          badge.className = 'count-badge';
+          badge.textContent = countMap[dateStr] + ' rez.';
+          cell.appendChild(badge);
+        }
+        var dateSpan = document.createElement('span');
+        dateSpan.textContent = d;
+        cell.insertBefore(dateSpan, cell.firstChild);
+        cell.dataset.date = dateStr;
+        cell.onclick = function() {
+          var dt = this.dataset.date;
+          document.getElementById('dateFrom').value = dt;
+          document.getElementById('dateTo').value = dt;
+          filterReservations();
+        };
+        grid.appendChild(cell);
+      }
+
+      // Next month days to fill grid
+      var totalCells = grid.children.length - 7; // minus headers
+      var remaining = 42 - totalCells;
+      for (var n = 1; n <= remaining; n++) {
+        var cell = document.createElement('div');
+        cell.className = 'calendar-day other-month';
+        cell.textContent = n;
+        grid.appendChild(cell);
+      }
+    }
+
+    // Expose renderCalendar globally
+    window.renderCalendar = renderCalendar;
+  })();
+
+  function switchHotel(hotelId) {
+    if (!hotelId) return;
+    var url = new URL(window.location.href);
+    url.searchParams.set('hotelId', hotelId);
+    url.searchParams.delete('status');
+    url.searchParams.delete('search');
+    url.searchParams.delete('dateFrom');
+    url.searchParams.delete('dateTo');
+    window.location.href = url.toString();
+  }
+
+  function filterReservations() {
+    var status = document.getElementById('statusFilter').value;
+    var search = document.getElementById('searchReservation').value.toLowerCase();
+    var dateFrom = document.getElementById('dateFrom').value;
+    var dateTo = document.getElementById('dateTo').value;
+
+    // Update URL params
+    var url = new URL(window.location.href);
+    if (status !== 'all') url.searchParams.set('status', status);
+    else url.searchParams.delete('status');
+    if (search) url.searchParams.set('search', search);
+    else url.searchParams.delete('search');
+    if (dateFrom) url.searchParams.set('dateFrom', dateFrom);
+    else url.searchParams.delete('dateFrom');
+    if (dateTo) url.searchParams.set('dateTo', dateTo);
+    else url.searchParams.delete('dateTo');
+    window.history.replaceState({}, '', url.toString());
+
+    // Client-side filtering
+    var rows = document.querySelectorAll('.reservations-table tbody tr[data-reservation-id]');
+
+    rows.forEach(function(row) {
+      var show = true;
+      var rowStatus = row.dataset.status;
+      var rowGuest = row.dataset.guest;
+      var rowCheckIn = row.dataset.checkin;
+      var rowCheckOut = row.dataset.checkout;
+
+      // Status filter
+      if (status !== 'all') {
+        var statusMap = {
+          'confirmată': 'confirmed',
+          'în așteptare': 'pending',
+          'check-in': 'checked-in',
+          'check-out': 'checked-out',
+          'anulată': 'cancelled',
+          'no-show': 'no-show'
+        };
+        var normalizedStatus = statusMap[rowStatus] || rowStatus;
+        if (normalizedStatus !== status) show = false;
+      }
+
+      // Search filter
+      if (show && search) {
+        if (!rowGuest.includes(search)) show = false;
+      }
+
+      // Date range filter
+      if (show && dateFrom) {
+        if (rowCheckOut && rowCheckOut < dateFrom) show = false;
+      }
+      if (show && dateTo) {
+        if (rowCheckIn && rowCheckIn > dateTo) show = false;
+      }
+
+      row.style.display = show ? '' : 'none';
+    });
+  }
+
+  function clearFilters() {
+    document.getElementById('statusFilter').value = 'all';
+    document.getElementById('searchReservation').value = '';
+    document.getElementById('dateFrom').value = '';
+    document.getElementById('dateTo').value = '';
+    filterReservations();
+  }
+
+  // ============================================================
+  // CHECK-IN / CHECK-OUT ACTIONS
+  // ============================================================
+
+  async function performCheckIn(reservationId) {
+    if (!reservationId) return;
+    if (!confirm('Ești sigur că vrei să faci check-in pentru această rezervare?')) return;
+
+    try {
+      var response = await fetch('/api/hotel/reservations/' + reservationId + '/checkin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({})
+      });
+
+      var data = await response.json();
+
+      if (response.ok && data.success) {
+        showToast('Check-in efectuat cu succes!', 'success');
+        setTimeout(function

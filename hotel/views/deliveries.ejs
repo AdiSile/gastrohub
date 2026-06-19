@@ -1,0 +1,973 @@
+<%
+  // ============================================================
+  // HOTEL DELIVERIES VIEW – Tracking livrări hotel
+  // ============================================================
+  const hotel = locals.hotel || null;
+  const deliveries = locals.deliveries || [];
+  const suppliers = locals.suppliers || [];
+  const loading = locals.loading || false;
+  const currentFilter = locals.currentFilter || 'all';
+  const currentSearch = locals.currentSearch || '';
+  const currentStatus = locals.currentStatus || 'all';
+  const currentDateFrom = locals.currentDateFrom || '';
+  const currentDateTo = locals.currentDateTo || '';
+  const currentPage = locals.currentPage || 1;
+  const totalPages = locals.totalPages || 1;
+  const totalItems = locals.totalItems || 0;
+  const statuses = locals.statuses || [
+    'pending', 'confirmed', 'in_transit', 'delivered', 'cancelled'
+  ];
+  const stats = locals.stats || {};
+%>
+
+<style>
+  /* ============================================================
+     HOTEL DELIVERIES PAGE STYLES
+     ============================================================ */
+  .hdel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .hdel-header h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .hdel-header h1 i {
+    color: #1abc9c;
+  }
+
+  .hdel-header .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--color-text-muted);
+    font-size: 13px;
+    flex-wrap: wrap;
+  }
+
+  .hdel-header .header-meta .hotel-name {
+    font-weight: 600;
+    color: #1abc9c;
+  }
+
+  /* ============================================================
+     STATS BAR
+     ============================================================ */
+  .hdel-stats-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .hdel-stat-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: all var(--transition);
+  }
+
+  .hdel-stat-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+  }
+
+  .hdel-stat-card .stat-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .hdel-stat-card .stat-icon.teal { background: rgba(26, 188, 156, 0.1); color: #1abc9c; }
+  .hdel-stat-card .stat-icon.success { background: #e8f5e9; color: var(--color-success); }
+  .hdel-stat-card .stat-icon.warning { background: #fff8e1; color: var(--color-warning); }
+  .hdel-stat-card .stat-icon.danger { background: #fce4ec; color: var(--color-danger); }
+  .hdel-stat-card .stat-icon.info { background: #e3f2fd; color: var(--color-info); }
+
+  .hdel-stat-card .stat-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .hdel-stat-card .stat-body .stat-number {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--color-text);
+    line-height: 1.1;
+  }
+
+  .hdel-stat-card .stat-body .stat-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+  }
+
+  /* ============================================================
+     FILTERS
+     ============================================================ */
+  .hdel-filters {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    padding: 16px 20px;
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+  }
+
+  .hdel-filters .search-wrapper {
+    flex: 1;
+    min-width: 200px;
+    position: relative;
+  }
+
+  .hdel-filters .search-wrapper input {
+    width: 100%;
+    padding: 10px 14px 10px 40px;
+    font-size: 14px;
+    font-family: var(--font-family);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    transition: border-color var(--transition);
+  }
+
+  .hdel-filters .search-wrapper input:focus {
+    outline: none;
+    border-color: #1abc9c;
+    box-shadow: 0 0 0 3px rgba(26, 188, 156, 0.12);
+  }
+
+  .hdel-filters .search-wrapper i {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-text-muted);
+    font-size: 14px;
+  }
+
+  .hdel-filters select,
+  .hdel-filters input[type="date"] {
+    padding: 10px 32px 10px 12px;
+    font-size: 13px;
+    font-family: var(--font-family);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23636e72' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+
+  .hdel-filters input[type="date"] {
+    appearance: auto;
+    -webkit-appearance: auto;
+    background-image: none;
+    padding: 10px 12px;
+    min-width: 140px;
+  }
+
+  .hdel-filters .filter-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  /* ============================================================
+     FILTER TABS (Status)
+     ============================================================ */
+  .hdel-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .hdel-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition);
+    border: 1px solid transparent;
+    background: var(--color-bg);
+    color: var(--color-text-muted);
+    text-decoration: none;
+  }
+
+  .hdel-tab:hover {
+    background: var(--color-surface);
+    border-color: var(--color-border);
+    color: var(--color-text);
+  }
+
+  .hdel-tab.active {
+    background: #1abc9c;
+    color: #fff;
+    border-color: #1abc9c;
+    box-shadow: 0 2px 8px rgba(26, 188, 156, 0.3);
+  }
+
+  .hdel-tab .count {
+    background: rgba(0,0,0,0.06);
+    border-radius: 12px;
+    padding: 1px 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .hdel-tab.active .count {
+    background: rgba(255,255,255,0.25);
+  }
+
+  .hdel-tab i {
+    font-size: 13px;
+  }
+
+  /* Tab colors by status - hotel teal theme */
+  .hdel-tab.tab-pending { color: #f39c12; }
+  .hdel-tab.tab-pending.active { background: #f39c12; color: #fff; border-color: #f39c12; }
+  .hdel-tab.tab-confirmed { color: #3498db; }
+  .hdel-tab.tab-confirmed.active { background: #3498db; color: #fff; border-color: #3498db; }
+  .hdel-tab.tab-in_transit { color: #e67e22; }
+  .hdel-tab.tab-in_transit.active { background: #e67e22; color: #fff; border-color: #e67e22; }
+  .hdel-tab.tab-delivered { color: #27ae60; }
+  .hdel-tab.tab-delivered.active { background: #27ae60; color: #fff; border-color: #27ae60; }
+  .hdel-tab.tab-cancelled { color: #e74c3c; }
+  .hdel-tab.tab-cancelled.active { background: #e74c3c; color: #fff; border-color: #e74c3c; }
+
+  /* ============================================================
+     TABLE
+     ============================================================ */
+  .hdel-table-wrapper {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--color-border);
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+
+  .hdel-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .hdel-table thead th {
+    padding: 12px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    background: var(--color-bg);
+    border-bottom: 2px solid var(--color-border);
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .hdel-table tbody td {
+    padding: 14px 16px;
+    font-size: 14px;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
+  }
+
+  .hdel-table tbody tr {
+    transition: background var(--transition);
+    cursor: pointer;
+  }
+
+  .hdel-table tbody tr:hover {
+    background: rgba(26, 188, 156, 0.03);
+  }
+
+  .hdel-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .hdel-table .del-id-cell {
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--color-text-muted);
+    font-family: monospace;
+  }
+
+  .hdel-table .del-supplier-cell {
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .hdel-table .del-supplier-cell .del-contact {
+    display: block;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+  }
+
+  .hdel-table .del-items-cell {
+    max-width: 180px;
+    font-size: 13px;
+    color: var(--color-text-muted);
+  }
+
+  .hdel-table .del-items-cell .item-chip {
+    display: inline-block;
+    padding: 2px 8px;
+    margin: 1px;
+    border-radius: 10px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-size: 11px;
+    border: 1px solid var(--color-border);
+    white-space: nowrap;
+  }
+
+  .hdel-table .del-date-cell {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+
+  .hdel-table .del-date-cell i {
+    margin-right: 4px;
+  }
+
+  .hdel-table .del-amount-cell {
+    font-weight: 700;
+    color: var(--color-text);
+    white-space: nowrap;
+  }
+
+  .hdel-table .del-actions-cell {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .hdel-table .del-actions-cell button {
+    padding: 6px 10px;
+    font-size: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: all var(--transition);
+    color: var(--color-text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 4px;
+  }
+
+  .hdel-table .del-actions-cell button:hover {
+    background: var(--color-bg);
+    color: var(--color-text);
+  }
+
+  .hdel-table .del-actions-cell .btn-track:hover {
+    color: var(--color-info);
+    border-color: var(--color-info);
+  }
+
+  .hdel-table .del-actions-cell .btn-receive:hover {
+    color: var(--color-success);
+    border-color: var(--color-success);
+  }
+
+  .hdel-table .del-actions-cell .btn-cancel:hover {
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+  }
+
+  /* ============================================================
+     STATUS BADGES
+     ============================================================ */
+  .hdel-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  .hdel-status-badge.pending {
+    background: #fff8e1;
+    color: #f57f17;
+  }
+
+  .hdel-status-badge.confirmed {
+    background: #e3f2fd;
+    color: #1565c0;
+  }
+
+  .hdel-status-badge.in_transit {
+    background: #fbe9e7;
+    color: #d84315;
+  }
+
+  .hdel-status-badge.delivered {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  .hdel-status-badge.cancelled {
+    background: #fce4ec;
+    color: #c62828;
+  }
+
+  /* ============================================================
+     STATUS PROGRESS INDICATOR
+     ============================================================ */
+  .hdel-progress {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  .hdel-progress .progress-step {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 10px;
+    color: var(--color-text-muted);
+  }
+
+  .hdel-progress .progress-step.done {
+    color: var(--color-success);
+  }
+
+  .hdel-progress .progress-step.active {
+    color: #1abc9c;
+    font-weight: 600;
+  }
+
+  .hdel-progress .progress-step .step-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--color-border);
+  }
+
+  .hdel-progress .progress-step.done .step-dot {
+    background: var(--color-success);
+  }
+
+  .hdel-progress .progress-step.active .step-dot {
+    background: #1abc9c;
+    box-shadow: 0 0 4px rgba(26, 188, 156, 0.4);
+  }
+
+  .hdel-progress .progress-arrow {
+    color: var(--color-border);
+    font-size: 8px;
+  }
+
+  /* ============================================================
+     PAGINATION
+     ============================================================ */
+  .hdel-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .hdel-pagination button {
+    padding: 8px 14px;
+    font-size: 13px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: all var(--transition);
+    color: var(--color-text);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .hdel-pagination button:hover:not(:disabled) {
+    border-color: #1abc9c;
+    color: #1abc9c;
+  }
+
+  .hdel-pagination button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .hdel-pagination button.active {
+    background: #1abc9c;
+    color: #fff;
+    border-color: #1abc9c;
+  }
+
+  .hdel-pagination .page-info {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    padding: 0 8px;
+  }
+
+  /* ============================================================
+     EMPTY STATE
+     ============================================================ */
+  .hdel-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--color-text-muted);
+  }
+
+  .hdel-empty i {
+    font-size: 52px;
+    opacity: 0.2;
+    margin-bottom: 16px;
+  }
+
+  .hdel-empty h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--color-text);
+  }
+
+  .hdel-empty p {
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+
+  /* ============================================================
+     TRACKING MODAL
+     ============================================================ */
+  .hdel-tracking-timeline {
+    position: relative;
+    padding: 10px 0;
+  }
+
+  .hdel-tracking-timeline::before {
+    content: '';
+    position: absolute;
+    left: 17px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--color-border);
+  }
+
+  .hdel-tracking-event {
+    position: relative;
+    display: flex;
+    gap: 16px;
+    padding: 12px 0;
+  }
+
+  .hdel-tracking-event .event-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    z-index: 1;
+    flex-shrink: 0;
+    background: var(--color-bg);
+    color: var(--color-text-muted);
+    border: 2px solid var(--color-border);
+  }
+
+  .hdel-tracking-event.done .event-icon {
+    background: #e8f5e9;
+    color: var(--color-success);
+    border-color: var(--color-success);
+  }
+
+  .hdel-tracking-event.active .event-icon {
+    background: #e0f2f1;
+    color: #1abc9c;
+    border-color: #1abc9c;
+    box-shadow: 0 0 8px rgba(26, 188, 156, 0.3);
+  }
+
+  .hdel-tracking-event.cancelled .event-icon {
+    background: #fce4ec;
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+  }
+
+  .hdel-tracking-event .event-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .hdel-tracking-event .event-content .event-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .hdel-tracking-event .event-content .event-desc {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+  }
+
+  .hdel-tracking-event .event-content .event-time {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+  }
+
+  /* ============================================================
+     RESPONSIVE
+     ============================================================ */
+  @media (max-width: 768px) {
+    .hdel-table thead {
+      display: none;
+    }
+
+    .hdel-table tbody tr {
+      display: block;
+      padding: 16px;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .hdel-table tbody td {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border: none;
+      font-size: 13px;
+    }
+
+    .hdel-table tbody td::before {
+      content: attr(data-label);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--color-text-muted);
+      min-width: 90px;
+    }
+
+    .hdel-table tbody td.hdel-actions-cell {
+      justify-content: flex-end;
+      padding-top: 10px;
+      border-top: 1px solid var(--color-border);
+      margin-top: 8px;
+    }
+
+    .hdel-table .del-items-cell {
+      max-width: none;
+    }
+
+    .hdel-filters {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .hdel-filters .search-wrapper {
+      min-width: 0;
+    }
+
+    .hdel-stats-bar {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .hdel-tabs {
+      gap: 4px;
+    }
+
+    .hdel-tab {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .hdel-header h1 {
+      font-size: 20px;
+    }
+
+    .hdel-stats-bar {
+      grid-template-columns: 1fr;
+    }
+
+    .hdel-tracking-event {
+      gap: 10px;
+    }
+  }
+
+  /* ============================================================
+     HOTEL SELECTOR OVERRIDE
+     ============================================================ */
+  .hdel-hotel-selector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .hdel-hotel-selector select {
+    padding: 8px 32px 8px 12px;
+    font-size: 13px;
+    font-family: var(--font-family);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23636e72' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+</style>
+
+<!-- ============================================================
+     PAGE HEADER
+     ============================================================ -->
+<div class="hdel-header">
+  <div>
+    <h1>
+      <i class="fas fa-truck"></i>
+      Livrări Hotel
+    </h1>
+    <div class="header-meta">
+      <% if (hotel) { %>
+        <span class="hotel-name"><i class="fas fa-building"></i> <%= hotel.nume || hotel.name %></span>
+        <span class="text-muted">•</span>
+      <% } %>
+      <span>
+        <i class="fas fa-boxes"></i>
+        <%= totalItems %> livrări
+      </span>
+      <% var pendingCount = deliveries.filter(function(d) { return d.status === 'pending' || d.status === 'confirmed'; }).length; %>
+      <% var inTransitCount = deliveries.filter(function(d) { return d.status === 'in_transit'; }).length; %>
+      <% if (pendingCount > 0) { %>
+        <span style="color:var(--color-warning);font-weight:600;">
+          <i class="fas fa-clock"></i>
+          <%= pendingCount %> în așteptare
+        </span>
+      <% } %>
+      <% if (inTransitCount > 0) { %>
+        <span style="color:var(--color-info);font-weight:600;">
+          <i class="fas fa-shipping-fast"></i>
+          <%= inTransitCount %> în tranzit
+        </span>
+      <% } %>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <% if (locals.hotels && locals.hotels.length > 1) { %>
+      <div class="hdel-hotel-selector">
+        <i class="fas fa-hotel" style="color:#1abc9c;font-size:14px;"></i>
+        <select id="hotelSelect" onchange="switchHotel(this.value)">
+          <% locals.hotels.forEach(function(h) { %>
+            <option value="<%= h._id %>" <%= hotel && (hotel._id === h._id) ? 'selected' : '' %>>
+              <%= h.nume || h.name %>
+            </option>
+          <% }); %>
+        </select>
+      </div>
+    <% } %>
+    <button class="btn btn-primary btn-sm" onclick="openAddDeliveryModal()" style="background:#1abc9c;border-color:#1abc9c;">
+      <i class="fas fa-plus"></i> Livrare nouă
+    </button>
+    <button class="btn btn-secondary btn-sm" onclick="refreshDeliveries()">
+      <i class="fas fa-sync-alt"></i> Reîmprospătare
+    </button>
+    <button class="btn btn-secondary btn-sm" onclick="exportDeliveries()">
+      <i class="fas fa-download"></i> Exportă
+    </button>
+  </div>
+</div>
+
+<!-- ============================================================
+     LOADING
+     ============================================================ -->
+<% if (loading) { %>
+  <div class="spinner"></div>
+<% } else { %>
+
+<!-- ============================================================
+     ALERT
+     ============================================================ -->
+<% if (locals.alert) { %>
+  <div class="dashboard-alert <%= alert.type || 'info' %>" style="margin-bottom:20px;">
+    <i class="fas fa-<%= alert.type === 'warning' ? 'exclamation-triangle' : alert.type === 'success' ? 'check-circle' : 'info-circle' %>"></i>
+    <%= alert.message %>
+  </div>
+<% } %>
+
+<!-- ============================================================
+     STATS CARDS
+     ============================================================ -->
+<div class="hdel-stats-bar">
+  <div class="hdel-stat-card">
+    <div class="stat-icon teal"><i class="fas fa-truck"></i></div>
+    <div class="stat-body">
+      <div class="stat-number"><%= stats.totalDeliveries || totalItems || 0 %></div>
+      <div class="stat-label">Total livrări</div>
+    </div>
+  </div>
+  <div class="hdel-stat-card">
+    <div class="stat-icon warning"><i class="fas fa-clock"></i></div>
+    <div class="stat-body">
+      <div class="stat-number"><%= stats.pendingCount || pendingCount || 0 %></div>
+      <div class="stat-label">În așteptare</div>
+    </div>
+  </div>
+  <div class="hdel-stat-card">
+    <div class="stat-icon info"><i class="fas fa-shipping-fast"></i></div>
+    <div class="stat-body">
+      <div class="stat-number"><%= stats.inTransitCount || inTransitCount || 0 %></div>
+      <div class="stat-label">În tranzit</div>
+    </div>
+  </div>
+  <div class="hdel-stat-card">
+    <div class="stat-icon success"><i class="fas fa-check-circle"></i></div>
+    <div class="stat-body">
+      <div class="stat-number"><%= stats.deliveredCount || deliveries.filter(function(d) { return d.status === 'delivered'; }).length || 0 %></div>
+      <div class="stat-label">Livrate</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     FILTER TABS
+     ============================================================ -->
+<div class="hdel-tabs">
+  <a href="?filter=all&hotelId=<%= hotel ? hotel._id : '' %>" class="hdel-tab <%= currentFilter === 'all' ? 'active' : '' %>">
+    <i class="fas fa-th-list"></i> Toate
+    <span class="count"><%= totalItems %></span>
+  </a>
+  <a href="?filter=pending&hotelId=<%= hotel ? hotel._id : '' %>" class="hdel-tab tab-pending <%= currentFilter === 'pending' ? 'active' : '' %>">
+    <i class="fas fa-clock"></i> În așteptare
+    <span class="count"><%= stats.pendingCount || deliveries.filter(function(d) { return d.status === 'pending'; }).length || 0 %></span>
+  </a>
+  <a href="?filter=confirmed&hotelId=<%= hotel ? hotel._id : '' %>" class="hdel-tab tab-confirmed <%= currentFilter === 'confirmed' ? 'active' : '' %>">
+    <i class="fas fa-check"></i> Confirmate
+    <span class="count"><%= deliveries.filter(function(d) { return d.status === 'confirmed'; }).length || 0 %></span>
+  </a>
+  <a href="?filter=in_transit&hotelId=<%= hotel ? hotel._id : '' %>" class="hdel-tab tab-in_transit <%= currentFilter === 'in_transit' ? 'active' : '' %>">
+    <i class="fas fa-shipping-fast"></i> În tranzit
+    <span class="count"><%= stats.inTransitCount || deliveries.filter(function(d) { return d.status === 'in_transit'; }).length || 0 %></span>
+  </a>
+  <a href="?filter=delivered&hotelId=<%= hotel ? hotel._id : '' %>" class="hdel-tab tab-delivered <%= currentFilter === 'delivered' ? 'active' : '' %>">
+    <i class="fas fa-check-circle"></i> Livrate
+    <span class="count"><%= stats.deliveredCount || deliveries.filter(function(d) { return d.status === 'delivered'; }).length || 0 %></span>
+  </a>
+  <a href="?filter=cancelled&hotelId=<%= hotel ? hotel._id : '' %>" class="hdel-tab tab-cancelled <%= currentFilter === 'cancelled' ? 'active' : '' %>">
+    <i class="fas fa-ban"></i> Anulate
+    <span class="count"><%= deliveries.filter(function(d) { return d.status === 'cancelled'; }).length || 0 %></span>
+  </a>
+</div>
+
+<!-- ============================================================
+     FILTERS
+     ============================================================ -->
+<div class="hdel-filters">
+  <div class="search-wrapper">
+    <i class="fas fa-search"></i>
+    <input type="text" id="searchInput" placeholder="Caută după furnizor, produs, ID..."
+           value="<%= currentSearch %>" onkeyup="debounceFilter()" />
+  </div>
+
+  <select id="statusFilter" onchange="applyFilters()">
+    <option value="all" <%= currentStatus === 'all' ? 'selected' : '' %>>Toate statusurile</option>
+    <% statuses.forEach(function(status) { %>
+      <option value="<%= status %>" <%= currentStatus === status ? 'selected' : '' %>>
+        <%= status === 'pending' ? 'În așteptare' : status === 'confirmed' ? 'Confirmată' : status === 'in_transit' ? 'În tranzit' : status === 'delivered' ? 'Livrată' : status === 'cancelled' ? 'Anulată' : status %>
+      </option>
+    <% }); %>
+  </select>
+
+  <input type="date" id="dateFrom" value="<%= currentDateFrom %>" onchange="applyFilters()" placeholder="De la data" />
+  <input type="date" id="dateTo" value="<%= currentDateTo %>" onchange="applyFilters()" placeholder="Până la data" />
+
+  <div class="filter-actions">
+    <button class="btn btn-sm btn-secondary" onclick="resetFilters()" title="Resetează filtrele">
+      <i class="fas fa-undo"></i> Resetează
+    </button>
+  </div>
+</div>
+
+<!-- ============================================================
+     DELIVERIES TABLE
+     ============================================================ -->
+<% if (deliveries.length === 0) { %>
+  <div class="hdel-empty">
+    <i class="fas fa-truck-loading"></i>
+    <h3>Nu există livrări</h3>
+    <p>Înregistrează o livrare nouă pentru a începe tracking-ul.</p>
+    <button class="btn btn-primary" onclick="openAddDeliveryModal()" style="background:#1abc9c;border-color:#1abc9c;">
+      <i class="fas fa-plus"></i> Livrare nouă
+    </button>
+  </div>
+<% } else { %>
+  <div class="hdel-table-wrapper">
+    <table class="hdel-table" id="deliveriesTable">
+      <thead>
+        <tr>
+          <th>ID Livrare</th>
+          <th>Furnizor</th>
+          <th>Status</th>
+          <th>Articole</th>
+          <th>Dată livrare</th>
+          <th>Total</th>
+          <th style="text-align:right;">Acțiuni</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% deliveries.forEach(function(delivery) { %>
+          <tr onclick="viewDelivery('<%= delivery._id %>')" data-id="<%= delivery._id %>" style="cursor:pointer;">
+            <td data-label="ID Livrare">
+              <span class="del-id-cell"><%= delivery._id.substring(0, 8) %>...</span>
+            </td>
+            <td data-label="Furnizor">
+              <div class="del-supplier-cell">
+                <%= delivery.supplierName || (

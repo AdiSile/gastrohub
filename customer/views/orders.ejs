@@ -1,0 +1,891 @@
+<%
+  // ============================================================
+  // customer/views/orders.ejs
+  // Istoric comenzi client — listing all customer orders
+  // Uses layout.ejs wrapper
+  // ============================================================
+
+  const user = locals.user || {};
+  const customer = locals.customer || user || {};
+  const orders = locals.orders || [];
+  const stats = locals.stats || {};
+  const loading = locals.loading || false;
+%>
+
+<style>
+  /* ============================================================
+     CUSTOMER ORDERS STYLES
+     ============================================================ */
+  .customer-orders-page .page-intro {
+    margin-bottom: 24px;
+  }
+
+  .customer-orders-page .page-intro h1 {
+    font-size: 24px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .customer-orders-page .page-intro h1 i {
+    color: var(--color-primary);
+  }
+
+  .customer-orders-page .page-intro p {
+    color: var(--color-text-muted);
+    margin-top: 4px;
+    font-size: 14px;
+  }
+
+  /* ============================================================
+     FILTER TABS
+     ============================================================ */
+  .orders-filter-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .orders-filter-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    background: var(--color-bg);
+    color: var(--color-text-muted);
+    text-decoration: none;
+  }
+
+  .orders-filter-tab:hover {
+    background: var(--color-surface);
+    border-color: var(--color-border);
+    color: var(--color-text);
+  }
+
+  .orders-filter-tab.active {
+    background: var(--color-primary);
+    color: #fff;
+    border-color: var(--color-primary);
+    box-shadow: 0 2px 8px rgba(13, 110, 253, 0.3);
+  }
+
+  .orders-filter-tab .count {
+    background: rgba(0,0,0,0.06);
+    border-radius: 12px;
+    padding: 1px 8px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .orders-filter-tab.active .count {
+    background: rgba(255,255,255,0.25);
+  }
+
+  /* ============================================================
+     ORDER CARDS
+     ============================================================ */
+  .order-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    margin-bottom: 14px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+
+  .order-card:hover {
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    border-color: var(--color-primary);
+  }
+
+  .order-card .card-top {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 18px;
+    flex-wrap: wrap;
+  }
+
+  .order-card .card-top .order-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: var(--color-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+    color: var(--color-text-muted);
+  }
+
+  .order-card .card-top .order-icon.active {
+    background: #fff3e0;
+    color: #e65100;
+  }
+
+  .order-card .card-top .order-icon.completed {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  .order-card .card-top .order-icon.cancelled {
+    background: #fce4ec;
+    color: #c62828;
+  }
+
+  .order-card .card-top .order-info {
+    flex: 1;
+    min-width: 150px;
+  }
+
+  .order-card .card-top .order-info .order-title {
+    font-weight: 600;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .order-card .card-top .order-info .order-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+    flex-wrap: wrap;
+  }
+
+  .order-card .card-top .order-info .order-meta i {
+    margin-right: 3px;
+    font-size: 11px;
+  }
+
+  .order-card .card-top .order-amount {
+    font-size: 18px;
+    font-weight: 700;
+    white-space: nowrap;
+    color: var(--color-text);
+  }
+
+  .order-card .card-top .order-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .order-card .card-top .order-actions .btn-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--color-text-muted);
+    font-size: 14px;
+  }
+
+  .order-card .card-top .order-actions .btn-icon:hover {
+    background: var(--color-bg);
+    color: var(--color-text);
+    border-color: var(--color-primary);
+  }
+
+  /* Status badge inline */
+  .order-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  .order-status-badge.deschisă {
+    background: #fff3e0;
+    color: #e65100;
+  }
+
+  .order-status-badge.în-preparare {
+    background: #e3f2fd;
+    color: #1565c0;
+  }
+
+  .order-status-badge.finalizată {
+    background: #f3e5f5;
+    color: #6a1b9a;
+  }
+
+  .order-status-badge.livrată {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  .order-status-badge.achitată {
+    background: #e8f5e9;
+    color: #1b5e20;
+  }
+
+  .order-status-badge.anulată {
+    background: #fce4ec;
+    color: #b71c1c;
+  }
+
+  .order-status-badge.processing {
+    background: #fff3e0;
+    color: #e65100;
+  }
+
+  .order-status-badge.confirmed {
+    background: #e3f2fd;
+    color: #1565c0;
+  }
+
+  .order-status-badge.pending {
+    background: #fff8e1;
+    color: #f57f17;
+  }
+
+  .order-status-badge.delivered {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  .order-status-badge.refunded {
+    background: #fce4ec;
+    color: #c62828;
+  }
+
+  /* ============================================================
+     ORDER CARD EXPANDED DETAIL
+     ============================================================ */
+  .order-card .card-detail {
+    border-top: 1px solid var(--color-border);
+    padding: 16px 18px;
+    background: var(--color-bg);
+    display: none;
+  }
+
+  .order-card .card-detail.open {
+    display: block;
+  }
+
+  .order-card .card-detail .detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .order-card .card-detail .detail-item label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--color-text-muted);
+  }
+
+  .order-card .card-detail .detail-item .value {
+    font-size: 14px;
+    margin-top: 2px;
+  }
+
+  .order-card .card-detail .items-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+  }
+
+  .order-card .card-detail .items-table th {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    padding: 6px 8px;
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .order-card .card-detail .items-table td {
+    padding: 8px;
+    font-size: 13px;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .order-card .card-detail .items-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .order-card .card-detail .detail-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--color-border);
+    flex-wrap: wrap;
+  }
+
+  /* ============================================================
+     STATISTICS ROW
+     ============================================================ */
+  .orders-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .orders-stats .stat-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+  }
+
+  .orders-stats .stat-card .stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .orders-stats .stat-card .stat-label {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    font-weight: 500;
+    margin-top: 2px;
+  }
+
+  .orders-stats .stat-card.primary .stat-value { color: var(--color-primary); }
+  .orders-stats .stat-card.success .stat-value { color: var(--color-success); }
+  .orders-stats .stat-card.info .stat-value { color: var(--color-info); }
+  .orders-stats .stat-card.warning .stat-value { color: var(--color-warning); }
+  .orders-stats .stat-card.danger .stat-value { color: var(--color-danger); }
+
+  /* ============================================================
+     EMPTY STATE
+     ============================================================ */
+  .orders-empty {
+    text-align: center;
+    padding: 60px 20px;
+  }
+
+  .orders-empty i {
+    font-size: 56px;
+    opacity: 0.2;
+    color: var(--color-text-muted);
+    margin-bottom: 16px;
+  }
+
+  .orders-empty h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .orders-empty p {
+    color: var(--color-text-muted);
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+
+  /* ============================================================
+     PAGINATION
+     ============================================================ */
+  .orders-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 18px 0;
+  }
+
+  .orders-pagination button {
+    padding: 8px 16px;
+    font-size: 13px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--color-text);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .orders-pagination button:hover:not(:disabled) {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .orders-pagination button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .orders-pagination .page-info {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    padding: 0 6px;
+  }
+
+  /* ============================================================
+     SEARCH
+     ============================================================ */
+  .orders-search {
+    margin-bottom: 20px;
+    position: relative;
+  }
+
+  .orders-search input {
+    width: 100%;
+    max-width: 400px;
+    padding: 10px 14px 10px 40px;
+    font-size: 14px;
+    font-family: var(--font-family);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    transition: border-color 0.2s ease;
+  }
+
+  .orders-search input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.12);
+  }
+
+  .orders-search i {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-text-muted);
+    font-size: 14px;
+    pointer-events: none;
+  }
+
+  /* ============================================================
+     RESPONSIVE
+     ============================================================ */
+  @media (max-width: 768px) {
+    .order-card .card-top {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .order-card .card-top .order-amount {
+      align-self: flex-start;
+    }
+
+    .order-card .card-top .order-actions {
+      align-self: flex-end;
+    }
+
+    .order-card .card-detail .detail-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .orders-stats {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .customer-orders-page .page-intro h1 {
+      font-size: 20px;
+    }
+
+    .orders-filter-tab {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    .orders-stats {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+</style>
+
+<!-- ============================================================
+     CUSTOMER ORDERS PAGE
+     ============================================================ -->
+<div class="customer-orders-page" data-page="customer-orders" data-customer-id="<%= customer._id || '' %>" data-tenant-id="<%= customer.tenantId || '' %>">
+
+  <!-- Page intro -->
+  <div class="page-intro">
+    <h1>
+      <i class="fas fa-receipt"></i>
+      Comenzile mele
+    </h1>
+    <p>Vezi toate comenzile plasate, urmărește statusul și re-comandă preparatele preferate.</p>
+  </div>
+
+  <% if (locals.flash && flash.message) { %>
+    <div class="alert alert-<%= flash.type || 'info' %>" style="margin-bottom:20px;padding:12px 16px;border-radius:8px;background:<%= flash.type === 'success' ? '#e8f5e9' : flash.type === 'error' ? '#fce4ec' : '#fff3e0' %>;color:<%= flash.type === 'success' ? '#2e7d32' : flash.type === 'error' ? '#c62828' : '#e65100' %>;">
+      <i class="fas fa-<%= flash.type === 'success' ? 'check-circle' : flash.type === 'error' ? 'exclamation-circle' : 'info-circle' %>"></i>
+      <%= flash.message %>
+    </div>
+  <% } %>
+
+  <!-- Loading state -->
+  <% if (loading) { %>
+    <div class="spinner"></div>
+  <% } else { %>
+
+  <!-- Stats cards -->
+  <% if (stats.totalOrders !== undefined) { %>
+    <div class="orders-stats">
+      <div class="stat-card primary">
+        <div class="stat-value"><%= stats.totalOrders || 0 %></div>
+        <div class="stat-label">Total comenzi</div>
+      </div>
+      <div class="stat-card success">
+        <div class="stat-value"><%= stats.completedOrders || 0 %></div>
+        <div class="stat-label">Finalizate</div>
+      </div>
+      <div class="stat-card warning">
+        <div class="stat-value"><%= stats.activeOrders || 0 %></div>
+        <div class="stat-label">În curs</div>
+      </div>
+      <div class="stat-card info">
+        <div class="stat-value"><%= stats.totalSpent ? Number(stats.totalSpent).toFixed(0) + ' lei' : '0 lei' %></div>
+        <div class="stat-label">Total cheltuit</div>
+      </div>
+    </div>
+  <% } %>
+
+  <!-- Filter tabs -->
+  <div class="orders-filter-tabs">
+    <a href="?filter=all" class="orders-filter-tab <%= (!locals.currentFilter || currentFilter === 'all') ? 'active' : '' %>">
+      <i class="fas fa-list"></i> Toate
+      <span class="count"><%= orders.length %></span>
+    </a>
+    <a href="?filter=active" class="orders-filter-tab <%= currentFilter === 'active' ? 'active' : '' %>">
+      <i class="fas fa-bolt"></i> Active
+      <span class="count"><%= (orders.filter(function(o) { return o.status !== 'achitată' && o.status !== 'anulată' && o.status !== 'livrată'; })).length %></span>
+    </a>
+    <a href="?filter=completed" class="orders-filter-tab <%= currentFilter === 'completed' ? 'active' : '' %>">
+      <i class="fas fa-check-circle"></i> Finalizate
+      <span class="count"><%= (orders.filter(function(o) { return o.status === 'achitată' || o.status === 'livrată'; })).length %></span>
+    </a>
+    <a href="?filter=cancelled" class="orders-filter-tab <%= currentFilter === 'cancelled' ? 'active' : '' %>">
+      <i class="fas fa-ban"></i> Anulate
+      <span class="count"><%= (orders.filter(function(o) { return o.status === 'anulată'; })).length %></span>
+    </a>
+  </div>
+
+  <!-- Search -->
+  <div class="orders-search">
+    <i class="fas fa-search"></i>
+    <input type="text" id="orderSearchInput" placeholder="Caută după restaurant, articol sau ID..." value="<%= locals.searchQuery || '' %>" onkeyup="handleOrderSearch(event)" />
+  </div>
+
+  <!-- Orders list -->
+  <% if (orders.length === 0) { %>
+    <div class="orders-empty">
+      <i class="fas fa-receipt"></i>
+      <h3>Nicio comandă încă</h3>
+      <p>Nu ai plasat încă nicio comandă. Descoperă restaurantele noastre și plasează prima ta comandă!</p>
+      <a href="/customer/restaurants" class="btn btn-primary">
+        <i class="fas fa-store"></i> Vezi restaurante
+      </a>
+    </div>
+  <% } else { %>
+    <div id="ordersList">
+      <% orders.forEach(function(order, index) { %>
+      <%
+        var statusClass = order.status ? order.status.replace(/ /g, '-') : 'pending';
+        var iconClass = 'active';
+        var iconName = 'receipt';
+        if (order.status === 'achitată' || order.status === 'livrată') {
+          iconClass = 'completed';
+          iconName = 'check-circle';
+        } else if (order.status === 'anulată') {
+          iconClass = 'cancelled';
+          iconName = 'ban';
+        } else if (order.status === 'deschisă') {
+          iconName = 'circle';
+        } else if (order.status === 'în preparare') {
+          iconName = 'spinner';
+        } else if (order.status === 'finalizată') {
+          iconName = 'check';
+        }
+        var restaurantName = order.restaurantId && order.restaurantId.name ? order.restaurantId.name : (order.restaurantName || 'Restaurant');
+        var orderTotal = order.total || 0;
+        var orderDate = order.createdAt || order.date || new Date().toISOString();
+      %>
+        <div class="order-card" data-order-id="<%= order._id %>" data-status="<%= order.status || '' %>" onclick="toggleOrderDetail('<%= order._id %>')">
+          <div class="card-top">
+            <div class="order-icon <%= iconClass %>">
+              <i class="fas fa-<%= iconName %>"></i>
+            </div>
+            <div class="order-info">
+              <div class="order-title">
+                <%= restaurantName %>
+                <span class="order-status-badge <%= statusClass %>">
+                  <% if (order.status === 'deschisă') { %><i class="fas fa-circle" style="font-size:8px;"></i><% } %>
+                  <% if (order.status === 'în preparare') { %><i class="fas fa-spinner"></i><% } %>
+                  <% if (order.status === 'finalizată') { %><i class="fas fa-check"></i><% } %>
+                  <% if (order.status === 'livrată' || order.status === 'achitată') { %><i class="fas fa-check-circle"></i><% } %>
+                  <% if (order.status === 'anulată') { %><i class="fas fa-ban"></i><% } %>
+                  <%= order.status ? order.status.charAt(0).toUpperCase() + order.status.slice(1) : 'În așteptare' %>
+                </span>
+              </div>
+              <div class="order-meta">
+                <span><i class="far fa-calendar-alt"></i> <%= formatDate(orderDate) %></span>
+                <% if (order.articole && order.articole.length > 0) { %>
+                  <span><i class="fas fa-utensils"></i> <%= order.articole.length %> articole</span>
+                <% } %>
+                <% if (order.masa > 0) { %>
+                  <span><i class="fas fa-chair"></i> Masa <%= order.masa %></span>
+                <% } %>
+                <% if (order._id) { %>
+                  <span style="font-family:monospace;font-size:11px;color:var(--color-text-muted);">#<%= order._id.substring(0, 8) %></span>
+                <% } %>
+              </div>
+            </div>
+            <div class="order-amount"><%= formatCurrency(orderTotal) %></div>
+            <div class="order-actions">
+              <button class="btn-icon" onclick="event.stopPropagation(); viewOrderDetailModal('<%= order._id %>')" title="Vezi detalii">
+                <i class="fas fa-eye"></i>
+              </button>
+              <% if (order.status !== 'anulată' && order.status !== 'achitată') { %>
+                <button class="btn-icon" onclick="event.stopPropagation(); repeatOrder('<%= order._id %>')" title="Comandă din nou">
+                  <i class="fas fa-redo"></i>
+                </button>
+                <% if (order.status === 'deschisă') { %>
+                  <button class="btn-icon" onclick="event.stopPropagation(); cancelCustomerOrder('<%= order._id %>')" title="Anulează comanda" style="color:var(--color-danger);">
+                    <i class="fas fa-times"></i>
+                  </button>
+                <% } %>
+              <% } else { %>
+                <button class="btn-icon" onclick="event.stopPropagation(); repeatOrder('<%= order._id %>')" title="Comandă din nou">
+                  <i class="fas fa-redo"></i>
+                </button>
+              <% } %>
+            </div>
+          </div>
+
+          <!-- Expandable detail -->
+          <div class="card-detail" id="detail-<%= order._id %>">
+            <div class="detail-grid">
+              <div class="detail-item">
+                <label>Restaurant</label>
+                <div class="value"><i class="fas fa-store"></i> <%= restaurantName %></div>
+              </div>
+              <div class="detail-item">
+                <label>Status</label>
+                <div class="value">
+                  <span class="order-status-badge <%= statusClass %>"><%= order.status || 'În așteptare' %></span>
+                </div>
+              </div>
+              <div class="detail-item">
+                <label>Data plasării</label>
+                <div class="value"><i class="far fa-clock"></i> <%= formatDate(orderDate) %></div>
+              </div>
+              <div class="detail-item">
+                <label>Total</label>
+                <div class="value" style="font-weight:700;"><%= formatCurrency(orderTotal) %></div>
+              </div>
+              <% if (order.masa > 0) { %>
+              <div class="detail-item">
+                <label>Masă</label>
+                <div class="value"><i class="fas fa-chair"></i> Masa <%= order.masa %></div>
+              </div>
+              <% } %>
+              <% if (order.notite) { %>
+              <div class="detail-item">
+                <label>Notițe</label>
+                <div class="value"><%= order.notite %></div>
+              </div>
+              <% } %>
+            </div>
+
+            <% if (order.articole && order.articole.length > 0) { %>
+            <table class="items-table">
+              <tr><th>Articol</th><th>Cant.</th><th>Preț</th><th>Total</th></tr>
+              <% order.articole.forEach(function(item) { %>
+                <tr>
+                  <td><%= item.nume || item.name || 'Articol' %></td>
+                  <td><%= item.cantitate || item.quantity || 1 %></td>
+                  <td><%= formatCurrency(item.pret || item.price || 0) %></td>
+                  <td style="font-weight:600;"><%= formatCurrency((item.pret || item.price || 0) * (item.cantitate || item.quantity || 1)) %></td>
+                </tr>
+              <% }); %>
+              <% if (order.tipLivrare || order.adresaLivrare) { %>
+                <tr>
+                  <td colspan="3" style="font-size:12px;color:var(--color-text-muted);">
+                    <i class="fas fa-truck"></i> <%= order.tipLivrare === 'curier' ? 'Livrare la domiciliu' : 'Ridicare din restaurant' %>
+                    <% if (order.adresaLivrare) { %>: <%= order.adresaLivrare %><% } %>
+                  </td>
+                  <td></td>
+                </tr>
+              <% } %>
+            </table>
+            <% } %>
+
+            <div class="detail-actions">
+              <a href="/customer/orders/<%= order._id %>" class="btn btn-primary btn-sm">
+                <i class="fas fa-eye"></i> Detalii complete
+              </a>
+              <button class="btn btn-secondary btn-sm" onclick="repeatOrder('<%= order._id %>')">
+                <i class="fas fa-redo"></i> Comandă din nou
+              </button>
+              <% if (order.status !== 'anulată' && order.status !== 'achitată' && order.status !== 'livrată') { %>
+                <button class="btn btn-danger btn-sm" onclick="cancelCustomerOrder('<%= order._id %>')">
+                  <i class="fas fa-ban"></i> Anulează comanda
+                </button>
+              <% } %>
+            </div>
+          </div>
+        </div>
+      <% }); %>
+    </div>
+
+    <!-- Pagination -->
+    <% if (locals.totalPages && totalPages > 1) { %>
+      <div class="orders-pagination">
+        <button onclick="changeOrdersPage(-1)" <%= !locals.hasPrevPage ? 'disabled' : '' %>>
+          <i class="fas fa-chevron-left"></i> Anterior
+        </button>
+        <span class="page-info">Pagina <%= locals.currentPage || 1 %> din <%= totalPages %></span>
+        <button onclick="changeOrdersPage(1)" <%= !locals.hasNextPage ? 'disabled' : '' %>>
+          Următor <i class="fas fa-chevron-right"></i>
+        </button>
+      </div>
+    <% } %>
+  <% } %>
+
+  <% } /* end loading else */ %>
+</div>
+
+<!-- ============================================================
+     ORDER DETAIL MODAL
+     ============================================================ -->
+<div class="modal-overlay" id="orderDetailModal" style="display:none;">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-header">
+      <h2><i class="fas fa-info-circle"></i> Detalii comandă</h2>
+      <button class="modal-close" onclick="closeOrderDetailModal()">&times;</button>
+    </div>
+    <div class="modal-body" id="orderDetailBody">
+      <div class="spinner"></div>
+    </div>
+    <div class="modal-footer" style="padding-top:16px;border-top:1px solid var(--color-border);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-secondary" onclick="closeOrderDetailModal()">Închide</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCRIPTS
+     ============================================================ -->
+<script>
+  (function() {
+    'use strict';
+
+    // ============================================================
+    // State
+    // ============================================================
+    var customerId = '<%= customer._id || "" %>';
+    var tenantId = '<%= customer.tenantId || "" %>';
+    var currentOrderId = null;
+
+    // ============================================================
+    // Toggle order card detail
+    // ============================================================
+    window.toggleOrderDetail = function(orderId) {
+      var detail = document.getElementById('detail-' + orderId);
+      if (detail) {
+        detail.classList.toggle('open');
+      }
+    };
+
+    // ============================================================
+    // View order detail modal
+    // ============================================================
+    window.viewOrderDetailModal = async function(orderId) {
+      currentOrderId = orderId;
+      var modal = document.getElementById('orderDetailModal');
+      var body = document.getElementById('orderDetailBody');
+      if (!modal || !body) return;
+
+      modal.style.display = 'flex';
+      body.innerHTML = '<div class="spinner"></div>';
+
+      try {
+        var data = await apiFetch('/api/orders/' + orderId + '?tenantId=' + tenantId);
+        if (data && data.success && data.data) {
+          var order = data.data.order || data.data;
+          renderOrderDetail(order, body);
+        } else {
+          body.innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-triangle" style="color:var(--color-warning);"></i><h3>Comanda nu a fost găsită</h3><p>Detaliile comenzii nu sunt disponibile.</p></div>';
+        }
+      } catch (err) {
+        body.innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-triangle" style="color:var(--color-danger);"></i><h3>Eroare</h3><p>' + escapeHtml(err.message) + '</p></div>';
+      }
+    };
+
+    // ============================================================
+    // Render order detail inside modal
+    // ============================================================
+    function renderOrderDetail(order, container) {
+      if (!order || !container) return;
+
+      var status = order.status || 'pending';
+      var restaurantName = order.restaurantId && order.restaurantId.name ? order.restaurantId.name : (order.restaurantName || 'Restaurant');
+      var items = order.articole || order.items || [];
+      var total = order.total || 0;
+      var dateStr = order.createdAt || order.date || '';
+      var formattedDate = dateStr ? formatDate(dateStr) : '—';
+
+      var html = '<div class="detail-grid" style="grid-template-columns:1fr 1fr;gap:12px;">' +
+        '<div class="detail-item"><label>Restaurant</label><div class="value"><i class="fas fa-store"></i> ' + escapeHtml(restaurantName) + '</div></div>' +
+        '<div class="detail-item"><label>Status</label><div class="value"><span class="order-status-badge ' + status.replace(/ /g, '-') + '">' + escapeHtml(status) + '</span></div></div>' +
+        '<div class="detail-item"><label>Data</label><div class="value"><i class="far fa-clock"></i> ' + formattedDate + '</div></div>' +
+        '<div class="detail-item"><label>Total</label><div class="value" style="font-weight:700;font-size:18px;">' + formatCurrency(total) + '</div></div>';
+
+      if (order.masa && order.masa > 0) {
+        html += '<div class="detail-item"><label>Masă</label><div class="value"><i class="fas fa-chair"></i> Masa ' + order.masa + '</div></div>';
+      }
+
+      if (order.notite) {
+        html += '<div class="detail-item" style="grid-column:1/-1;"><label>Notițe</label><div class="value">' + escapeHtml(order.notite) + '</div></div>';
+      }
+
+      html += '</div>';
+
+      if (items && items.length > 0) {
+        html += '<table class="items-table" style="margin-top:14px;"><tr><th>Articol</th><th>Cant.</th><th>Preț</th><th>Total</th></tr>';
+        items.forEach(function(item) {
+          var nume = item.nume || item.name || 'Articol';
+          var cantitate = item.cantitate || item.quantity || 1;
+          var pret = item.pret || item.price || 0;
+          html += '<tr><td>' + escapeHtml(nume) + '</td><td>' + cantitate + '</td><td>' + formatCurrency(pret) + '</td><td style="font-weight:600;">' + formatCurrency(pret * cantitate) + '</td></tr>';
+        });
+        html += '</table>';
+      }
+
+      if (order.tipLivrare) {
+        html += '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--color-border);font-size:13px;color:var(--color-text-muted);">' +
+          '<i class="fas fa-truck"></i> ' + (order.tipLivrare ===

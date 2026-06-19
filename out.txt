@@ -1,0 +1,940 @@
+'use strict';
+
+// ---------------------------------------------------------------------------
+// Model Reservation - GastroHub
+// Definirea structurii, valid«rilor ?i opera?iilor CRUD pentru rezerv«ri.
+// Suport« rezerv«ri pentru restaurante (mese) ?i hoteluri (camere cu check-in/check-out).
+// CÉmpuri suportate: tip, tenantId, restaurantId, hotelId, mas«, camer«,
+// numePersoan«, telefon, email, dat«, or«, num«rPersoane, status, note,
+// checkInData, checkOutData, guestId, sumarFacturare
+// ---------------------------------------------------------------------------
+
+const { restaurants } = require('../config/db');
+const { AppError } = require('../middleware/errorHandler');
+
+// ---------------------------------------------------------------------------
+// Tipuri de rezervare valide
+// ---------------------------------------------------------------------------
+
+const VALID_RESERVATION_TYPES = ['restaurant', 'hotel'];
+
+// ---------------------------------------------------------------------------
+// Statusuri valide pentru o rezervare
+// ---------------------------------------------------------------------------
+
+const VALID_RESERVATION_STATUSES = [
+  'confirmat«',
+  'ån a?teptare',
+  'anulat«',
+  'finalizat«',
+  'neprezentat',
+  'ån curs',
+  'check-in',
+  'check-out',
+];
+
+// ---------------------------------------------------------------------------
+// Statusuri valide pentru facturare
+// ---------------------------------------------------------------------------
+
+const VALID_BILLING_STATUSES = [
+  'nefacturat',
+  'facturat par?ial',
+  'facturat integral',
+  'achitat',
+  'anulat',
+];
+
+// ---------------------------------------------------------------------------
+// Func?ii de validare
+// ---------------------------------------------------------------------------
+
+/**
+ * Verific« dac« un ?ir nu este gol ?i are lungimea åntre limite.
+ * @param {*} val - Valoarea de verificat
+ * @param {number} [min=1] - Lungimea minim«
+ * @param {number} [max=255] - Lungimea maxim«
+ * @returns {boolean}
+ */
+function isValidString(val, min = 1, max = 255) {
+  return typeof val === 'string' && val.trim().length >= min && val.trim().length <= max;
+}
+
+/**
+ * Verific« dac« o valoare este un num«r åntreg pozitiv.
+ * @param {*} val
+ * @returns {boolean}
+ */
+function isValidPositiveInt(val) {
+  return Number.isInteger(val) && val >= 0;
+}
+
+/**
+ * Verific« dac« un tip de rezervare este valid.
+ * @param {string} tip
+ * @returns {boolean}
+ */
+function isValidReservationType(tip) {
+  return VALID_RESERVATION_TYPES.includes(tip);
+}
+
+/**
+ * Verific« dac« un status de rezervare este valid.
+ * @param {string} status
+ * @returns {boolean}
+ */
+function isValidReservationStatus(status) {
+  return VALID_RESERVATION_STATUSES.includes(status);
+}
+
+/**
+ * Verific« dac« un status de facturare este valid.
+ * @param {string} status
+ * @returns {boolean}
+ */
+function isValidBillingStatus(status) {
+  return VALID_BILLING_STATUSES.includes(status);
+}
+
+/**
+ * Verific« dac« un ?ir este o adres« de email valid« (format simplu).
+ * @param {string} email
+ * @returns {boolean}
+ */
+function isValidEmail(email) {
+  if (typeof email !== 'string') return false;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+/**
+ * Verific« dac« un ?ir este un num«r de telefon valid (format simplu romÉnesc/interna?ional).
+ * @param {string} phone
+ * @returns {boolean}
+ */
+function isValidPhone(phone) {
+  if (typeof phone !== 'string') return false;
+  const phoneRegex = /^[+]?[\d\s\-./()]{6,20}$/;
+  return phoneRegex.test(phone.trim());
+}
+
+/**
+ * Verific« dac« o dat« este un string ISO valid ?i reprezint« o dat« din viitor (sau azi).
+ * @param {string} dateStr - Data ån format ISO (YYYY-MM-DD)
+ * @returns {boolean}
+ */
+function isValidDate(dateStr) {
+  if (typeof dateStr !== 'string') return false;
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(dateStr)) return false;
+  const date = new Date(dateStr + 'T00:00:00.000Z');
+  if (isNaN(date.getTime())) return false;
+  return true;
+}
+
+/**
+ * Verific« dac« o or« este valid« (format HH:MM).
+ * @param {string} timeStr
+ * @returns {boolean}
+ */
+function isValidTime(timeStr) {
+  if (typeof timeStr !== 'string') return false;
+  const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+  return timeRegex.test(timeStr);
+}
+
+/**
+ * Verific« dac« un datetime ISO este valid.
+ * @param {string} datetimeStr
+ * @returns {boolean}
+ */
+function isValidISODateTime(datetimeStr) {
+  if (typeof datetimeStr !== 'string') return false;
+  const date = new Date(datetimeStr);
+  return !isNaN(date.getTime()) && date.toISOString() === datetimeStr;
+}
+
+/**
+ * Verific« dac« num«rul de persoane este valid (åntreg åntre 1 ?i 999).
+ * @param {*} val
+ * @returns {boolean}
+ */
+function isValidNumberOfPersons(val) {
+  return Number.isInteger(val) && val >= 1 && val <= 999;
+}
+
+/**
+ * Verific« dac« o valoare este un num«r pozitiv (inclusiv 0).
+ * @param {*} val
+ * @returns {boolean}
+ */
+function isValidPositiveNumber(val) {
+  return typeof val === 'number' && !isNaN(val) && val >= 0;
+}
+
+/**
+ * Verific« dac« check-out este dup« check-in.
+ * @param {string} checkIn - Data check-in (YYYY-MM-DD)
+ * @param {string} checkOut - Data check-out (YYYY-MM-DD)
+ * @returns {boolean}
+ */
+function isValidDateRange(checkIn, checkOut) {
+  if (!isValidDate(checkIn) || !isValidDate(checkOut)) return false;
+  return new Date(checkOut) > new Date(checkIn);
+}
+
+// ---------------------------------------------------------------------------
+// Func?ii de ini?ializare a colec?iei per-tenant
+// ---------------------------------------------------------------------------
+
+/**
+ * Ob?ine colec?ia NeDB pentru rezerv«rile unui tenant.
+ * Folose?te baza de date per-tenant din config/tenant.js.
+ * @param {string} tenantId
+ * @returns {Datastore}
+ */
+function getReservationsDb(tenantId) {
+  const { getTenantDb } = require('../config/tenant');
+  return getTenantDb(tenantId);
+}
+
+// ---------------------------------------------------------------------------
+// Opera?ii CRUD - Reservations
+// ---------------------------------------------------------------------------
+
+/**
+ * Creeaz« o rezervare nou«.
+ *
+ * @param {Object} reservationData - Datele rezerv«rii
+ * @param {string} reservationData.tip - Tipul rezerv«rii ('restaurant' | 'hotel') (obligatoriu)
+ * @param {string} reservationData.tenantId - ID-ul tenant-ului (obligatoriu)
+ * @param {string} [reservationData.restaurantId] - ID-ul restaurantului (obligatoriu pentru tip='restaurant')
+ * @param {string} [reservationData.hotelId] - ID-ul hotelului (obligatoriu pentru tip='hotel')
+ * @param {number} [reservationData.masa] - Num«rul mesei (pentru restaurante)
+ * @param {string} [reservationData.camera] - Identificatorul camerei (pentru hoteluri)
+ * @param {string} reservationData.numePersoana - Numele persoanei care rezerv« (obligatoriu)
+ * @param {string} [reservationData.telefon] - Num«rul de telefon
+ * @param {string} [reservationData.email] - Adresa de email
+ * @param {string} reservationData.data - Data rezerv«rii (format YYYY-MM-DD) (obligatoriu)
+ * @param {string} [reservationData.ora] - Ora rezerv«rii (format HH:MM)
+ * @param {number} reservationData.numarPersoane - Num«rul de persoane (obligatoriu)
+ * @param {string} [reservationData.status='confirmat«'] - Statusul rezerv«rii
+ * @param {string} [reservationData.note=''] - Note adi?ionale
+ * @param {string} [reservationData.checkInData] - Data check-in (pentru hoteluri, format YYYY-MM-DD)
+ * @param {string} [reservationData.checkOutData] - Data check-out (pentru hoteluri, format YYYY-MM-DD)
+ * @param {string} [reservationData.guestId] - ID-ul guest-ului (pentru hoteluri)
+ * @param {Object} [reservationData.sumarFacturare] - Sumar facturare
+ * @param {number} [reservationData.sumarFacturare.totalBrut] - Total brut
+ * @param {number} [reservationData.sumarFacturare.totalTVA] - Total TVA
+ * @param {number} [reservationData.sumarFacturare.totalNet] - Total net de plat«
+ * @param {string} [reservationData.sumarFacturare.moneda='RON'] - Moneda
+ * @param {string} [reservationData.sumarFacturare.statusFacturare='nefacturat'] - Status facturare
+ * @param {Array} [reservationData.sumarFacturare.elementeFacturare] - Elemente facturare
+ * @returns {Promise<Object>} Documentul rezerv«rii creat
+ * @throws {AppError} Dac« validarea e?ueaz«
+ */
+function createReservation(reservationData) {
+  return new Promise((resolve, reject) => {
+    // Validare date de baz«
+    if (!reservationData || typeof reservationData !== 'object') {
+      return reject(new AppError('Datele rezerv«rii sunt invalide.', 400, 'INVALID_RESERVATION_DATA'));
+    }
+
+    const {
+      tip,
+      tenantId,
+      restaurantId,
+      hotelId,
+      masa,
+      camera,
+      numePersoana,
+      telefon,
+      email,
+      data,
+      ora,
+      numarPersoane,
+      status,
+      note,
+      checkInData,
+      checkOutData,
+      guestId,
+      sumarFacturare,
+    } = reservationData;
+
+    // -----------------------------------------------------------------------
+    // Valid«ri individuale
+    // -----------------------------------------------------------------------
+
+    // Validare tenantId
+    if (!tenantId) {
+      return reject(new AppError(
+        'ID-ul tenant-ului este obligatoriu.',
+        400,
+        'MISSING_TENANT_ID'
+      ));
+    }
+
+    // Validare tip
+    if (!tip || !isValidReservationType(tip)) {
+      return reject(new AppError(
+        `Tipul rezerv«rii trebuie s« fie unul dintre: ${VALID_RESERVATION_TYPES.join(', ')}.`,
+        400,
+        'INVALID_RESERVATION_TYPE'
+      ));
+    }
+
+    // Validare nume persoan«
+    if (!numePersoana || !isValidString(numePersoana, 2, 200)) {
+      return reject(new AppError(
+        'Numele persoanei trebuie s« aib« åntre 2 ?i 200 de caractere.',
+        400,
+        'INVALID_PERSON_NAME'
+      ));
+    }
+
+    // Validare telefon (op?ional)
+    if (telefon !== undefined && telefon !== null && telefon !== '') {
+      if (!isValidPhone(telefon)) {
+        return reject(new AppError(
+          'Num«rul de telefon nu este valid.',
+          400,
+          'INVALID_PHONE'
+        ));
+      }
+    }
+
+    // Validare email (op?ional)
+    if (email !== undefined && email !== null && email !== '') {
+      if (!isValidEmail(email)) {
+        return reject(new AppError(
+          'Adresa de email nu este valid«.',
+          400,
+          'INVALID_EMAIL'
+        ));
+      }
+    }
+
+    // Validare dat«
+    if (!data || !isValidDate(data)) {
+      return reject(new AppError(
+        'Data rezerv«rii trebuie s« fie o dat« valid« (format YYYY-MM-DD).',
+        400,
+        'INVALID_DATE'
+      ));
+    }
+
+    // Validare or« (op?ional)
+    if (ora !== undefined && ora !== null && ora !== '') {
+      if (!isValidTime(ora)) {
+        return reject(new AppError(
+          'Ora rezerv«rii trebuie s« fie ån format HH:MM (24h).',
+          400,
+          'INVALID_TIME'
+        ));
+      }
+    }
+
+    // Validare num«r persoane
+    if (numarPersoane === undefined || numarPersoane === null || !isValidNumberOfPersons(numarPersoane)) {
+      return reject(new AppError(
+        'Num«rul de persoane trebuie s« fie un num«r åntreg åntre 1 ?i 999.',
+        400,
+        'INVALID_PERSON_COUNT'
+      ));
+    }
+
+    // Validare status (op?ional)
+    const finalStatus = status || 'confirmat«';
+    if (!isValidReservationStatus(finalStatus)) {
+      return reject(new AppError(
+        `Statusul "${finalStatus}" nu este valid. Statusuri permise: ${VALID_RESERVATION_STATUSES.join(', ')}.`,
+        400,
+        'INVALID_RESERVATION_STATUS'
+      ));
+    }
+
+    // Validare note (op?ional)
+    const finalNote = note !== undefined && note !== null ? String(note) : '';
+    if (finalNote.length > 2000) {
+      return reject(new AppError(
+        'Notele pot avea maximum 2000 de caractere.',
+        400,
+        'INVALID_NOTES'
+      ));
+    }
+
+    // -----------------------------------------------------------------------
+    // Valid«ri specifice tipului hotel
+    // -----------------------------------------------------------------------
+
+    if (tip === 'hotel') {
+      // checkInData ?i checkOutData
+      if (checkInData !== undefined && checkInData !== null && checkInData !== '') {
+        if (!isValidDate(checkInData)) {
+          return reject(new AppError(
+            'Data de check-in trebuie s« fie o dat« valid« (format YYYY-MM-DD).',
+            400,
+            'INVALID_CHECKIN_DATE'
+          ));
+        }
+      }
+
+      if (checkOutData !== undefined && checkOutData !== null && checkOutData !== '') {
+        if (!isValidDate(checkOutData)) {
+          return reject(new AppError(
+            'Data de check-out trebuie s« fie o dat« valid« (format YYYY-MM-DD).',
+            400,
+            'INVALID_CHECKOUT_DATE'
+          ));
+        }
+      }
+
+      // Dac« avem ambele date, valid«m c« check-out este dup« check-in
+      if (checkInData && checkOutData) {
+        if (!isValidDateRange(checkInData, checkOutData)) {
+          return reject(new AppError(
+            'Data de check-out trebuie s« fie dup« data de check-in.',
+            400,
+            'INVALID_DATE_RANGE'
+          ));
+        }
+      }
+
+      // Validare guestId (op?ional)
+      if (guestId !== undefined && guestId !== null && guestId !== '') {
+        if (typeof guestId !== 'string' || guestId.trim().length === 0) {
+          return reject(new AppError(
+            'ID-ul guest-ului este invalid.',
+            400,
+            'INVALID_GUEST_ID'
+          ));
+        }
+      }
+
+      // Validare sumarFacturare (op?ional)
+      if (sumarFacturare !== undefined && sumarFacturare !== null) {
+        if (typeof sumarFacturare !== 'object' || Array.isArray(sumarFacturare)) {
+          return reject(new AppError(
+            'Sumarul de facturare trebuie s« fie un obiect.',
+            400,
+            'INVALID_BILLING_SUMMARY'
+          ));
+        }
+
+        const {
+          totalBrut,
+          totalTVA,
+          totalNet,
+          moneda,
+          statusFacturare,
+          elementeFacturare,
+        } = sumarFacturare;
+
+        // Validare totalBrut
+        if (totalBrut !== undefined && totalBrut !== null) {
+          if (!isValidPositiveNumber(totalBrut)) {
+            return reject(new AppError(
+              'Totalul brut trebuie s« fie un num«r pozitiv.',
+              400,
+              'INVALID_BILLING_TOTAL_BRUT'
+            ));
+          }
+        }
+
+        // Validare totalTVA
+        if (totalTVA !== undefined && totalTVA !== null) {
+          if (!isValidPositiveNumber(totalTVA)) {
+            return reject(new AppError(
+              'Totalul TVA trebuie s« fie un num«r pozitiv.',
+              400,
+              'INVALID_BILLING_TOTAL_TVA'
+            ));
+          }
+        }
+
+        // Validare totalNet
+        if (totalNet !== undefined && totalNet !== null) {
+          if (!isValidPositiveNumber(totalNet)) {
+            return reject(new AppError(
+              'Totalul net trebuie s« fie un num«r pozitiv.',
+              400,
+              'INVALID_BILLING_TOTAL_NET'
+            ));
+          }
+        }
+
+        // Validare moned«
+        if (moneda !== undefined && moneda !== null) {
+          if (typeof moneda !== 'string' || moneda.trim().length !== 3) {
+            return reject(new AppError(
+              'Moneda trebuie s« fie un cod ISO de 3 caractere (ex: RON, EUR, USD).',
+              400,
+              'INVALID_BILLING_CURRENCY'
+            ));
+          }
+        }
+
+        // Validare statusFacturare
+        if (statusFacturare !== undefined && statusFacturare !== null) {
+          if (!isValidBillingStatus(statusFacturare)) {
+            return reject(new AppError(
+              `Statusul de facturare "${statusFacturare}" nu este valid. Statusuri permise: ${VALID_BILLING_STATUSES.join(', ')}.`,
+              400,
+              'INVALID_BILLING_STATUS'
+            ));
+          }
+        }
+
+        // Validare elementeFacturare
+        if (elementeFacturare !== undefined && elementeFacturare !== null) {
+          if (!Array.isArray(elementeFacturare)) {
+            return reject(new AppError(
+              'Elementele de facturare trebuie s« fie un array.',
+              400,
+              'INVALID_BILLING_ITEMS'
+            ));
+          }
+
+          for (let i = 0; i < elementeFacturare.length; i++) {
+            const item = elementeFacturare[i];
+            if (!item || typeof item !== 'object') {
+              return reject(new AppError(
+                `Elementul de facturare #${i + 1} este invalid.`,
+                400,
+                'INVALID_BILLING_ITEM'
+              ));
+            }
+
+            // denumire obligatorie
+            if (!item.denumire || !isValidString(item.denumire, 1, 500)) {
+              return reject(new AppError(
+                `Elementul de facturare #${i + 1} trebuie s« aib« o denumire valid«.`,
+                400,
+                'INVALID_BILLING_ITEM_NAME'
+              ));
+            }
+
+            // cantitate op?ional«
+            if (item.cantitate !== undefined && item.cantitate !== null) {
+              if (!isValidPositiveNumber(item.cantitate) || item.cantitate === 0) {
+                return reject(new AppError(
+                  `Cantitatea pentru elementul #${i + 1} trebuie s« fie un num«r pozitiv.`,
+                  400,
+                  'INVALID_BILLING_ITEM_QUANTITY'
+                ));
+              }
+            }
+
+            // pre? unitar op?ional
+            if (item.pretUnitar !== undefined && item.pretUnitar !== null) {
+              if (!isValidPositiveNumber(item.pretUnitar)) {
+                return reject(new AppError(
+                  `Pre?ul unitar pentru elementul #${i + 1} trebuie s« fie un num«r pozitiv.`,
+                  400,
+                  'INVALID_BILLING_ITEM_PRICE'
+                ));
+              }
+            }
+
+            // total op?ional
+            if (item.total !== undefined && item.total !== null) {
+              if (!isValidPositiveNumber(item.total)) {
+                return reject(new AppError(
+                  `Totalul pentru elementul #${i + 1} trebuie s« fie un num«r pozitiv.`,
+                  400,
+                  'INVALID_BILLING_ITEM_TOTAL'
+                ));
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Valid«ri specifice tipului
+    // -----------------------------------------------------------------------
+
+    if (tip === 'restaurant') {
+      // Pentru rezerv«ri la restaurant, restaurantId este obligatoriu
+      if (!restaurantId) {
+        return reject(new AppError(
+          'ID-ul restaurantului este obligatoriu pentru rezerv«rile de tip restaurant.',
+          400,
+          'MISSING_RESTAURANT_ID'
+        ));
+      }
+
+      // Validare mas« (op?ional«)
+      if (masa !== undefined && masa !== null && masa !== 0) {
+        if (!isValidPositiveInt(masa) || masa === 0) {
+          return reject(new AppError(
+            'Num«rul mesei trebuie s« fie un num«r åntreg pozitiv.',
+            400,
+            'INVALID_TABLE_NUMBER'
+          ));
+        }
+      }
+
+      // Verificare existen?« restaurant
+      restaurants.findOne({ _id: restaurantId, tenantId }, (findErr, restaurant) => {
+        if (findErr) {
+          return reject(new AppError(
+            `Eroare la verificarea restaurantului: ${findErr.message}`,
+            500,
+            'DB_QUERY_ERROR'
+          ));
+        }
+
+        if (!restaurant) {
+          return reject(new AppError(
+            'Restaurantul specificat nu exist« sau nu apar?ine acestui tenant.',
+            404,
+            'RESTAURANT_NOT_FOUND'
+          ));
+        }
+
+        // Dac« restaurantul are un num«r limitat de mese, verific«m c« masa exist«
+        if (masa !== undefined && masa !== null && masa !== 0) {
+          if (restaurant.tableCount && masa > restaurant.tableCount) {
+            return reject(new AppError(
+              `Masa #${masa} dep«?e?te num«rul total de mese (${restaurant.tableCount}) al restaurantului.`,
+              400,
+              'TABLE_EXCEEDS_COUNT'
+            ));
+          }
+        }
+
+        // Creare efectiv«
+        _insertReservation(resolve, reject, reservationData, tip, finalStatus, finalNote, tenantId);
+      });
+    } else if (tip === 'hotel') {
+      // Pentru rezerv«ri la hotel, hotelId este obligatoriu
+      if (!hotelId) {
+        return reject(new AppError(
+          'ID-ul hotelului este obligatoriu pentru rezerv«rile de tip hotel.',
+          400,
+          'MISSING_HOTEL_ID'
+        ));
+      }
+
+      // ◊ncerc«m s« verific«m existen?a hotelului prin hotelModel
+      try {
+        const { getHotelById } = require('./hotelModel');
+
+        getHotelById(hotelId)
+          .then((hotel) => {
+            if (!hotel) {
+              return reject(new AppError(
+                'Hotelul specificat nu exist«.',
+                404,
+                'HOTEL_NOT_FOUND'
+              ));
+            }
+
+            // Verific«m c« hotelul apar?ine tenantului corect
+            if (hotel.tenantId !== tenantId) {
+              return reject(new AppError(
+                'Hotelul specificat nu apar?ine acestui tenant.',
+                403,
+                'HOTEL_TENANT_MISMATCH'
+              ));
+            }
+
+            // Creare efectiv«
+            _insertReservation(resolve, reject, reservationData, tip, finalStatus, finalNote, tenantId);
+          })
+          .catch((err) => {
+            // Dac« getHotelById e disponibil dar d« eroare, åncerc«m oricum inserarea
+            _insertReservation(resolve, reject, reservationData, tip, finalStatus, finalNote, tenantId);
+          });
+      } catch (err) {
+        // Dac« hotelModel nu este disponibil, inser«m direct
+        _insertReservation(resolve, reject, reservationData, tip, finalStatus, finalNote, tenantId);
+      }
+    }
+  });
+}
+
+/**
+ * Func?ie intern« pentru inserarea efectiv« a rezerv«rii ån baza de date.
+ * @param {Function} resolve
+ * @param {Function} reject
+ * @param {Object} reservationData
+ * @param {string} tip
+ * @param {string} finalStatus
+ * @param {string} finalNote
+ * @param {string} tenantId
+ * @private
+ */
+function _insertReservation(resolve, reject, reservationData, tip, finalStatus, finalNote, tenantId) {
+  const {
+    restaurantId,
+    hotelId,
+    masa,
+    camera,
+    numePersoana,
+    telefon,
+    email,
+    data,
+    ora,
+    numarPersoane,
+    checkInData,
+    checkOutData,
+    guestId,
+    sumarFacturare,
+  } = reservationData;
+
+  const reservationDoc = {
+    tip,
+    tenantId,
+    restaurantId: tip === 'restaurant' ? restaurantId : null,
+    hotelId: tip === 'hotel' ? hotelId : null,
+    masa: tip === 'restaurant' && masa !== undefined && masa !== null ? masa : null,
+    camera: tip === 'hotel' && camera !== undefined && camera !== null ? camera : null,
+    numePersoana: numePersoana.trim(),
+    telefon: telefon || '',
+    email: email ? email.toLowerCase().trim() : '',
+    data,
+    ora: ora || '',
+    numarPersoane,
+    status: finalStatus,
+    note: finalNote,
+    // CÉmpuri specifice hotel
+    checkInData: tip === 'hotel' ? (checkInData || data) : null,
+    checkOutData: tip === 'hotel' ? (checkOutData || null) : null,
+    guestId: tip === 'hotel' ? (guestId || null) : null,
+    // Sumar facturare
+    sumarFacturare: tip === 'hotel' ? _buildBillingSummary(sumarFacturare) : null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  const reservationsDb = getReservationsDb(tenantId);
+  reservationsDb.insert(reservationDoc, (insertErr, newReservation) => {
+    if (insertErr) {
+      return reject(new AppError(
+        `Eroare la crearea rezerv«rii: ${insertErr.message}`,
+        500,
+        'DB_INSERT_ERROR'
+      ));
+    }
+
+    resolve(newReservation);
+  });
+}
+
+/**
+ * Construie?te obiectul sumar facturare cu valori implicite.
+ * @param {Object} [sumarFacturare]
+ * @returns {Object}
+ * @private
+ */
+function _buildBillingSummary(sumarFacturare) {
+  const defaultSummary = {
+    totalBrut: 0,
+    totalTVA: 0,
+    totalNet: 0,
+    moneda: 'RON',
+    statusFacturare: 'nefacturat',
+    elementeFacturare: [],
+    dataEmiterii: null,
+    dataScadentei: null,
+    numarFactura: null,
+    observatii: '',
+  };
+
+  if (!sumarFacturare || typeof sumarFacturare !== 'object') {
+    return defaultSummary;
+  }
+
+  return {
+    totalBrut: sumarFacturare.totalBrut !== undefined && sumarFacturare.totalBrut !== null
+      ? Math.round(sumarFacturare.totalBrut * 100) / 100 : defaultSummary.totalBrut,
+    totalTVA: sumarFacturare.totalTVA !== undefined && sumarFacturare.totalTVA !== null
+      ? Math.round(sumarFacturare.totalTVA * 100) / 100 : defaultSummary.totalTVA,
+    totalNet: sumarFacturare.totalNet !== undefined && sumarFacturare.totalNet !== null
+      ? Math.round(sumarFacturare.totalNet * 100) / 100 : defaultSummary.totalNet,
+    moneda: sumarFacturare.moneda || defaultSummary.moneda,
+    statusFacturare: sumarFacturare.statusFacturare || defaultSummary.statusFacturare,
+    elementeFacturare: Array.isArray(sumarFacturare.elementeFacturare)
+      ? sumarFacturare.elementeFacturare.map((item) => ({
+          denumire: item.denumire || '',
+          cantitate: item.cantitate || 1,
+          pretUnitar: item.pretUnitar || 0,
+          total: item.total || 0,
+          cotaTVA: item.cotaTVA || 19,
+        }))
+      : defaultSummary.elementeFacturare,
+    dataEmiterii: sumarFacturare.dataEmiterii || defaultSummary.dataEmiterii,
+    dataScadentei: sumarFacturare.dataScadentei || defaultSummary.dataScadentei,
+    numarFactura: sumarFacturare.numarFactura || defaultSummary.numarFactura,
+    observatii: sumarFacturare.observatii || defaultSummary.observatii,
+  };
+}
+
+/**
+ * G«se?te o rezervare dup« ID.
+ * @param {string} id - ID-ul NeDB
+ * @param {string} tenantId - ID-ul tenant-ului
+ * @returns {Promise<Object|null>}
+ */
+function findReservationById(id, tenantId) {
+  return new Promise((resolve, reject) => {
+    if (!id) {
+      return reject(new AppError('ID-ul rezerv«rii este invalid.', 400, 'INVALID_RESERVATION_ID'));
+    }
+
+    if (!tenantId) {
+      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
+    }
+
+    const reservationsDb = getReservationsDb(tenantId);
+    reservationsDb.findOne({ _id: id }, (err, reservation) => {
+      if (err) {
+        return reject(new AppError(
+          `Eroare la c«utarea rezerv«rii: ${err.message}`,
+          500,
+          'DB_QUERY_ERROR'
+        ));
+      }
+      resolve(reservation || null);
+    });
+  });
+}
+
+/**
+ * G«se?te rezerv«ri dup« restaurant.
+ * @param {string} restaurantId - ID-ul restaurantului
+ * @param {string} tenantId - ID-ul tenant-ului
+ * @param {Object} [options={}] - Op?iuni (sort, limit, skip, status, data)
+ * @returns {Promise<Array>}
+ */
+function findReservationsByRestaurant(restaurantId, tenantId, options = {}) {
+  return new Promise((resolve, reject) => {
+    if (!restaurantId) {
+      return reject(new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID'));
+    }
+
+    if (!tenantId) {
+      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
+    }
+
+    const filter = { tip: 'restaurant', restaurantId };
+
+    // Filtrare op?ional« dup« status
+    if (options.status) {
+      if (!isValidReservationStatus(options.status)) {
+        return reject(new AppError(
+          `Statusul "${options.status}" nu este valid. Statusuri permise: ${VALID_RESERVATION_STATUSES.join(', ')}.`,
+          400,
+          'INVALID_RESERVATION_STATUS'
+        ));
+      }
+      filter.status = options.status;
+    }
+
+    // Filtrare op?ional« dup« dat«
+    if (options.data) {
+      if (!isValidDate(options.data)) {
+        return reject(new AppError(
+          'Data specificat« nu este valid« (format YYYY-MM-DD).',
+          400,
+          'INVALID_DATE'
+        ));
+      }
+      filter.data = options.data;
+    }
+
+    // Filtrare op?ional« dup« mas«
+    if (options.masa !== undefined && options.masa !== null) {
+      if (!isValidPositiveInt(options.masa) || options.masa === 0) {
+        return reject(new AppError(
+          'Num«rul mesei trebuie s« fie un num«r åntreg pozitiv.',
+          400,
+          'INVALID_TABLE_NUMBER'
+        ));
+      }
+      filter.masa = options.masa;
+    }
+
+    const reservationsDb = getReservationsDb(tenantId);
+    let query = reservationsDb.find(filter);
+
+    // Sortare
+    if (options.sort) {
+      query = query.sort(options.sort);
+    } else {
+      query = query.sort({ data: 1, ora: 1 });
+    }
+
+    // Limit
+    if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
+      query = query.limit(options.limit);
+    }
+
+    // Skip
+    if (options.skip && Number.isInteger(options.skip) && options.skip > 0) {
+      query = query.skip(options.skip);
+    }
+
+    query.exec((err, reservations) => {
+      if (err) {
+        return reject(new AppError(
+          `Eroare la c«utarea rezerv«rilor: ${err.message}`,
+          500,
+          'DB_QUERY_ERROR'
+        ));
+      }
+
+      resolve(reservations || []);
+    });
+  });
+}
+
+/**
+ * G«se?te rezerv«ri dup« hotel.
+ * @param {string} hotelId - ID-ul hotelului
+ * @param {string} tenantId - ID-ul tenant-ului
+ * @param {Object} [options={}] - Op?iuni (sort, limit, skip, status, data, checkInData, checkOutData)
+ * @returns {Promise<Array>}
+ */
+function findReservationsByHotel(hotelId, tenantId, options = {}) {
+  return new Promise((resolve, reject) => {
+    if (!hotelId) {
+      return reject(new AppError('ID-ul hotelului este invalid.', 400, 'INVALID_HOTEL_ID'));
+    }
+
+    if (!tenantId) {
+      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
+    }
+
+    const filter = { tip: 'hotel', hotelId };
+
+    // Filtrare op?ional« dup« status
+    if (options.status) {
+      if (!isValidReservationStatus(options.status)) {
+        return reject(new AppError(
+          `Statusul "${options.status}" nu este valid. Statusuri permise: ${VALID_RESERVATION_STATUSES.join(', ')}.`,
+          400,
+          'INVALID_RESERVATION_STATUS'
+        ));
+      }
+      filter.status = options.status;
+    }
+
+    // Filtrare op?ional« dup« dat« (data rezerv«rii)
+    if (options.data) {
+      if (!isValidDate(options.data)) {
+        return reject(new AppError(
+          'Data specificat« nu este valid« (format YYYY-MM-DD).',
+          400,
+          'INVALID_DATE'
+        ));
+      }
+      filter.data = options.data;
+    }
+
+    // Filtrare op?ional« dup« checkInData
+    if (options.checkInData) {
+      if (!

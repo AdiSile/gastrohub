@@ -1,0 +1,923 @@
+<%
+  // Hotel Inventory View – Gestionare inventar hotel
+  // Variabile locale: hotel, inventoryItems, lowStockItems, suppliers, categories, units,
+  //                   loading, currentCategory, currentSearch, currentSort, currentSortOrder,
+  //                   currentPage, totalPages, totalItems, showLowStock
+  const hotel = locals.hotel || null;
+  const inventoryItems = locals.inventoryItems || [];
+  const lowStockItems = locals.lowStockItems || [];
+  const suppliers = locals.suppliers || [];
+  const categories = locals.categories || ['lenjerie', 'articole de toaletă', 'curățenie', 'consumabile', 'alte'];
+  const units = locals.units || ['kg', 'g', 'l', 'ml', 'buc', 'pachet', 'cutie', 'sticlă', 'bax', 'set'];
+  const loading = locals.loading || false;
+  const currentCategory = locals.currentCategory || 'all';
+  const currentSearch = locals.currentSearch || '';
+  const currentSort = locals.currentSort || 'name';
+  const currentSortOrder = locals.currentSortOrder || 'asc';
+  const currentPage = locals.currentPage || 1;
+  const totalPages = locals.totalPages || 1;
+  const totalItems = locals.totalItems || 0;
+  const showLowStock = locals.showLowStock || false;
+%>
+
+<style>
+  /* ============================================================
+     HOTEL INVENTORY PAGE STYLES
+     ============================================================ */
+  .hinv-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .hinv-header h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .hinv-header h1 i {
+    color: #1abc9c;
+  }
+
+  .hinv-header .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--color-text-muted);
+    font-size: 13px;
+    flex-wrap: wrap;
+  }
+
+  .hinv-header .header-meta .hotel-name {
+    font-weight: 600;
+    color: #1abc9c;
+  }
+
+  .hinv-stats-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .hinv-stat-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: all var(--transition);
+  }
+
+  .hinv-stat-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+  }
+
+  .hinv-stat-card .stat-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .hinv-stat-card .stat-icon.teal { background: rgba(26, 188, 156, 0.1); color: #1abc9c; }
+  .hinv-stat-card .stat-icon.success { background: #e8f5e9; color: var(--color-success); }
+  .hinv-stat-card .stat-icon.warning { background: #fff8e1; color: var(--color-warning); }
+  .hinv-stat-card .stat-icon.danger { background: #fce4ec; color: var(--color-danger); }
+  .hinv-stat-card .stat-icon.info { background: #e3f2fd; color: var(--color-info); }
+
+  .hinv-stat-card .stat-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .hinv-stat-card .stat-body .stat-number {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--color-text);
+    line-height: 1.1;
+  }
+
+  .hinv-stat-card .stat-body .stat-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+  }
+
+  /* ============================================================
+     FILTERS & SEARCH
+     ============================================================ */
+  .hinv-filters {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    padding: 16px 20px;
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+  }
+
+  .hinv-filters .search-wrapper {
+    flex: 1;
+    min-width: 200px;
+    position: relative;
+  }
+
+  .hinv-filters .search-wrapper input {
+    width: 100%;
+    padding: 10px 14px 10px 40px;
+    font-size: 14px;
+    font-family: var(--font-family);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    transition: border-color var(--transition);
+  }
+
+  .hinv-filters .search-wrapper input:focus {
+    outline: none;
+    border-color: #1abc9c;
+    box-shadow: 0 0 0 3px rgba(26, 188, 156, 0.12);
+  }
+
+  .hinv-filters .search-wrapper i {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-text-muted);
+    font-size: 14px;
+  }
+
+  .hinv-filters select {
+    padding: 10px 32px 10px 12px;
+    font-size: 13px;
+    font-family: var(--font-family);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23636e72' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+
+  .hinv-filters .filter-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .hinv-filters .low-stock-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--color-text);
+    white-space: nowrap;
+  }
+
+  .hinv-filters .low-stock-toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--color-danger);
+    cursor: pointer;
+  }
+
+  /* ============================================================
+     TABLE
+     ============================================================ */
+  .hinv-table-wrapper {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--color-border);
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+
+  .hinv-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .hinv-table thead th {
+    padding: 12px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    background: var(--color-bg);
+    border-bottom: 2px solid var(--color-border);
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition: color var(--transition);
+  }
+
+  .hinv-table thead th:hover {
+    color: var(--color-text);
+  }
+
+  .hinv-table thead th.sorted {
+    color: #1abc9c;
+  }
+
+  .hinv-table thead th.sorted i {
+    margin-left: 4px;
+  }
+
+  .hinv-table tbody td {
+    padding: 14px 16px;
+    font-size: 14px;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
+  }
+
+  .hinv-table tbody tr {
+    transition: background var(--transition);
+  }
+
+  .hinv-table tbody tr:hover {
+    background: rgba(26, 188, 156, 0.03);
+  }
+
+  .hinv-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .hinv-table .item-name-cell {
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .hinv-table .item-name-cell .item-supplier {
+    display: block;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+  }
+
+  .hinv-table .item-category-cell {
+    font-size: 12px;
+  }
+
+  .hinv-table .item-category-cell .cat-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .hinv-table .item-category-cell .cat-badge.lenjerie {
+    background: #e0f2f1;
+    color: #00695c;
+  }
+
+  .hinv-table .item-category-cell .cat-badge.articole-de-toaletă,
+  .hinv-table .item-category-cell .cat-badge.articole-de-toaleta {
+    background: #f3e5f5;
+    color: #6a1b9a;
+  }
+
+  .hinv-table .item-category-cell .cat-badge.curățenie,
+  .hinv-table .item-category-cell .cat-badge.curatenie {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  .hinv-table .item-category-cell .cat-badge.consumabile {
+    background: #fff8e1;
+    color: #f57f17;
+  }
+
+  .hinv-table .item-category-cell .cat-badge.alte {
+    background: var(--color-bg);
+    color: var(--color-text-muted);
+  }
+
+  .hinv-table .item-unit-cell {
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+
+  .hinv-table .item-qty-cell {
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .hinv-table .item-qty-cell .qty-value {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 12px;
+    border-radius: 12px;
+    font-size: 14px;
+  }
+
+  .hinv-table .item-qty-cell .qty-value.ok {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  .hinv-table .item-qty-cell .qty-value.low {
+    background: #fff8e1;
+    color: #f57f17;
+  }
+
+  .hinv-table .item-qty-cell .qty-value.critical {
+    background: #fce4ec;
+    color: #c62828;
+    animation: pulse 1.5s ease infinite;
+  }
+
+  .hinv-table .item-threshold-cell {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    text-align: center;
+  }
+
+  .hinv-table .item-actions-cell {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .hinv-table .item-actions-cell button {
+    padding: 6px 10px;
+    font-size: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: all var(--transition);
+    color: var(--color-text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 4px;
+  }
+
+  .hinv-table .item-actions-cell button:hover {
+    background: var(--color-bg);
+    color: var(--color-text);
+  }
+
+  .hinv-table .item-actions-cell .btn-edit:hover {
+    color: var(--color-info);
+    border-color: var(--color-info);
+  }
+
+  .hinv-table .item-actions-cell .btn-adjust:hover {
+    color: #1abc9c;
+    border-color: #1abc9c;
+  }
+
+  .hinv-table .item-actions-cell .btn-delete:hover {
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+  }
+
+  /* ============================================================
+     PAGINATION
+     ============================================================ */
+  .hinv-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .hinv-pagination button {
+    padding: 8px 14px;
+    font-size: 13px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: all var(--transition);
+    color: var(--color-text);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .hinv-pagination button:hover:not(:disabled) {
+    border-color: #1abc9c;
+    color: #1abc9c;
+  }
+
+  .hinv-pagination button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .hinv-pagination button.active {
+    background: #1abc9c;
+    color: #fff;
+    border-color: #1abc9c;
+  }
+
+  .hinv-pagination .page-info {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    padding: 0 8px;
+  }
+
+  /* ============================================================
+     LOW STOCK ALERT BANNER
+     ============================================================ */
+  .h-low-stock-alert {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    border-radius: var(--radius-md);
+    margin-bottom: 20px;
+    font-size: 14px;
+    font-weight: 500;
+    background: #fce4ec;
+    color: #c62828;
+    border-left: 4px solid var(--color-danger);
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+
+  .h-low-stock-alert:hover {
+    box-shadow: var(--shadow-sm);
+  }
+
+  .h-low-stock-alert i {
+    font-size: 22px;
+  }
+
+  .h-low-stock-alert .alert-count {
+    margin-left: auto;
+    background: var(--color-danger);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 3px 14px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  .h-low-stock-alert.success {
+    background: #e8f5e9;
+    color: #2e7d32;
+    border-left-color: var(--color-success);
+  }
+
+  .h-low-stock-alert.success .alert-count {
+    background: var(--color-success);
+  }
+
+  /* ============================================================
+     EMPTY STATE
+     ============================================================ */
+  .h-empty-inv {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--color-text-muted);
+  }
+
+  .h-empty-inv i {
+    font-size: 52px;
+    opacity: 0.2;
+    margin-bottom: 16px;
+  }
+
+  .h-empty-inv h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--color-text);
+  }
+
+  .h-empty-inv p {
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+
+  /* ============================================================
+     QUICK REFERENCE LEGEND
+     ============================================================ */
+  .h-inv-legend {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+    padding: 12px 0;
+    flex-wrap: wrap;
+  }
+
+  .h-inv-legend .legend-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 4px;
+  }
+
+  .h-inv-legend .legend-dot.ok { background: var(--color-success); }
+  .h-inv-legend .legend-dot.low { background: var(--color-warning); }
+  .h-inv-legend .legend-dot.critical { background: var(--color-danger); }
+
+  /* ============================================================
+     RESPONSIVE
+     ============================================================ */
+  @media (max-width: 768px) {
+    .hinv-table thead {
+      display: none;
+    }
+
+    .hinv-table tbody tr {
+      display: block;
+      padding: 16px;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .hinv-table tbody td {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border: none;
+      font-size: 13px;
+    }
+
+    .hinv-table tbody td::before {
+      content: attr(data-label);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--color-text-muted);
+      min-width: 90px;
+    }
+
+    .hinv-table tbody td.item-actions-cell {
+      justify-content: flex-end;
+      padding-top: 10px;
+      border-top: 1px solid var(--color-border);
+      margin-top: 8px;
+    }
+
+    .hinv-filters {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .hinv-filters .search-wrapper {
+      min-width: 0;
+    }
+
+    .hinv-stats-bar {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .hinv-header h1 {
+      font-size: 20px;
+    }
+
+    .hinv-stats-bar {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* ============================================================
+     HOTEL SELECTOR OVERRIDE (inline mini-selector)
+     ============================================================ */
+  .h-hotel-selector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .h-hotel-selector select {
+    padding: 8px 32px 8px 12px;
+    font-size: 13px;
+    font-family: var(--font-family);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23636e72' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+</style>
+
+<!-- ============================================================
+     PAGE HEADER
+     ============================================================ -->
+<div class="hinv-header">
+  <div>
+    <h1>
+      <i class="fas fa-warehouse"></i>
+      Inventar Hotel
+    </h1>
+    <div class="header-meta">
+      <% if (hotel) { %>
+        <span class="hotel-name"><i class="fas fa-building"></i> <%= hotel.nume || hotel.name %></span>
+        <span class="text-muted">•</span>
+      <% } %>
+      <span>
+        <i class="fas fa-boxes"></i>
+        <%= totalItems %> produse
+      </span>
+      <% if (lowStockItems.length > 0) { %>
+        <span style="color:var(--color-danger);font-weight:600;">
+          <i class="fas fa-exclamation-triangle"></i>
+          <%= lowStockItems.length %> sub prag
+        </span>
+      <% } %>
+    </div>
+  </div>
+  <div class="hotel-actions-bar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <% if (locals.hotels && locals.hotels.length > 1) { %>
+      <div class="h-hotel-selector">
+        <i class="fas fa-hotel" style="color:#1abc9c;font-size:14px;"></i>
+        <select id="hotelSelect" onchange="switchHotel(this.value)">
+          <% locals.hotels.forEach(function(h) { %>
+            <option value="<%= h._id %>" <%= hotel && (hotel._id === h._id) ? 'selected' : '' %>>
+              <%= h.nume || h.name %>
+            </option>
+          <% }); %>
+        </select>
+      </div>
+    <% } %>
+    <button class="btn btn-primary btn-sm" onclick="openAddItemModal()" style="background:#1abc9c;border-color:#1abc9c;">
+      <i class="fas fa-plus"></i> Produs nou
+    </button>
+    <button class="btn btn-secondary btn-sm" onclick="loadInventory()">
+      <i class="fas fa-sync-alt"></i> Reîmprospătare
+    </button>
+    <button class="btn btn-secondary btn-sm" onclick="exportInventory()">
+      <i class="fas fa-download"></i> Exportă
+    </button>
+  </div>
+</div>
+
+<!-- ============================================================
+     LOADING
+     ============================================================ -->
+<% if (loading) { %>
+  <div class="spinner"></div>
+<% } else { %>
+
+<!-- ============================================================
+     ALERT
+     ============================================================ -->
+<% if (locals.alert) { %>
+  <div class="dashboard-alert <%= locals.alert.type || 'info' %>" style="margin-bottom:20px;">
+    <i class="fas fa-<%= locals.alert.type === 'warning' ? 'exclamation-triangle' : locals.alert.type === 'success' ? 'check-circle' : 'info-circle' %>"></i>
+    <%= locals.alert.message %>
+  </div>
+<% } %>
+
+<!-- ============================================================
+     LOW STOCK BANNER
+     ============================================================ -->
+<% if (lowStockItems.length > 0) { %>
+  <div class="h-low-stock-alert" onclick="showLowStockOnly()">
+    <i class="fas fa-exclamation-circle"></i>
+    <span><strong>Atenție!</strong> <%= lowStockItems.length %> produse au stocul sub pragul minim.</span>
+    <span class="alert-count"><%= lowStockItems.length %></span>
+  </div>
+<% } else { %>
+  <div class="h-low-stock-alert success" onclick="showLowStockOnly()">
+    <i class="fas fa-check-circle"></i>
+    <span>Inventarul este în parametri normali. Nu există produse sub pragul minim.</span>
+    <span class="alert-count">0</span>
+  </div>
+<% } %>
+
+<!-- ============================================================
+     STATS CARDS
+     ============================================================ -->
+<div class="hinv-stats-bar">
+  <div class="hinv-stat-card">
+    <div class="stat-icon teal"><i class="fas fa-box"></i></div>
+    <div class="stat-body">
+      <div class="stat-number"><%= totalItems %></div>
+      <div class="stat-label">Total produse</div>
+    </div>
+  </div>
+  <div class="hinv-stat-card">
+    <div class="stat-icon success"><i class="fas fa-check-circle"></i></div>
+    <div class="stat-body">
+      <div class="stat-number"><%= inventoryItems.filter(function(i) { return (i.quantity || 0) >= (i.minThreshold || 0); }).length %></div>
+      <div class="stat-label">Stoc optim</div>
+    </div>
+  </div>
+  <div class="hinv-stat-card">
+    <div class="stat-icon warning"><i class="fas fa-exclamation-triangle"></i></div>
+    <div class="stat-body">
+      <div class="stat-number"><%= lowStockItems.length %></div>
+      <div class="stat-label">Sub prag minim</div>
+    </div>
+  </div>
+  <div class="hinv-stat-card">
+    <div class="stat-icon info"><i class="fas fa-truck"></i></div>
+    <div class="stat-body">
+      <div class="stat-number"><%= suppliers.length %></div>
+      <div class="stat-label">Furnizori</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     FILTERS
+     ============================================================ -->
+<div class="hinv-filters">
+  <div class="search-wrapper">
+    <i class="fas fa-search"></i>
+    <input type="text" id="searchInput" placeholder="Caută produs după nume..." 
+           value="<%= currentSearch %>" onkeyup="debounceFilter()" />
+  </div>
+
+  <select id="categoryFilter" onchange="applyFilters()">
+    <option value="all" <%= currentCategory === 'all' ? 'selected' : '' %>>Toate categoriile</option>
+    <% categories.forEach(function(cat) { %>
+      <option value="<%= cat %>" <%= currentCategory === cat ? 'selected' : '' %>>
+        <%= cat.charAt(0).toUpperCase() + cat.slice(1) %>
+      </option>
+    <% }); %>
+  </select>
+
+  <select id="sortFilter" onchange="applyFilters()">
+    <option value="name" <%= currentSort === 'name' ? 'selected' : '' %>>Nume</option>
+    <option value="quantity" <%= currentSort === 'quantity' ? 'selected' : '' %>>Cantitate</option>
+    <option value="category" <%= currentSort === 'category' ? 'selected' : '' %>>Categorie</option>
+    <option value="lastUpdated" <%= currentSort === 'lastUpdated' ? 'selected' : '' %>>Ultima actualizare</option>
+  </select>
+
+  <select id="orderFilter" onchange="applyFilters()">
+    <option value="asc" <%= currentSortOrder === 'asc' ? 'selected' : '' %>>Ascendent</option>
+    <option value="desc" <%= currentSortOrder === 'desc' ? 'selected' : '' %>>Descendent</option>
+  </select>
+
+  <div class="filter-actions">
+    <label class="low-stock-toggle">
+      <input type="checkbox" id="lowStockOnly" <%= showLowStock ? 'checked' : '' %> onchange="applyFilters()" />
+      <i class="fas fa-exclamation-triangle" style="color:var(--color-warning);"></i> Doar stoc scăzut
+    </label>
+    <button class="btn btn-sm btn-secondary" onclick="resetFilters()" title="Resetează filtrele">
+      <i class="fas fa-undo"></i>
+    </button>
+  </div>
+</div>
+
+<!-- ============================================================
+     LEGEND
+     ============================================================ -->
+<div class="h-inv-legend">
+  <span><span class="legend-dot ok"></span> Stoc optim</span>
+  <span><span class="legend-dot low"></span> Sub prag minim</span>
+  <span><span class="legend-dot critical"></span> Stoc critic</span>
+  <span style="margin-left:auto;"><i class="fas fa-mouse-pointer"></i> Click pe rând pentru detalii</span>
+</div>
+
+<!-- ============================================================
+     INVENTORY TABLE
+     ============================================================ -->
+<% if (inventoryItems.length === 0) { %>
+  <div class="h-empty-inv">
+    <i class="fas fa-box-open"></i>
+    <h3>Nu există produse în inventar</h3>
+    <p>Adaugă primul produs pentru a începe gestionarea inventarului hotelului.</p>
+    <button class="btn btn-primary" onclick="openAddItemModal()" style="background:#1abc9c;border-color:#1abc9c;">
+      <i class="fas fa-plus"></i> Adaugă produs
+    </button>
+  </div>
+<% } else { %>
+  <div class="hinv-table-wrapper">
+    <table class="hinv-table" id="inventoryTable">
+      <thead>
+        <tr>
+          <th onclick="sortBy('name')" class="<%= currentSort === 'name' ? 'sorted' : '' %>">
+            Produs <% if (currentSort === 'name') { %><i class="fas fa-arrow-<%= currentSortOrder === 'asc' ? 'up' : 'down' %>"></i><% } %>
+          </th>
+          <th onclick="sortBy('category')" class="<%= currentSort === 'category' ? 'sorted' : '' %>">
+            Categorie <% if (currentSort === 'category') { %><i class="fas fa-arrow-<%= currentSortOrder === 'asc' ? 'up' : 'down' %>"></i><% } %>
+          </th>
+          <th style="text-align:center;">Cantitate</th>
+          <th style="text-align:center;">U.M.</th>
+          <th style="text-align:center;">Prag minim</th>
+          <th style="text-align:right;">Acțiuni</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% inventoryItems.forEach(function(item) { 
+          var qty = item.quantity || 0;
+          var threshold = item.minThreshold || 0;
+          var isLow = qty < threshold;
+          var isCritical = qty === 0;
+          var qtyClass = isCritical ? 'critical' : (isLow ? 'low' : 'ok');
+          
+          // Determină iconița pentru badge-ul categoriei
+          var catIcon = 'tag';
+          var catKey = (item.category || 'alte').toLowerCase().replace(/\s+/g, '-');
+          if (item.category === 'lenjerie') catIcon = 'bed';
+          else if (item.category === 'articole de toaletă' || item.category === 'articole de toaleta') catIcon = 'soap';
+          else if (item.category === 'curățenie' || item.category === 'curatenie') catIcon = 'broom';
+          else if (item.category === 'consumabile') catIcon = 'box';
+        %>
+          <tr onclick="viewItem('<%= item._id %>')" data-id="<%= item._id %>" style="cursor:pointer;">
+            <td data-label="Produs">
+              <div class="item-name-cell">
+                <%= item.name %>
+                <% if (item.supplierId) { %>
+                  <% var supplier = suppliers.find(function(s) { return s._id === item.supplierId; }); %>
+                  <% if (supplier) { %>
+                    <span class="item-supplier"><i class="fas fa-truck"></i> <%= supplier.name %></span>
+                  <% } %>
+                <% } %>
+              </div>
+            </td>
+            <td data-label="Categorie">
+              <span class="cat-badge <%= catKey %>">
+                <i class="fas fa-<%= catIcon %>"></i>
+                <%= (item.category || 'Alte').charAt(0).toUpperCase() + (item.category || 'Alte').slice(1) %>
+              </span>
+            </td>
+            <td data-label="Cantitate" class="item-qty-cell">
+              <span class="qty-value <%= qtyClass %>">
+                <%= qty %>
+              </span>
+            </td>
+            <td data-label="U.M." class="item-unit-cell">
+              <%= item.unit %>
+            </td>
+            <td data-label="Prag minim" class="item-threshold-cell">
+              <%= threshold %>
+            </td>
+            <td data-label="Acțiuni" class="item-actions-cell" onclick="event.stopPropagation();">
+              <button class="btn-edit" onclick="editItem('<%= item._id %>')" title="Editează produsul">
+                <i class="fas fa-edit"></i>
+              </button>
+              <button class="btn-adjust" onclick="adjustItem('<%= item._id %>', '<%= item.name.replace(/'/g, "\\'") %>')" title="Ajustează cantitatea">
+                <i class="fas fa-balance-scale"></i>
+              </button>
+              <button class="btn-delete" onclick="deleteItem('<%= item._id %>', '<%= item.name.replace(/'/g, "\\'") %>')" title="Șterge produsul">
+                <i class="fas fa-trash"></i>
+              </button>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+
+    <!-- Pagination -->
+    <div class="hinv-pagination">
+      <button onclick="changePage(<%= currentPage - 1 %>)" <%= currentPage <= 1 ? 'disabled' : '' %>>
+        <i class="fas fa-chevron-left"></i> Anterior
+      </button>
+      
+      <% var startPage = Math.max(1, currentPage - 2); %>
+      <% var endPage = Math.min(totalPages, currentPage + 2); %>
+      
+      <% if (startPage > 1) { %>
+        <button onclick="changePage(1)">1</button>
+        <% if (startPage > 2) { %><span class="page-info">...</span><% } %>
+      <% } %>
+      
+      <% for (var p =

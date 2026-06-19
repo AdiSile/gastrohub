@@ -1,0 +1,599 @@
+<% 
+  // ============================================================
+  // customer/views/reserve.ejs
+  // Formular și istoric rezervări client
+  // ============================================================
+%>
+
+<div class="reserve-page">
+  <div class="grid-2">
+    <!-- ============================================================
+         COLUMN 1 — Formular rezervare nouă
+         ============================================================ -->
+    <div class="card">
+      <div class="card-header">
+        <span><i class="fas fa-calendar-plus"></i> Rezervare nouă</span>
+      </div>
+      <div class="card-body">
+        <form id="reservationForm" novalidate>
+          <input type="hidden" id="reservationId" value="" />
+
+          <!-- Restaurant -->
+          <div class="form-group">
+            <label for="restaurantId">Restaurant *</label>
+            <select id="restaurantId" name="restaurantId" required>
+              <option value="">— Selectează restaurantul —</option>
+              <% if (locals.restaurants && restaurants.length) { %>
+                <% restaurants.forEach(function(r) { %>
+                  <option value="<%= r._id %>"><%= r.name %></option>
+                <% }); %>
+              <% } %>
+            </select>
+            <div class="form-error" id="restaurantIdError"></div>
+          </div>
+
+          <!-- Data & ora -->
+          <div class="form-group">
+            <label for="reservationDate">Data & ora *</label>
+            <input type="datetime-local" id="reservationDate" name="reservationDate" required />
+            <div class="form-error" id="reservationDateError"></div>
+          </div>
+
+          <!-- Număr persoane -->
+          <div class="form-group">
+            <label for="guests">Număr persoane *</label>
+            <input type="number" id="guests" name="guests" min="1" max="50" value="2" required />
+            <div class="form-hint">Minimum 1, maximum 50 de persoane</div>
+            <div class="form-error" id="guestsError"></div>
+          </div>
+
+          <!-- Masă preferată (opțional) -->
+          <div class="form-group">
+            <label for="tablePreference">Preferință masă</label>
+            <select id="tablePreference" name="tablePreference">
+              <option value="">— Indiferent —</option>
+              <option value="interior">Interior</option>
+              <option value="terasă">Terasă</option>
+              <option value="fumători">Fumători</option>
+              <option value="nefumători">Nefumători</option>
+              <option value="fereastră">Lângă fereastră</option>
+              <option value="vip">VIP</option>
+            </select>
+          </div>
+
+          <!-- Alte solicitări -->
+          <div class="form-group">
+            <label for="notes">Solicitări speciale</label>
+            <textarea id="notes" name="notes" rows="3" placeholder="Ex: aniversare, alergie, preferințe culinare…" maxlength="500"></textarea>
+            <div class="form-hint"><span id="notesCount">0</span> / 500 caractere</div>
+          </div>
+
+          <!-- Acțiuni -->
+          <div class="form-actions">
+            <button type="button" class="btn btn-secondary" onclick="resetForm()">
+              <i class="fas fa-undo"></i> Resetează
+            </button>
+            <button type="submit" class="btn btn-primary" id="submitBtn">
+              <i class="fas fa-check"></i> <span>Confirmă rezervarea</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         COLUMN 2 — Istoric rezervări
+         ============================================================ -->
+    <div class="card">
+      <div class="card-header">
+        <span><i class="fas fa-history"></i> Istoric rezervări</span>
+        <button class="btn btn-sm btn-secondary" onclick="loadReservations()" title="Reîmprospătează">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+      </div>
+      <div class="card-body" id="reservationsContainer">
+        <!-- Spinner încărcare -->
+        <div class="spinner" id="reservationsSpinner"></div>
+
+        <!-- Empty state (ascuns implicit) -->
+        <div class="empty-state" id="reservationsEmpty" style="display:none;">
+          <i class="fas fa-calendar-times"></i>
+          <h3>Nicio rezervare</h3>
+          <p>Nu ai încă nicio rezervare. Folosește formularul pentru a face o rezervare nouă.</p>
+        </div>
+
+        <!-- Tabel istoric (ascuns implicit) -->
+        <div id="reservationsTableWrapper" style="display:none;">
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Restaurant</th>
+                  <th>Data</th>
+                  <th>Pers.</th>
+                  <th>Status</th>
+                  <th>Acțiuni</th>
+                </tr>
+              </thead>
+              <tbody id="reservationsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL — Detalii rezervare
+     ============================================================ -->
+<div class="modal-overlay" id="detailModal" style="display:none;">
+  <div class="modal">
+    <div class="modal-header">
+      <h2><i class="fas fa-info-circle"></i> Detalii rezervare</h2>
+      <button class="modal-close" onclick="closeDetailModal()">&times;</button>
+    </div>
+    <div class="modal-body" id="detailModalBody">
+      <!-- Populat dinamic -->
+    </div>
+    <div class="modal-footer" style="padding-top:16px;border-top:1px solid var(--color-border);display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn btn-secondary" onclick="closeDetailModal()">Închide</button>
+      <button class="btn btn-danger btn-sm" id="cancelReservationBtn" onclick="cancelReservation()" style="display:none;">
+        <i class="fas fa-times"></i> Anulează rezervarea
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCRIPTE — Reserve page logic
+     ============================================================ -->
+<script>
+  (function() {
+    'use strict';
+
+    // ============================================================
+    // Stare globală
+    // ============================================================
+    var currentReservations = [];
+    var selectedReservationId = null;
+    var isSubmitting = false;
+
+    // ============================================================
+    // DOM references
+    // ============================================================
+    var form = document.getElementById('reservationForm');
+    var submitBtn = document.getElementById('submitBtn');
+    var restaurantIdEl = document.getElementById('restaurantId');
+    var reservationDateEl = document.getElementById('reservationDate');
+    var guestsEl = document.getElementById('guests');
+    var tablePreferenceEl = document.getElementById('tablePreference');
+    var notesEl = document.getElementById('notes');
+    var notesCountEl = document.getElementById('notesCount');
+    var reservationIdEl = document.getElementById('reservationId');
+
+    var tbody = document.getElementById('reservationsTableBody');
+    var spinner = document.getElementById('reservationsSpinner');
+    var emptyState = document.getElementById('reservationsEmpty');
+    var tableWrapper = document.getElementById('reservationsTableWrapper');
+
+    var detailModal = document.getElementById('detailModal');
+    var detailModalBody = document.getElementById('detailModalBody');
+    var cancelReservationBtn = document.getElementById('cancelReservationBtn');
+
+    // ============================================================
+    // Inițializare
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', function() {
+      // Setăm data minimă (azi)
+      setMinDate();
+
+      // Încărcăm restaurantele
+      loadRestaurants();
+
+      // Încărcăm istoricul
+      loadReservations();
+
+      // Caracter count
+      if (notesEl && notesCountEl) {
+        notesEl.addEventListener('input', function() {
+          notesCountEl.textContent = this.value.length;
+        });
+      }
+
+      // Submit form
+      if (form) {
+        form.addEventListener('submit', handleSubmit);
+      }
+    });
+
+    // ============================================================
+    // Setează data minimă în inputul datetime-local
+    // ============================================================
+    function setMinDate() {
+      if (!reservationDateEl) return;
+      var now = new Date();
+      // Format: YYYY-MM-DDTHH:MM (local)
+      var year = now.getFullYear();
+      var month = String(now.getMonth() + 1).padStart(2, '0');
+      var day = String(now.getDate()).padStart(2, '0');
+      var hours = String(now.getHours()).padStart(2, '0');
+      var minutes = String(now.getMinutes()).padStart(2, '0');
+      var min = year + '-' + month + '-' + day + 'T' + hours + ':' + minutes;
+      reservationDateEl.setAttribute('min', min);
+    }
+
+    // ============================================================
+    // Încărcare restaurante
+    // ============================================================
+    async function loadRestaurants() {
+      try {
+        var data = await apiFetch('/api/restaurants?tenantId=<%= locals.user ? user.tenantId : "" %>');
+        if (data && data.success && data.data && data.data.restaurants) {
+          var select = restaurantIdEl;
+          // Păstrăm opțiunea placeholder
+          select.innerHTML = '<option value="">— Selectează restaurantul —</option>';
+          data.data.restaurants.forEach(function(r) {
+            var opt = document.createElement('option');
+            opt.value = r._id;
+            opt.textContent = r.name;
+            select.appendChild(opt);
+          });
+        }
+      } catch (err) {
+        console.error('Eroare la încărcarea restaurantelor:', err);
+      }
+    }
+
+    // ============================================================
+    // Încărcare istoric rezervări
+    // ============================================================
+    async function loadReservations() {
+      if (spinner) spinner.style.display = 'block';
+      if (emptyState) emptyState.style.display = 'none';
+      if (tableWrapper) tableWrapper.style.display = 'none';
+
+      try {
+        var customerId = '<%= locals.user ? user._id : "" %>';
+        var tenantId = '<%= locals.user ? user.tenantId : "" %>';
+        if (!customerId || !tenantId) {
+          if (spinner) spinner.style.display = 'none';
+          if (emptyState) emptyState.style.display = 'block';
+          return;
+        }
+
+        var data = await apiFetch('/api/reservations/customer/' + customerId + '?tenantId=' + tenantId + '&limit=50');
+        if (spinner) spinner.style.display = 'none';
+
+        if (data && data.success) {
+          var reservations = data.data && data.data.reservations ? data.data.reservations : [];
+          currentReservations = reservations;
+          renderReservations(reservations);
+        } else {
+          currentReservations = [];
+          if (emptyState) emptyState.style.display = 'block';
+        }
+      } catch (err) {
+        console.error('Eroare la încărcarea rezervărilor:', err);
+        if (spinner) spinner.style.display = 'none';
+        if (emptyState) emptyState.style.display = 'block';
+      }
+    }
+
+    // ============================================================
+    // Randare tabel rezervări
+    // ============================================================
+    function renderReservations(reservations) {
+      if (!reservations || reservations.length === 0) {
+        if (emptyState) emptyState.style.display = 'block';
+        if (tableWrapper) tableWrapper.style.display = 'none';
+        return;
+      }
+
+      if (emptyState) emptyState.style.display = 'none';
+      if (tableWrapper) tableWrapper.style.display = 'block';
+
+      tbody.innerHTML = '';
+      reservations.forEach(function(r) {
+        var tr = document.createElement('tr');
+        tr.style.cursor = 'pointer';
+
+        // Restaurant name
+        var restaurantName = r.restaurantId && r.restaurantId.name ? r.restaurantId.name : (r.restaurantName || '—');
+        var dateStr = r.date || r.reservationDate || r.createdAt;
+        var formattedDate = dateStr ? formatDate(dateStr) : '—';
+        var guests = r.guests || r.numberOfGuests || '—';
+        var status = r.status || 'pending';
+
+        tr.innerHTML = '<td>' + escapeHtml(restaurantName) + '</td>' +
+          '<td>' + formattedDate + '</td>' +
+          '<td>' + guests + '</td>' +
+          '<td>' + formatStatusLabel(status) + '</td>' +
+          '<td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); viewReservationDetails(\'' + r._id + '\')"><i class="fas fa-eye"></i></button></td>';
+
+        tr.addEventListener('click', function() {
+          viewReservationDetails(r._id);
+        });
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    // ============================================================
+    // Formatare status
+    // ============================================================
+    function formatStatusLabel(status) {
+      var map = {
+        'pending':       { label: 'În așteptare', class: 'badge-pending' },
+        'confirmată':    { label: 'Confirmată', class: 'badge-active' },
+        'check-in':      { label: 'Check-in', class: 'badge-info' },
+        'finalizată':    { label: 'Finalizată', class: 'badge-closed' },
+        'anulată':       { label: 'Anulată', class: 'badge-inactive' },
+        'cancelled':     { label: 'Anulată', class: 'badge-inactive' },
+        'confirmed':     { label: 'Confirmată', class: 'badge-active' },
+        'completed':     { label: 'Finalizată', class: 'badge-closed' },
+        'checked_in':    { label: 'Check-in', class: 'badge-info' },
+        'no-show':       { label: 'Neprezentare', class: 'badge-closed' },
+      };
+      var entry = map[status];
+      if (!entry) return '<span class="badge badge-pending">' + escapeHtml(status) + '</span>';
+      return '<span class="badge ' + entry.class + '">' + entry.label + '</span>';
+    }
+
+    // ============================================================
+    // Vizualizare detalii rezervare
+    // ============================================================
+    window.viewReservationDetails = function(reservationId) {
+      selectedReservationId = reservationId;
+      var r = currentReservations.find(function(item) { return item._id === reservationId; });
+      if (!r) {
+        showToast('Rezervarea nu a fost găsită.', 'error');
+        return;
+      }
+
+      var restaurantName = r.restaurantId && r.restaurantId.name ? r.restaurantId.name : (r.restaurantName || '—');
+      var dateStr = r.date || r.reservationDate || r.createdAt;
+      var formattedDate = dateStr ? formatDate(dateStr) : '—';
+      var guests = r.guests || r.numberOfGuests || '—';
+      var status = r.status || 'pending';
+      var tablePref = r.tablePreference || '—';
+      var notes = r.notes || '—';
+      var createdAt = r.createdAt ? formatDate(r.createdAt) : '—';
+
+      // Determinăm dacă poate fi anulată
+      var canCancel = (status === 'pending' || status === 'confirmată');
+      cancelReservationBtn.style.display = canCancel ? 'inline-flex' : 'none';
+
+      detailModalBody.innerHTML =
+        '<div class="grid-2" style="gap:12px;">' +
+          '<div><strong>Restaurant:</strong><br>' + escapeHtml(restaurantName) + '</div>' +
+          '<div><strong>Data & ora:</strong><br>' + formattedDate + '</div>' +
+          '<div><strong>Nr. persoane:</strong><br>' + guests + '</div>' +
+          '<div><strong>Status:</strong><br>' + formatStatusLabel(status) + '</div>' +
+          '<div><strong>Preferință masă:</strong><br>' + escapeHtml(tablePref) + '</div>' +
+          '<div><strong>Creată la:</strong><br>' + createdAt + '</div>' +
+        '</div>' +
+        '<div class="mt-2"><strong>Solicitări speciale:</strong><br>' + escapeHtml(notes) + '</div>';
+
+      detailModal.style.display = 'flex';
+    };
+
+    // ============================================================
+    // Închidere modal
+    // ============================================================
+    window.closeDetailModal = function() {
+      detailModal.style.display = 'none';
+      selectedReservationId = null;
+    };
+
+    // Click pe overlay pentru închidere
+    if (detailModal) {
+      detailModal.addEventListener('click', function(e) {
+        if (e.target === detailModal) {
+          closeDetailModal();
+        }
+      });
+    }
+
+    // ============================================================
+    // Anulare rezervare
+    // ============================================================
+    window.cancelReservation = async function() {
+      if (!selectedReservationId) return;
+      if (!confirm('Ești sigur că vrei să anulezi această rezervare?')) return;
+
+      try {
+        var data = await apiFetch('/api/reservations/' + selectedReservationId + '/cancel', {
+          method: 'PUT',
+          body: JSON.stringify({ tenantId: '<%= locals.user ? user.tenantId : "" %>' })
+        });
+
+        if (data && data.success) {
+          showToast('Rezervarea a fost anulată cu succes.', 'success');
+          closeDetailModal();
+          loadReservations();
+        }
+      } catch (err) {
+        showToast('Eroare la anularea rezervării.', 'error');
+      }
+    };
+
+    // ============================================================
+    // Submit formular
+    // ============================================================
+    async function handleSubmit(e) {
+      e.preventDefault();
+
+      if (isSubmitting) return;
+
+      // Validare client-side
+      var errors = validateForm();
+      if (errors.length > 0) {
+        errors.forEach(function(err) {
+          showToast(err, 'error');
+        });
+        return;
+      }
+
+      isSubmitting = true;
+      submitBtn.disabled = true;
+      submitBtn.querySelector('span').textContent = 'Se trimite…';
+
+      var isUpdate = !!reservationIdEl.value;
+      var url = isUpdate ? '/api/reservations/' + reservationIdEl.value : '/api/reservations';
+      var method = isUpdate ? 'PUT' : 'POST';
+
+      var payload = {
+        tenantId: '<%= locals.user ? user.tenantId : "" %>',
+        customerId: '<%= locals.user ? user._id : "" %>',
+        restaurantId: restaurantIdEl.value,
+        date: reservationDateEl.value,
+        guests: parseInt(guestsEl.value, 10),
+        tablePreference: tablePreferenceEl.value || undefined,
+        notes: notesEl.value || undefined,
+      };
+
+      try {
+        var data = await apiFetch(url, {
+          method: method,
+          body: JSON.stringify(payload)
+        });
+
+        if (data && data.success) {
+          showToast(isUpdate ? 'Rezervarea a fost actualizată.' : 'Rezervarea a fost creată cu succes!', 'success');
+          resetForm();
+          loadReservations();
+        }
+      } catch (err) {
+        showToast('Eroare la trimiterea rezervării.', 'error');
+      } finally {
+        isSubmitting = false;
+        submitBtn.disabled = false;
+        submitBtn.querySelector('span').textContent = isUpdate ? 'Actualizează rezervarea' : 'Confirmă rezervarea';
+      }
+    }
+
+    // ============================================================
+    // Validare formular
+    // ============================================================
+    function validateForm() {
+      var errors = [];
+
+      if (!restaurantIdEl.value) {
+        errors.push('Selectează un restaurant.');
+        document.getElementById('restaurantIdError').textContent = 'Câmp obligatoriu';
+      } else {
+        document.getElementById('restaurantIdError').textContent = '';
+      }
+
+      if (!reservationDateEl.value) {
+        errors.push('Selectează data și ora rezervării.');
+        document.getElementById('reservationDateError').textContent = 'Câmp obligatoriu';
+      } else {
+        document.getElementById('reservationDateError').textContent = '';
+        // Verifică dacă data e în viitor
+        var selectedDate = new Date(reservationDateEl.value);
+        if (selectedDate <= new Date()) {
+          errors.push('Data și ora trebuie să fie în viitor.');
+          document.getElementById('reservationDateError').textContent = 'Trebuie să fie în viitor';
+        }
+      }
+
+      var guests = parseInt(guestsEl.value, 10);
+      if (!guests || guests < 1) {
+        errors.push('Numărul de persoane trebuie să fie cel puțin 1.');
+        document.getElementById('guestsError').textContent = 'Minimum 1 persoană';
+      } else if (guests > 50) {
+        errors.push('Numărul maxim de persoane este 50.');
+        document.getElementById('guestsError').textContent = 'Maximum 50';
+      } else {
+        document.getElementById('guestsError').textContent = '';
+      }
+
+      return errors;
+    }
+
+    // ============================================================
+    // Resetare formular
+    // ============================================================
+    window.resetForm = function() {
+      form.reset();
+      reservationIdEl.value = '';
+      submitBtn.querySelector('span').textContent = 'Confirmă rezervarea';
+      guestsEl.value = 2;
+      if (notesCountEl) notesCountEl.textContent = '0';
+      // Resetează erorile
+      document.querySelectorAll('.form-error').forEach(function(el) {
+        el.textContent = '';
+      });
+    };
+
+    // ============================================================
+    // Helper: escape HTML
+    // ============================================================
+    function escapeHtml(text) {
+      if (!text) return '—';
+      var div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // ============================================================
+    // Expunem funcțiile globale necesare
+    // ============================================================
+    window.loadReservations = loadReservations;
+    window.resetForm = resetForm;
+  })();
+</script>
+
+<style>
+  /* ============================================================
+     Reserve page — stiluri specifice
+     ============================================================ */
+  .reserve-page .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .reserve-page .card-header span i {
+    margin-right: 8px;
+    color: var(--color-primary);
+  }
+
+  #reservationsTableBody tr {
+    transition: background 0.15s ease;
+  }
+
+  #reservationsTableBody tr:hover {
+    background: rgba(13, 110, 253, 0.04);
+  }
+
+  #reservationsTableBody tr td:first-child {
+    font-weight: 500;
+  }
+
+  /* Modal detail adjustments */
+  #detailModal .modal-body strong {
+    color: var(--color-text-muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  #detailModal .modal-body .grid-2 > div {
+    padding: 8px 0;
+  }
+
+  /* Spinner centering */
+  #reservationsSpinner {
+    margin: 60px auto;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .reserve-page .grid-2 {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

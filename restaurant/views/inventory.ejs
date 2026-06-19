@@ -1,0 +1,969 @@
+<%
+  // ============================================================
+  // INVENTORY VIEW – Gestionare inventar restaurant
+  // Variabile locale
+  // ============================================================
+  const restaurant = locals.restaurant || null;
+  const inventoryItems = locals.inventoryItems || [];
+  const lowStockItems = locals.lowStockItems || [];
+  const suppliers = locals.suppliers || [];
+  const categories = locals.categories || ['alimente', 'băuturi', 'consumabile', 'alte'];
+  const units = locals.units || ['kg', 'g', 'l', 'ml', 'buc', 'pachet', 'cutie', 'sticlă', 'bax'];
+  const loading = locals.loading || false;
+  const currentCategory = locals.currentCategory || 'all';
+  const currentSearch = locals.currentSearch || '';
+  const currentSort = locals.currentSort || 'name';
+  const currentSortOrder = locals.currentSortOrder || 'asc';
+  const currentPage = locals.currentPage || 1;
+  const totalPages = locals.totalPages || 1;
+  const totalItems = locals.totalItems || 0;
+  const showLowStock = locals.showLowStock || false;
+%>
+
+<style>
+  /* ============================================================
+     INVENTORY PAGE STYLES
+     ============================================================ */
+  .inv-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .inv-header h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .inv-header h1 i {
+    color: var(--color-primary);
+  }
+
+  .inv-header .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--color-text-muted);
+    font-size: 13px;
+    flex-wrap: wrap;
+  }
+
+  .inv-header .header-meta .resto-name {
+    font-weight: 600;
+    color: var(--color-primary);
+  }
+
+  .inv-stats-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .inv-stat-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: all var(--transition);
+  }
+
+  .inv-stat-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+  }
+
+  .inv-stat-card .stat-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .inv-stat-card .stat-icon.primary { background: rgba(232, 93, 4, 0.1); color: var(--color-primary); }
+  .inv-stat-card .stat-icon.success { background: #e8f5e9; color: var(--color-success); }
+  .inv-stat-card .stat-icon.warning { background: #fff8e1; color: var(--color-warning); }
+  .inv-stat-card .stat-icon.danger { background: #fce4ec; color: var(--color-danger); }
+  .inv-stat-card .stat-icon.info { background: #e3f2fd; color: var(--color-info); }
+
+  .inv-stat-card .stat-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .inv-stat-card .stat-body .stat-number {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--color-text);
+    line-height: 1.1;
+  }
+
+  .inv-stat-card .stat-body .stat-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+  }
+
+  /* ============================================================
+     FILTERS & SEARCH
+     ============================================================ */
+  .inv-filters {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    padding: 16px 20px;
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+  }
+
+  .inv-filters .search-wrapper {
+    flex: 1;
+    min-width: 200px;
+    position: relative;
+  }
+
+  .inv-filters .search-wrapper input {
+    width: 100%;
+    padding: 10px 14px 10px 40px;
+    font-size: 14px;
+    font-family: var(--font-family);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    transition: border-color var(--transition);
+  }
+
+  .inv-filters .search-wrapper input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(232, 93, 4, 0.12);
+  }
+
+  .inv-filters .search-wrapper i {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-text-muted);
+    font-size: 14px;
+  }
+
+  .inv-filters select {
+    padding: 10px 32px 10px 12px;
+    font-size: 13px;
+    font-family: var(--font-family);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23636e72' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+
+  .inv-filters .filter-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .inv-filters .low-stock-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--color-text);
+    white-space: nowrap;
+  }
+
+  .inv-filters .low-stock-toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--color-danger);
+    cursor: pointer;
+  }
+
+  /* ============================================================
+     TABLE
+     ============================================================ */
+  .inv-table-wrapper {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--color-border);
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+
+  .inv-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .inv-table thead th {
+    padding: 12px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    background: var(--color-bg);
+    border-bottom: 2px solid var(--color-border);
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition: color var(--transition);
+  }
+
+  .inv-table thead th:hover {
+    color: var(--color-text);
+  }
+
+  .inv-table thead th.sorted {
+    color: var(--color-primary);
+  }
+
+  .inv-table thead th.sorted i {
+    margin-left: 4px;
+  }
+
+  .inv-table tbody td {
+    padding: 14px 16px;
+    font-size: 14px;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
+  }
+
+  .inv-table tbody tr {
+    transition: background var(--transition);
+  }
+
+  .inv-table tbody tr:hover {
+    background: rgba(0,0,0,0.02);
+  }
+
+  .inv-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .inv-table .item-name-cell {
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .inv-table .item-name-cell .item-supplier {
+    display: block;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+  }
+
+  .inv-table .item-category-cell {
+    font-size: 12px;
+  }
+
+  .inv-table .item-category-cell .cat-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .inv-table .item-category-cell .cat-badge.alimente {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  .inv-table .item-category-cell .cat-badge.băuturi {
+    background: #e3f2fd;
+    color: #1565c0;
+  }
+
+  .inv-table .item-category-cell .cat-badge.consumabile {
+    background: #fff8e1;
+    color: #f57f17;
+  }
+
+  .inv-table .item-category-cell .cat-badge.alte {
+    background: var(--color-bg);
+    color: var(--color-text-muted);
+  }
+
+  .inv-table .item-unit-cell {
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+
+  .inv-table .item-qty-cell {
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .inv-table .item-qty-cell .qty-value {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 12px;
+    border-radius: 12px;
+    font-size: 14px;
+  }
+
+  .inv-table .item-qty-cell .qty-value.ok {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  .inv-table .item-qty-cell .qty-value.low {
+    background: #fff8e1;
+    color: #f57f17;
+  }
+
+  .inv-table .item-qty-cell .qty-value.critical {
+    background: #fce4ec;
+    color: #c62828;
+    animation: pulse 1.5s ease infinite;
+  }
+
+  .inv-table .item-threshold-cell {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    text-align: center;
+  }
+
+  .inv-table .item-actions-cell {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .inv-table .item-actions-cell button {
+    padding: 6px 10px;
+    font-size: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: all var(--transition);
+    color: var(--color-text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 4px;
+  }
+
+  .inv-table .item-actions-cell button:hover {
+    background: var(--color-bg);
+    color: var(--color-text);
+  }
+
+  .inv-table .item-actions-cell .btn-edit:hover {
+    color: var(--color-info);
+    border-color: var(--color-info);
+  }
+
+  .inv-table .item-actions-cell .btn-adjust:hover {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+  }
+
+  .inv-table .item-actions-cell .btn-delete:hover {
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+  }
+
+  /* ============================================================
+     PAGINATION
+     ============================================================ */
+  .inv-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .inv-pagination button {
+    padding: 8px 14px;
+    font-size: 13px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: all var(--transition);
+    color: var(--color-text);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .inv-pagination button:hover:not(:disabled) {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .inv-pagination button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .inv-pagination button.active {
+    background: var(--color-primary);
+    color: #fff;
+    border-color: var(--color-primary);
+  }
+
+  .inv-pagination .page-info {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    padding: 0 8px;
+  }
+
+  /* ============================================================
+     LOW STOCK ALERT BANNER
+     ============================================================ */
+  .low-stock-alert {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    border-radius: var(--radius-md);
+    margin-bottom: 20px;
+    font-size: 14px;
+    font-weight: 500;
+    background: #fce4ec;
+    color: #c62828;
+    border-left: 4px solid var(--color-danger);
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+
+  .low-stock-alert:hover {
+    box-shadow: var(--shadow-sm);
+  }
+
+  .low-stock-alert i {
+    font-size: 22px;
+  }
+
+  .low-stock-alert .alert-count {
+    margin-left: auto;
+    background: var(--color-danger);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 3px 14px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  .low-stock-alert.success {
+    background: #e8f5e9;
+    color: #2e7d32;
+    border-left-color: var(--color-success);
+  }
+
+  .low-stock-alert.success .alert-count {
+    background: var(--color-success);
+  }
+
+  /* ============================================================
+     EMPTY STATE
+     ============================================================ */
+  .empty-inv {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--color-text-muted);
+  }
+
+  .empty-inv i {
+    font-size: 52px;
+    opacity: 0.2;
+    margin-bottom: 16px;
+  }
+
+  .empty-inv h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--color-text);
+  }
+
+  .empty-inv p {
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+
+  /* ============================================================
+     QUICK REFERENCE LEGEND
+     ============================================================ */
+  .inv-legend {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+    padding: 12px 0;
+    flex-wrap: wrap;
+  }
+
+  .inv-legend .legend-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 4px;
+  }
+
+  .inv-legend .legend-dot.ok { background: var(--color-success); }
+  .inv-legend .legend-dot.low { background: var(--color-warning); }
+  .inv-legend .legend-dot.critical { background: var(--color-danger); }
+
+  /* ============================================================
+     RESPONSIVE
+     ============================================================ */
+  @media (max-width: 768px) {
+    .inv-table thead {
+      display: none;
+    }
+
+    .inv-table tbody tr {
+      display: block;
+      padding: 16px;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .inv-table tbody td {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border: none;
+      font-size: 13px;
+    }
+
+    .inv-table tbody td::before {
+      content: attr(data-label);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--color-text-muted);
+      min-width: 90px;
+    }
+
+    .inv-table tbody td.item-actions-cell {
+      justify-content: flex-end;
+      padding-top: 10px;
+      border-top: 1px solid var(--color-border);
+      margin-top: 8px;
+    }
+
+    .inv-filters {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .inv-filters .search-wrapper {
+      min-width: 0;
+    }
+
+    .inv-stats-bar {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .inv-header h1 {
+      font-size: 20px;
+    }
+
+    .inv-stats-bar {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<!-- ============================================================
+     PAGE HEADER
+     ============================================================ -->
+<div class="inv-header">
+  <div>
+    <h1>
+      <i class="fas fa-warehouse"></i>
+      Inventar
+    </h1>
+    <div class="header-meta">
+      <% if (restaurant) { %>
+        <span class="resto-name"><i class="fas fa-store"></i> <%= restaurant.name %></span>
+        <span class="text-muted">•</span>
+      <% } %>
+      <span>
+        <i class="fas fa-boxes"></i>
+        <%= totalItems %> produse
+      </span>
+      <% if (lowStockItems.length > 0) { %>
+        <span style="color:var(--color-danger);font-weight:600;">
+          <i class="fas fa-exclamation-triangle"></i>
+          <%= lowStockItems.length %> sub prag
+        </span>
+      <% } %>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-primary btn-sm" onclick="openAddItemModal()">
+      <i class="fas fa-plus"></i> Produs nou
+    </button>
+    <button class="btn btn-secondary btn-sm" onclick="loadInventory()">
+      <i class="fas fa-sync-alt"></i> Reîmprospătare
+    </button>
+    <button class="btn btn-secondary btn-sm" onclick="exportInventory()">
+      <i class="fas fa-download"></i> Exportă
+    </button>
+  </div>
+</div>
+
+<!-- ============================================================
+     LOADING
+     ============================================================ -->
+<% if (loading) { %>
+  <div class="spinner"></div>
+<% } else { %>
+
+<!-- ============================================================
+     ALERT
+     ============================================================ -->
+<% if (locals.alert) { %>
+  <div class="dashboard-alert <%= alert.type || 'info' %>" style="margin-bottom:20px;">
+    <i class="fas fa-<%= alert.type === 'warning' ? 'exclamation-triangle' : alert.type === 'success' ? 'check-circle' : 'info-circle' %>"></i>
+    <%= alert.message %>
+  </div>
+<% } %>
+
+<!-- ============================================================
+     LOW STOCK BANNER
+     ============================================================ -->
+<% if (lowStockItems.length > 0) { %>
+  <div class="low-stock-alert" onclick="showLowStockOnly()">
+    <i class="fas fa-exclamation-circle"></i>
+    <span><strong>Atenție!</strong> <%= lowStockItems.length %> produse au stocul sub pragul minim.</span>
+    <span class="alert-count"><%= lowStockItems.length %></span>
+  </div>
+<% } else { %>
+  <div class="low-stock-alert success" onclick="showLowStockOnly()">
+    <i class="fas fa-check-circle"></i>
+    <span>Inventarul este în parametri normali. Nu există produse sub pragul minim.</span>
+    <span class="alert-count">0</span>
+  </div>
+<% } %>
+
+<!-- ============================================================
+     STATS CARDS
+     ============================================================ -->
+<div class="inv-stats-bar">
+  <div class="inv-stat-card">
+    <div class="stat-icon primary"><i class="fas fa-box"></i></div>
+    <div class="stat-body">
+      <div class="stat-number"><%= totalItems %></div>
+      <div class="stat-label">Total produse</div>
+    </div>
+  </div>
+  <div class="inv-stat-card">
+    <div class="stat-icon success"><i class="fas fa-check-circle"></i></div>
+    <div class="stat-body">
+      <div class="stat-number"><%= inventoryItems.filter(function(i) { return (i.quantity || 0) >= (i.minThreshold || 0); }).length %></div>
+      <div class="stat-label">Stoc optim</div>
+    </div>
+  </div>
+  <div class="inv-stat-card">
+    <div class="stat-icon warning"><i class="fas fa-exclamation-triangle"></i></div>
+    <div class="stat-body">
+      <div class="stat-number"><%= lowStockItems.length %></div>
+      <div class="stat-label">Sub prag minim</div>
+    </div>
+  </div>
+  <div class="inv-stat-card">
+    <div class="stat-icon info"><i class="fas fa-truck"></i></div>
+    <div class="stat-body">
+      <div class="stat-number"><%= suppliers.length %></div>
+      <div class="stat-label">Furnizori</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     FILTERS
+     ============================================================ -->
+<div class="inv-filters">
+  <div class="search-wrapper">
+    <i class="fas fa-search"></i>
+    <input type="text" id="searchInput" placeholder="Caută produs după nume..." 
+           value="<%= currentSearch %>" onkeyup="debounceFilter()" />
+  </div>
+
+  <select id="categoryFilter" onchange="applyFilters()">
+    <option value="all" <%= currentCategory === 'all' ? 'selected' : '' %>>Toate categoriile</option>
+    <% categories.forEach(function(cat) { %>
+      <option value="<%= cat %>" <%= currentCategory === cat ? 'selected' : '' %>>
+        <%= cat.charAt(0).toUpperCase() + cat.slice(1) %>
+      </option>
+    <% }); %>
+  </select>
+
+  <select id="sortFilter" onchange="applyFilters()">
+    <option value="name" <%= currentSort === 'name' ? 'selected' : '' %>>Nume</option>
+    <option value="quantity" <%= currentSort === 'quantity' ? 'selected' : '' %>>Cantitate</option>
+    <option value="category" <%= currentSort === 'category' ? 'selected' : '' %>>Categorie</option>
+    <option value="lastUpdated" <%= currentSort === 'lastUpdated' ? 'selected' : '' %>>Ultima actualizare</option>
+  </select>
+
+  <select id="orderFilter" onchange="applyFilters()">
+    <option value="asc" <%= currentSortOrder === 'asc' ? 'selected' : '' %>><i class="fas fa-arrow-up"></i> Ascendent</option>
+    <option value="desc" <%= currentSortOrder === 'desc' ? 'selected' : '' %>><i class="fas fa-arrow-down"></i> Descendent</option>
+  </select>
+
+  <div class="filter-actions">
+    <label class="low-stock-toggle">
+      <input type="checkbox" id="lowStockOnly" <%= showLowStock ? 'checked' : '' %> onchange="applyFilters()" />
+      <i class="fas fa-exclamation-triangle" style="color:var(--color-warning);"></i> Doar stoc scăzut
+    </label>
+    <button class="btn btn-sm btn-secondary" onclick="resetFilters()" title="Resetează filtrele">
+      <i class="fas fa-undo"></i>
+    </button>
+  </div>
+</div>
+
+<!-- ============================================================
+     LEGEND
+     ============================================================ -->
+<div class="inv-legend">
+  <span><span class="legend-dot ok"></span> Stoc optim</span>
+  <span><span class="legend-dot low"></span> Sub prag minim</span>
+  <span><span class="legend-dot critical"></span> Stoc critic</span>
+  <span style="margin-left:auto;"><i class="fas fa-mouse-pointer"></i> Click pe rând pentru detalii</span>
+</div>
+
+<!-- ============================================================
+     INVENTORY TABLE
+     ============================================================ -->
+<% if (inventoryItems.length === 0) { %>
+  <div class="empty-inv">
+    <i class="fas fa-box-open"></i>
+    <h3>Nu există produse în inventar</h3>
+    <p>Adaugă primul produs pentru a începe gestionarea inventarului.</p>
+    <button class="btn btn-primary" onclick="openAddItemModal()">
+      <i class="fas fa-plus"></i> Adaugă produs
+    </button>
+  </div>
+<% } else { %>
+  <div class="inv-table-wrapper">
+    <table class="inv-table" id="inventoryTable">
+      <thead>
+        <tr>
+          <th onclick="sortBy('name')" class="<%= currentSort === 'name' ? 'sorted' : '' %>">
+            Produs <% if (currentSort === 'name') { %><i class="fas fa-arrow-<%= currentSortOrder === 'asc' ? 'up' : 'down' %>"></i><% } %>
+          </th>
+          <th onclick="sortBy('category')" class="<%= currentSort === 'category' ? 'sorted' : '' %>">
+            Categorie <% if (currentSort === 'category') { %><i class="fas fa-arrow-<%= currentSortOrder === 'asc' ? 'up' : 'down' %>"></i><% } %>
+          </th>
+          <th style="text-align:center;">Cantitate</th>
+          <th style="text-align:center;">U.M.</th>
+          <th style="text-align:center;">Prag minim</th>
+          <th style="text-align:right;">Acțiuni</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% inventoryItems.forEach(function(item) { 
+          var qty = item.quantity || 0;
+          var threshold = item.minThreshold || 0;
+          var isLow = qty < threshold;
+          var isCritical = qty === 0;
+          var qtyClass = isCritical ? 'critical' : (isLow ? 'low' : 'ok');
+        %>
+          <tr onclick="viewItem('<%= item._id %>')" data-id="<%= item._id %>" style="cursor:pointer;">
+            <td data-label="Produs">
+              <div class="item-name-cell">
+                <%= item.name %>
+                <% if (item.supplierId) { %>
+                  <% var supplier = suppliers.find(function(s) { return s._id === item.supplierId; }); %>
+                  <% if (supplier) { %>
+                    <span class="item-supplier"><i class="fas fa-truck"></i> <%= supplier.name %></span>
+                  <% } %>
+                <% } %>
+              </div>
+            </td>
+            <td data-label="Categorie">
+              <span class="cat-badge <%= item.category %>">
+                <i class="fas fa-<%= item.category === 'alimente' ? 'apple-alt' : item.category === 'băuturi' ? 'wine-bottle' : item.category === 'consumabile' ? 'box' : 'tag' %>"></i>
+                <%= item.category.charAt(0).toUpperCase() + item.category.slice(1) %>
+              </span>
+            </td>
+            <td data-label="Cantitate" class="item-qty-cell">
+              <span class="qty-value <%= qtyClass %>">
+                <%= qty %>
+              </span>
+            </td>
+            <td data-label="U.M." class="item-unit-cell">
+              <%= item.unit %>
+            </td>
+            <td data-label="Prag minim" class="item-threshold-cell">
+              <%= threshold %>
+            </td>
+            <td data-label="Acțiuni" class="item-actions-cell" onclick="event.stopPropagation();">
+              <button class="btn-edit" onclick="editItem('<%= item._id %>')" title="Editează produsul">
+                <i class="fas fa-edit"></i>
+              </button>
+              <button class="btn-adjust" onclick="adjustItem('<%= item._id %>', '<%= item.name.replace(/'/g, "\\'") %>')" title="Ajustează cantitatea">
+                <i class="fas fa-balance-scale"></i>
+              </button>
+              <button class="btn-delete" onclick="deleteItem('<%= item._id %>', '<%= item.name.replace(/'/g, "\\'") %>')" title="Șterge produsul">
+                <i class="fas fa-trash"></i>
+              </button>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+
+    <!-- Pagination -->
+    <div class="inv-pagination">
+      <button onclick="changePage(<%= currentPage - 1 %>)" <%= currentPage <= 1 ? 'disabled' : '' %>>
+        <i class="fas fa-chevron-left"></i> Anterior
+      </button>
+      
+      <% var startPage = Math.max(1, currentPage - 2); %>
+      <% var endPage = Math.min(totalPages, currentPage + 2); %>
+      
+      <% if (startPage > 1) { %>
+        <button onclick="changePage(1)">1</button>
+        <% if (startPage > 2) { %><span class="page-info">...</span><% } %>
+      <% } %>
+      
+      <% for (var p = startPage; p <= endPage; p++) { %>
+        <button class="<%= p === currentPage ? 'active' : '' %>" onclick="changePage(<%= p %>)"><%= p %></button>
+      <% } %>
+      
+      <% if (endPage < totalPages) { %>
+        <% if (endPage < totalPages - 1) { %><span class="page-info">...</span><% } %>
+        <button onclick="changePage(<%= totalPages %>)"><%= totalPages %></button>
+      <% } %>
+      
+      <span class="page-info">
+        Pagina <%= currentPage %> din <%= totalPages %>
+        <span style="margin-left:8px;font-weight:400;">(<%= totalItems %> produse)</span>
+      </span>
+      
+      <button onclick="changePage(<%= currentPage + 1 %>)" <%= currentPage >= totalPages ? 'disabled' : '' %>>
+        Următor <i class="fas fa-chevron-right"></i>
+      </button>
+    </div>
+  </div>
+<% } %>
+
+<% } /* end loading */ %>
+
+<!-- ============================================================
+     MODAL: Adaugă / Editează Produs
+     ============================================================ -->
+<div id="itemModal" class="modal-overlay" style="display:none;">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="itemModalTitle">Adaugă produs nou</h2>
+      <button class="modal-close" onclick="closeItemModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="itemForm" onsubmit="return saveItem(event)">
+        <input type="hidden" id="itemId" value="" />
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="itemName">Nume produs *</label>
+            <input type="text" id="itemName" required maxlength="200" placeholder="Ex: Făină albă" />
+          </div>
+          <div class="form-group">
+            <label for="itemCategory">Categorie *</label>
+            <select id="itemCategory" required>
+              <option value="">— Selectează —</option>
+              <% categories.forEach(function(cat) { %>
+                <option value="<%= cat %>"><%= cat.charAt(0).toUpperCase() + cat.slice(1) %></option>
+              <% }); %>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="itemQuantity">Cantitate *</label>
+            <input type="number" id="itemQuantity" required min="0" step="0.01" placeholder="0" />
+          </div>
+          <div class="form-group">
+            <label for="itemUnit">Unitate măsură *</label>
+            <select id="itemUnit" required>
+              <option value="">— Alege —</option>
+              <% units.forEach(function(u) { %>
+                <option value="<%= u %>"><%= u %></option>
+              <% }); %>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="itemMinThreshold">Prag minim stoc</label>
+            <input type="number" id="itemMinThreshold" min="0" step="0.01" placeholder="0" />
+          </div>
+          <div class="form-group">
+            <label for="itemSupplier">Furnizor</label>
+            <select id="itemSupplier">
+              <option value="">— Fără furnizor —</option>
+              <% suppliers.forEach(function(s) { %>
+                <option value="<%= s._id %>"><%= s.name %></option>
+              <% }); %>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeItemModal()">Anulează</button>
+          <button type="submit" class="btn btn-primary" id="itemSubmitBtn">
+            <i class="fas fa-save"></i> Salvează
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL: Ajustare Cantitate
+     ============================================================ -->
+<div id="

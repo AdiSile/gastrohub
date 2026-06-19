@@ -1,0 +1,274 @@
+<!-- ============================================================
+     VIEW: TENANȚI
+     ============================================================ -->
+<div id="admin-view-tenants" class="admin-view" style="display: none;">
+
+  <!-- Page Header -->
+  <div class="flex items-center justify-between mb-3">
+    <div>
+      <h2 style="font-size: 22px; font-weight: 700; margin: 0;">Gestionare Tenanți</h2>
+      <p class="text-muted" style="margin-top: 4px; font-size: 14px;">
+        Administrează toate instanțele de pe platforma GastroHub
+      </p>
+    </div>
+    <button class="btn btn-primary" onclick="showNewTenantForm()">
+      <i class="fas fa-plus"></i> Tenant Nou
+    </button>
+  </div>
+
+  <!-- Quick Stats -->
+  <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 24px;">
+    <div class="kpi-card">
+      <div class="kpi-value" id="admin-tenants-total"><%= locals.tenants ? (tenants.total || tenants.length || 0) : 0 %></div>
+      <div class="kpi-label">Total Tenanți</div>
+    </div>
+    <div class="kpi-card success">
+      <div class="kpi-value" id="admin-tenants-active">0</div>
+      <div class="kpi-label">Activi</div>
+    </div>
+    <div class="kpi-card warning">
+      <div class="kpi-value" id="admin-tenants-suspended">0</div>
+      <div class="kpi-label">Suspendati</div>
+    </div>
+    <div class="kpi-card info">
+      <div class="kpi-value" id="admin-tenants-trial">0</div>
+      <div class="kpi-label">În Perioadă de Test</div>
+    </div>
+  </div>
+
+  <!-- Filters Bar -->
+  <div class="filters-bar">
+    <div class="filter-group" style="flex: 1; min-width: 200px;">
+      <label for="admin-tenants-search"><i class="fas fa-search"></i></label>
+      <input type="text" id="admin-tenants-search" placeholder="Caută după nume, email, subdomeniu..."
+             onkeyup="if (event.key === 'Enter') applyTenantsFilters()" style="width: 100%;" />
+    </div>
+    <div class="filter-group">
+      <label for="admin-tenants-status">Status:</label>
+      <select id="admin-tenants-status" onchange="applyTenantsFilters()">
+        <option value="all">Toate</option>
+        <option value="active">Activ</option>
+        <option value="inactive">Inactiv</option>
+        <option value="suspended">Suspendat</option>
+        <option value="trial">Probă</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label for="admin-tenants-plan">Plan:</label>
+      <select id="admin-tenants-plan" onchange="applyTenantsFilters()">
+        <option value="all">Toate</option>
+        <option value="basic">Basic</option>
+        <option value="professional">Professional</option>
+        <option value="enterprise">Enterprise</option>
+      </select>
+    </div>
+    <button class="btn btn-secondary" onclick="resetTenantsFilters()">
+      <i class="fas fa-undo"></i> Resetează
+    </button>
+  </div>
+
+  <!-- Tenants Table -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <i class="fas fa-building"></i> Lista Tenanți
+      </div>
+      <span class="text-muted" id="admin-tenants-count">
+        <%= locals.tenants ? (tenants.total || tenants.length || 0) : 0 %> înregistrări
+      </span>
+    </div>
+
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Nume / Subdomeniu</th>
+            <th>Email Proprietar</th>
+            <th>Utilizatori</th>
+            <th>Status</th>
+            <th>Plan</th>
+            <th>Venituri</th>
+            <th class="actions-cell">Acțiuni</th>
+          </tr>
+        </thead>
+        <tbody id="admin-tenants-table-body">
+          <% if (locals.tenants && tenants.items && tenants.items.length > 0) { %>
+            <% tenants.items.forEach(function(tenant) { %>
+              <tr>
+                <td>
+                  <strong><%= tenant.name || 'N/A' %></strong>
+                  <br><small class="text-muted"><%= tenant.subdomain || tenant.domain || '-' %></small>
+                </td>
+                <td><%= tenant.ownerEmail || tenant.email || '-' %></td>
+                <td><%= tenant.usersCount || 0 %></td>
+                <td>
+                  <span class="badge <%= tenant.status === 'active' ? 'badge-active' : tenant.status === 'suspended' ? 'badge-suspended' : tenant.status === 'trial' ? 'badge-pending' : 'badge-inactive' %>">
+                    <%= tenant.status === 'active' ? 'Activ' : tenant.status === 'suspended' ? 'Suspendat' : tenant.status === 'trial' ? 'Probă' : 'Inactiv' %>
+                  </span>
+                </td>
+                <td><%= tenant.plan || '-' %></td>
+                <td><%= typeof formatCurrency === 'function' ? formatCurrency(tenant.revenue || 0) : `${Number(tenant.revenue || 0).toFixed(2)} lei` %></td>
+                <td class="actions-cell">
+                  <button class="btn btn-sm btn-outline-primary" onclick="editTenant('<%= tenant._id || tenant.id %>')" title="Editează">
+                    <i class="fas fa-edit"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-danger" onclick="deleteTenant('<%= tenant._id || tenant.id %>')" title="Șterge">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-info" onclick="showTenantDetail('<%= tenant._id || tenant.id %>')" title="Detalii">
+                    <i class="fas fa-info-circle"></i>
+                  </button>
+                </td>
+              </tr>
+            <% }); %>
+          <% } else { %>
+            <tr>
+              <td colspan="7" class="text-center" style="padding: 40px 20px; color: var(--color-text-muted);">
+                <i class="fas fa-building" style="font-size: 32px; opacity: 0.4; margin-bottom: 8px; display: block;"></i>
+                Nu există tenanți. <button class="btn btn-sm btn-primary mt-2" onclick="showNewTenantForm()">Creează primul tenant</button>
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div id="admin-tenants-pagination" class="flex justify-center mt-2"></div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL: CREARE / EDITARE TENANT
+     ============================================================ -->
+<div class="modal-overlay" id="admin-tenant-modal" style="display: none;">
+  <div class="modal modal-wide">
+    <div class="modal-header">
+      <h2 id="tenant-modal-title">Tenant Nou</h2>
+      <button class="modal-close" onclick="closeModal('admin-tenant-modal')">&times;</button>
+    </div>
+
+    <form id="tenant-form" onsubmit="event.preventDefault(); saveTenant();">
+      <input type="hidden" id="tenant-modal-id" value="" />
+
+      <!-- Rând 1: Nume + Subdomeniu -->
+      <div class="form-row">
+        <div class="form-group">
+          <label for="tenant-modal-name">Nume Tenant <span class="required">*</span></label>
+          <input type="text" id="tenant-modal-name" placeholder="ex: Restaurantul Maria" required />
+          <div class="form-hint">Numele comercial al tenantului</div>
+        </div>
+        <div class="form-group">
+          <label for="tenant-modal-subdomain">Subdomeniu <span class="required">*</span></label>
+          <input type="text" id="tenant-modal-subdomain" placeholder="ex: maria" required pattern="[a-z0-9-]+" />
+          <div class="form-hint">Doar litere mici, cifre și cratime. Va fi folosit ca: maria.gastrohub.ro</div>
+        </div>
+      </div>
+
+      <!-- Rând 2: Email + Plan -->
+      <div class="form-row">
+        <div class="form-group">
+          <label for="tenant-modal-email">Email Proprietar <span class="required">*</span></label>
+          <input type="email" id="tenant-modal-email" placeholder="ex: contact@restaurant-maria.ro" required />
+          <div class="form-hint">Adresa de email a administratorului tenantului</div>
+        </div>
+        <div class="form-group">
+          <label for="tenant-modal-plan">Plan Abonament</label>
+          <select id="tenant-modal-plan">
+            <option value="trial">Probă (Trial)</option>
+            <option value="basic">Basic</option>
+            <option value="professional">Professional</option>
+            <option value="enterprise">Enterprise</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Rând 3: Status + Note -->
+      <div class="form-row">
+        <div class="form-group">
+          <label for="tenant-modal-status">Status</label>
+          <select id="tenant-modal-status">
+            <option value="active">Activ</option>
+            <option value="inactive">Inactiv</option>
+            <option value="suspended">Suspendat</option>
+            <option value="trial">Probă</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="tenant-modal-notes">Note Interne</label>
+          <textarea id="tenant-modal-notes" rows="3" placeholder="Observații, informații suplimentare..." style="min-height: 60px;"></textarea>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('admin-tenant-modal')">Anulează</button>
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-save"></i> Salvează Tenant
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL: DETALII TENANT
+     ============================================================ -->
+<div class="modal-overlay" id="admin-tenant-detail-modal" style="display: none;">
+  <div class="modal">
+    <div class="modal-header">
+      <h2><i class="fas fa-building" style="color: var(--color-primary);"></i> <span id="tenant-detail-name">Detalii Tenant</span></h2>
+      <button class="modal-close" onclick="closeModal('admin-tenant-detail-modal')">&times;</button>
+    </div>
+
+    <div class="card-body">
+      <!-- Info Grid -->
+      <div class="grid-2" style="gap: 16px; margin-bottom: 16px;">
+        <div>
+          <div class="text-muted" style="font-size: 12px;">Subdomeniu</div>
+          <div style="font-weight: 600;" id="tenant-detail-subdomain">-</div>
+        </div>
+        <div>
+          <div class="text-muted" style="font-size: 12px;">Email Proprietar</div>
+          <div style="font-weight: 600;" id="tenant-detail-email">-</div>
+        </div>
+        <div>
+          <div class="text-muted" style="font-size: 12px;">Plan</div>
+          <div style="font-weight: 600;" id="tenant-detail-plan">-</div>
+        </div>
+        <div>
+          <div class="text-muted" style="font-size: 12px;">Status</div>
+          <div style="font-weight: 600;" id="tenant-detail-status">-</div>
+        </div>
+        <div>
+          <div class="text-muted" style="font-size: 12px;">Data Creării</div>
+          <div style="font-weight: 600;" id="tenant-detail-created">-</div>
+        </div>
+        <div>
+          <div class="text-muted" style="font-size: 12px;">Utilizatori</div>
+          <div style="font-weight: 600;" id="tenant-detail-users">0</div>
+        </div>
+        <div>
+          <div class="text-muted" style="font-size: 12px;">Venituri Totale</div>
+          <div style="font-weight: 600; color: var(--color-success);" id="tenant-detail-revenue">0 lei</div>
+        </div>
+        <div>
+          <div class="text-muted" style="font-size: 12px;">Locații</div>
+          <div style="font-weight: 600;" id="tenant-detail-locations">0</div>
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div class="form-group">
+        <label style="font-size: 12px; color: var(--color-text-muted);">Note</label>
+        <div id="tenant-detail-notes" style="padding: 10px 12px; background: var(--color-bg); border-radius: var(--radius-sm); font-size: 14px; min-height: 40px;">-</div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('admin-tenant-detail-modal')">Închide</button>
+      <button class="btn btn-primary" onclick="const name = document.getElementById('tenant-detail-name').textContent; closeModal('admin-tenant-detail-modal'); editTenant(document.querySelector('[data-view=\"tenants\"]')?.getAttribute('data-id') || '');">
+        <i class="fas fa-edit"></i> Editează
+      </button>
+    </div>
+  </div>
+</div>

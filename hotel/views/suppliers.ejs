@@ -1,0 +1,907 @@
+<%
+  // ============================================================
+  // HOTEL SUPPLIERS VIEW – Gestionare furnizori hotel (CRUD, filtre, căutare)
+  // Variabile locale:
+  //   hotel, suppliers, loading, currentSearch, currentStatus,
+  //   currentSort, currentSortOrder, currentPage, totalPages, totalItems,
+  //   paymentTerms, statuses, activeCount, blacklistedCount
+  // ============================================================
+  const hotel = locals.hotel || null;
+  const suppliers = locals.suppliers || [];
+  const loading = locals.loading || false;
+  const currentSearch = locals.currentSearch || '';
+  const currentStatus = locals.currentStatus || 'all';
+  const currentSort = locals.currentSort || 'name';
+  const currentSortOrder = locals.currentSortOrder || 'asc';
+  const currentPage = locals.currentPage || 1;
+  const totalPages = locals.totalPages || 1;
+  const totalItems = locals.totalItems || 0;
+  const paymentTerms = locals.paymentTerms || [
+    'pe loc', '7 zile', '14 zile', '30 zile', '45 zile', '60 zile',
+    'la livrare', 'avans 50%', 'personalizat'
+  ];
+  const statuses = locals.statuses || ['active', 'inactive', 'blacklisted'];
+
+  const activeCount = suppliers.filter(function(s) { return s.status === 'active'; }).length;
+  const blacklistedCount = suppliers.filter(function(s) { return s.status === 'blacklisted'; }).length;
+%>
+
+<style>
+  /* ============================================================
+     HOTEL SUPPLIERS PAGE STYLES
+     ============================================================ */
+  .hsup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .hsup-header h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .hsup-header h1 i {
+    color: #1abc9c;
+  }
+
+  .hsup-header .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--color-text-muted);
+    font-size: 13px;
+    flex-wrap: wrap;
+  }
+
+  .hsup-header .header-meta .hotel-name {
+    font-weight: 600;
+    color: #1abc9c;
+  }
+
+  /* ============================================================
+     STATS BAR
+     ============================================================ */
+  .hsup-stats-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .hsup-stat-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: all var(--transition);
+  }
+
+  .hsup-stat-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+  }
+
+  .hsup-stat-card .stat-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .hsup-stat-card .stat-icon.teal { background: rgba(26, 188, 156, 0.1); color: #1abc9c; }
+  .hsup-stat-card .stat-icon.success { background: #e8f5e9; color: var(--color-success); }
+  .hsup-stat-card .stat-icon.danger { background: #fce4ec; color: var(--color-danger); }
+  .hsup-stat-card .stat-icon.info { background: #e3f2fd; color: var(--color-info); }
+  .hsup-stat-card .stat-icon.warning { background: #fff8e1; color: var(--color-warning); }
+
+  .hsup-stat-card .stat-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .hsup-stat-card .stat-body .stat-number {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--color-text);
+    line-height: 1.1;
+  }
+
+  .hsup-stat-card .stat-body .stat-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+  }
+
+  /* ============================================================
+     FILTERS
+     ============================================================ */
+  .hsup-filters {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    padding: 16px 20px;
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+  }
+
+  .hsup-filters .search-wrapper {
+    flex: 1;
+    min-width: 200px;
+    position: relative;
+  }
+
+  .hsup-filters .search-wrapper input {
+    width: 100%;
+    padding: 10px 14px 10px 40px;
+    font-size: 14px;
+    font-family: var(--font-family);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    transition: border-color var(--transition);
+  }
+
+  .hsup-filters .search-wrapper input:focus {
+    outline: none;
+    border-color: #1abc9c;
+    box-shadow: 0 0 0 3px rgba(26, 188, 156, 0.12);
+  }
+
+  .hsup-filters .search-wrapper i {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-text-muted);
+    font-size: 14px;
+  }
+
+  .hsup-filters select {
+    padding: 10px 32px 10px 12px;
+    font-size: 13px;
+    font-family: var(--font-family);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23636e72' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+
+  .hsup-filters .filter-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  /* ============================================================
+     TABLE
+     ============================================================ */
+  .hsup-table-wrapper {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--color-border);
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+
+  .hsup-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .hsup-table thead th {
+    padding: 12px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    background: var(--color-bg);
+    border-bottom: 2px solid var(--color-border);
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition: color var(--transition);
+  }
+
+  .hsup-table thead th:hover {
+    color: var(--color-text);
+  }
+
+  .hsup-table thead th.sorted {
+    color: #1abc9c;
+  }
+
+  .hsup-table thead th.sorted i {
+    margin-left: 4px;
+  }
+
+  .hsup-table tbody td {
+    padding: 14px 16px;
+    font-size: 14px;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
+  }
+
+  .hsup-table tbody tr {
+    transition: background var(--transition);
+    cursor: pointer;
+  }
+
+  .hsup-table tbody tr:hover {
+    background: rgba(26, 188, 156, 0.03);
+  }
+
+  .hsup-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .hsup-table .sup-name-cell {
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .hsup-table .sup-name-cell .sup-contact-person {
+    display: block;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+  }
+
+  .hsup-table .sup-contact-cell {
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+
+  .hsup-table .sup-contact-cell i {
+    width: 16px;
+    text-align: center;
+    margin-right: 4px;
+    color: var(--color-text-muted);
+  }
+
+  .hsup-table .sup-products-cell {
+    font-size: 12px;
+  }
+
+  .hsup-table .sup-products-cell .product-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    margin: 2px;
+    border-radius: 10px;
+    background: var(--color-bg);
+    color: var(--color-text-muted);
+    font-size: 11px;
+    border: 1px solid var(--color-border);
+  }
+
+  .hsup-table .sup-payment-cell {
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+
+  .hsup-table .sup-rating-cell {
+    text-align: center;
+  }
+
+  .hsup-table .sup-rating-cell .stars {
+    color: var(--color-warning);
+    font-size: 13px;
+    letter-spacing: 1px;
+  }
+
+  .hsup-table .sup-rating-cell .rating-number {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-left: 4px;
+  }
+
+  .hsup-table .sup-status-cell {
+    text-align: center;
+  }
+
+  .hsup-table .sup-actions-cell {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .hsup-table .sup-actions-cell button {
+    padding: 6px 10px;
+    font-size: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: all var(--transition);
+    color: var(--color-text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 4px;
+  }
+
+  .hsup-table .sup-actions-cell button:hover {
+    background: var(--color-bg);
+    color: var(--color-text);
+  }
+
+  .hsup-table .sup-actions-cell .btn-edit:hover {
+    color: var(--color-info);
+    border-color: var(--color-info);
+  }
+
+  .hsup-table .sup-actions-cell .btn-order:hover {
+    color: #1abc9c;
+    border-color: #1abc9c;
+  }
+
+  .hsup-table .sup-actions-cell .btn-delete:hover {
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+  }
+
+  /* ============================================================
+     STATUS BADGES
+     ============================================================ */
+  .hsup-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 12px;
+  }
+
+  .hsup-status-badge.active {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  .hsup-status-badge.inactive {
+    background: var(--color-bg);
+    color: var(--color-text-muted);
+  }
+
+  .hsup-status-badge.blacklisted {
+    background: #fce4ec;
+    color: #c62828;
+  }
+
+  /* ============================================================
+     PAGINATION
+     ============================================================ */
+  .hsup-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .hsup-pagination button {
+    padding: 8px 14px;
+    font-size: 13px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: all var(--transition);
+    color: var(--color-text);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .hsup-pagination button:hover:not(:disabled) {
+    border-color: #1abc9c;
+    color: #1abc9c;
+  }
+
+  .hsup-pagination button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .hsup-pagination button.active {
+    background: #1abc9c;
+    color: #fff;
+    border-color: #1abc9c;
+  }
+
+  .hsup-pagination .page-info {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    padding: 0 8px;
+  }
+
+  /* ============================================================
+     EMPTY STATE
+     ============================================================ */
+  .hsup-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--color-text-muted);
+  }
+
+  .hsup-empty i {
+    font-size: 52px;
+    opacity: 0.2;
+    margin-bottom: 16px;
+  }
+
+  .hsup-empty h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--color-text);
+  }
+
+  .hsup-empty p {
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+
+  /* ============================================================
+     RESPONSIVE
+     ============================================================ */
+  @media (max-width: 768px) {
+    .hsup-table thead {
+      display: none;
+    }
+
+    .hsup-table tbody tr {
+      display: block;
+      padding: 16px;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .hsup-table tbody td {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border: none;
+      font-size: 13px;
+    }
+
+    .hsup-table tbody td::before {
+      content: attr(data-label);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--color-text-muted);
+      min-width: 90px;
+    }
+
+    .hsup-table tbody td.hsup-actions-cell {
+      justify-content: flex-end;
+      padding-top: 10px;
+      border-top: 1px solid var(--color-border);
+      margin-top: 8px;
+    }
+
+    .hsup-filters {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .hsup-filters .search-wrapper {
+      min-width: 0;
+    }
+
+    .hsup-stats-bar {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .hsup-header h1 {
+      font-size: 20px;
+    }
+
+    .hsup-stats-bar {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* ============================================================
+     HOTEL SELECTOR OVERRIDE
+     ============================================================ */
+  .hsup-hotel-selector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .hsup-hotel-selector select {
+    padding: 8px 32px 8px 12px;
+    font-size: 13px;
+    font-family: var(--font-family);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23636e72' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+</style>
+
+<!-- ============================================================
+     PAGE HEADER
+     ============================================================ -->
+<div class="hsup-header">
+  <div>
+    <h1>
+      <i class="fas fa-truck"></i>
+      Furnizori Hotel
+    </h1>
+    <div class="header-meta">
+      <% if (hotel) { %>
+        <span class="hotel-name"><i class="fas fa-building"></i> <%= hotel.nume || hotel.name %></span>
+        <span class="text-muted">•</span>
+      <% } %>
+      <span>
+        <i class="fas fa-boxes"></i>
+        <%= totalItems %> furnizori
+      </span>
+      <% if (blacklistedCount > 0) { %>
+        <span style="color:var(--color-danger);font-weight:600;">
+          <i class="fas fa-exclamation-triangle"></i>
+          <%= blacklistedCount %> blacklisted
+        </span>
+      <% } %>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <% if (locals.hotels && locals.hotels.length > 1) { %>
+      <div class="hsup-hotel-selector">
+        <i class="fas fa-hotel" style="color:#1abc9c;font-size:14px;"></i>
+        <select id="hotelSelect" onchange="switchHotel(this.value)">
+          <% locals.hotels.forEach(function(h) { %>
+            <option value="<%= h._id %>" <%= hotel && (hotel._id === h._id) ? 'selected' : '' %>>
+              <%= h.nume || h.name %>
+            </option>
+          <% }); %>
+        </select>
+      </div>
+    <% } %>
+    <button class="btn btn-primary btn-sm" onclick="openAddSupplierModal()" style="background:#1abc9c;border-color:#1abc9c;">
+      <i class="fas fa-plus"></i> Furnizor nou
+    </button>
+    <button class="btn btn-secondary btn-sm" onclick="loadSuppliers()">
+      <i class="fas fa-sync-alt"></i> Reîmprospătare
+    </button>
+  </div>
+</div>
+
+<!-- ============================================================
+     LOADING
+     ============================================================ -->
+<% if (loading) { %>
+  <div class="spinner"></div>
+<% } else { %>
+
+<!-- ============================================================
+     ALERT
+     ============================================================ -->
+<% if (locals.alert) { %>
+  <div class="dashboard-alert <%= alert.type || 'info' %>" style="margin-bottom:20px;">
+    <i class="fas fa-<%= alert.type === 'warning' ? 'exclamation-triangle' : alert.type === 'success' ? 'check-circle' : 'info-circle' %>"></i>
+    <%= alert.message %>
+  </div>
+<% } %>
+
+<!-- ============================================================
+     STATS CARDS
+     ============================================================ -->
+<div class="hsup-stats-bar">
+  <div class="hsup-stat-card">
+    <div class="stat-icon teal"><i class="fas fa-truck"></i></div>
+    <div class="stat-body">
+      <div class="stat-number"><%= totalItems %></div>
+      <div class="stat-label">Total furnizori</div>
+    </div>
+  </div>
+  <div class="hsup-stat-card">
+    <div class="stat-icon success"><i class="fas fa-check-circle"></i></div>
+    <div class="stat-body">
+      <div class="stat-number"><%= activeCount %></div>
+      <div class="stat-label">Activi</div>
+    </div>
+  </div>
+  <div class="hsup-stat-card">
+    <div class="stat-icon warning"><i class="fas fa-clock"></i></div>
+    <div class="stat-body">
+      <div class="stat-number"><%= suppliers.length - activeCount - blacklistedCount %></div>
+      <div class="stat-label">Inactivi</div>
+    </div>
+  </div>
+  <div class="hsup-stat-card">
+    <div class="stat-icon danger"><i class="fas fa-ban"></i></div>
+    <div class="stat-body">
+      <div class="stat-number"><%= blacklistedCount %></div>
+      <div class="stat-label">Blacklisted</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     FILTERS
+     ============================================================ -->
+<div class="hsup-filters">
+  <div class="search-wrapper">
+    <i class="fas fa-search"></i>
+    <input type="text" id="searchInput" placeholder="Caută furnizor după nume, contact, produs..."
+           value="<%= currentSearch %>" onkeyup="debounceFilter()" />
+  </div>
+
+  <select id="statusFilter" onchange="applyFilters()">
+    <option value="all" <%= currentStatus === 'all' ? 'selected' : '' %>>Toate statusurile</option>
+    <% statuses.forEach(function(status) { %>
+      <option value="<%= status %>" <%= currentStatus === status ? 'selected' : '' %>>
+        <%= status.charAt(0).toUpperCase() + status.slice(1) %>
+      </option>
+    <% }); %>
+  </select>
+
+  <select id="sortFilter" onchange="applyFilters()">
+    <option value="name" <%= currentSort === 'name' ? 'selected' : '' %>>Nume</option>
+    <option value="rating" <%= currentSort === 'rating' ? 'selected' : '' %>>Rating</option>
+    <option value="paymentTerms" <%= currentSort === 'paymentTerms' ? 'selected' : '' %>>Termeni plată</option>
+    <option value="createdAt" <%= currentSort === 'createdAt' ? 'selected' : '' %>>Dată adăugare</option>
+  </select>
+
+  <select id="orderFilter" onchange="applyFilters()">
+    <option value="asc" <%= currentSortOrder === 'asc' ? 'selected' : '' %>>Ascendent</option>
+    <option value="desc" <%= currentSortOrder === 'desc' ? 'selected' : '' %>>Descendent</option>
+  </select>
+
+  <div class="filter-actions">
+    <button class="btn btn-sm btn-secondary" onclick="resetFilters()" title="Resetează filtrele">
+      <i class="fas fa-undo"></i> Resetează
+    </button>
+  </div>
+</div>
+
+<!-- ============================================================
+     SUPPLIERS TABLE
+     ============================================================ -->
+<% if (suppliers.length === 0) { %>
+  <div class="hsup-empty">
+    <i class="fas fa-truck"></i>
+    <h3>Nu există furnizori</h3>
+    <p>Adaugă primul furnizor pentru a începe gestionarea aprovizionării hotelului.</p>
+    <button class="btn btn-primary" onclick="openAddSupplierModal()" style="background:#1abc9c;border-color:#1abc9c;">
+      <i class="fas fa-plus"></i> Adaugă furnizor
+    </button>
+  </div>
+<% } else { %>
+  <div class="hsup-table-wrapper">
+    <table class="hsup-table" id="suppliersTable">
+      <thead>
+        <tr>
+          <th onclick="sortBy('name')" class="<%= currentSort === 'name' ? 'sorted' : '' %>">
+            Nume furnizor <% if (currentSort === 'name') { %><i class="fas fa-arrow-<%= currentSortOrder === 'asc' ? 'up' : 'down' %>"></i><% } %>
+          </th>
+          <th>Contact</th>
+          <th>Produse</th>
+          <th onclick="sortBy('paymentTerms')" class="<%= currentSort === 'paymentTerms' ? 'sorted' : '' %>">
+            Termeni plată <% if (currentSort === 'paymentTerms') { %><i class="fas fa-arrow-<%= currentSortOrder === 'asc' ? 'up' : 'down' %>"></i><% } %>
+          </th>
+          <th onclick="sortBy('rating')" class="<%= currentSort === 'rating' ? 'sorted' : '' %>" style="text-align:center;">
+            Rating <% if (currentSort === 'rating') { %><i class="fas fa-arrow-<%= currentSortOrder === 'asc' ? 'up' : 'down' %>"></i><% } %>
+          </th>
+          <th style="text-align:center;">Status</th>
+          <th style="text-align:right;">Acțiuni</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% suppliers.forEach(function(supplier) { %>
+          <tr onclick="viewSupplier('<%= supplier._id %>')" data-id="<%= supplier._id %>" style="cursor:pointer;">
+            <td data-label="Nume furnizor">
+              <div class="sup-name-cell">
+                <%= supplier.name %>
+                <% if (supplier.contactPerson) { %>
+                  <span class="sup-contact-person"><i class="fas fa-user"></i> <%= supplier.contactPerson %></span>
+                <% } %>
+              </div>
+            </td>
+            <td data-label="Contact" class="sup-contact-cell">
+              <% if (supplier.phone) { %>
+                <div><i class="fas fa-phone"></i> <%= supplier.phone %></div>
+              <% } %>
+              <% if (supplier.email) { %>
+                <div><i class="fas fa-envelope"></i> <%= supplier.email %></div>
+              <% } %>
+              <% if (!supplier.phone && !supplier.email) { %>
+                <span class="text-muted">—</span>
+              <% } %>
+            </td>
+            <td data-label="Produse" class="sup-products-cell">
+              <% if (supplier.products && supplier.products.length > 0) { %>
+                <% supplier.products.slice(0, 4).forEach(function(product) { %>
+                  <span class="product-tag"><%= product %></span>
+                <% }); %>
+                <% if (supplier.products.length > 4) { %>
+                  <span class="product-tag" style="background:#1abc9c;color:#fff;">+<%= supplier.products.length - 4 %></span>
+                <% } %>
+              <% } else { %>
+                <span class="text-muted">—</span>
+              <% } %>
+            </td>
+            <td data-label="Termeni plată" class="sup-payment-cell">
+              <i class="fas fa-credit-card"></i> <%= supplier.paymentTerms || '30 zile' %>
+            </td>
+            <td data-label="Rating" class="sup-rating-cell">
+              <% if (supplier.rating !== null && supplier.rating !== undefined) { %>
+                <span class="stars">
+                  <% for (var i = 1; i <= 5; i++) { %>
+                    <i class="fas fa-star<%= i <= supplier.rating ? '' : '-o' %>"></i>
+                  <% } %>
+                </span>
+                <span class="rating-number"><%= supplier.rating.toFixed(1) %></span>
+              <% } else { %>
+                <span class="text-muted">—</span>
+              <% } %>
+            </td>
+            <td data-label="Status" class="sup-status-cell">
+              <span class="hsup-status-badge <%= supplier.status || 'inactive' %>">
+                <%= (supplier.status || 'inactive') === 'active' ? 'Activ' : (supplier.status || 'inactive') === 'blacklisted' ? 'Blacklisted' : 'Inactiv' %>
+              </span>
+            </td>
+            <td data-label="Acțiuni" class="sup-actions-cell" onclick="event.stopPropagation();">
+              <button class="btn-edit" onclick="editSupplier('<%= supplier._id %>')" title="Editează furnizorul">
+                <i class="fas fa-edit"></i>
+              </button>
+              <button class="btn-order" onclick="placeOrder('<%= supplier._id %>', '<%= supplier.name.replace(/'/g, "\\'") %>')" title="Plasează comandă">
+                <i class="fas fa-shopping-cart"></i>
+              </button>
+              <button class="btn-delete" onclick="deleteSupplier('<%= supplier._id %>', '<%= supplier.name.replace(/'/g, "\\'") %>')" title="Șterge furnizorul">
+                <i class="fas fa-trash"></i>
+              </button>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+
+    <!-- Pagination -->
+    <div class="hsup-pagination">
+      <button onclick="changePage(<%= currentPage - 1 %>)" <%= currentPage <= 1 ? 'disabled' : '' %>>
+        <i class="fas fa-chevron-left"></i> Anterior
+      </button>
+
+      <% var startPage = Math.max(1, currentPage - 2); %>
+      <% var endPage = Math.min(totalPages, currentPage + 2); %>
+
+      <% if (startPage > 1) { %>
+        <button onclick="changePage(1)">1</button>
+        <% if (startPage > 2) { %><span class="page-info">...</span><% } %>
+      <% } %>
+
+      <% for (var p = startPage; p <= endPage; p++) { %>
+        <button class="<%= p === currentPage ? 'active' : '' %>" onclick="changePage(<%= p %>)"><%= p %></button>
+      <% } %>
+
+      <% if (endPage < totalPages) { %>
+        <% if (endPage < totalPages - 1) { %><span class="page-info">...</span><% } %>
+        <button onclick="changePage(<%= totalPages %>)"><%= totalPages %></button>
+      <% } %>
+
+      <span class="page-info">
+        Pagina <%= currentPage %> din <%= totalPages %>
+        <span style="margin-left:8px;font-weight:400;">(<%= totalItems %> furnizori)</span>
+      </span>
+
+      <button onclick="changePage(<%= currentPage + 1 %>)" <%= currentPage >= totalPages ? 'disabled' : '' %>>
+        Următor <i class="fas fa-chevron-right"></i>
+      </button>
+    </div>
+  </div>
+<% } %>
+
+<% } /* end loading */ %>
+
+<!-- ============================================================
+     MODAL: Adaugă / Editează Furnizor
+     ============================================================ -->
+<div id="supplierModal" class="modal-overlay" style="display:none;">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="supplierModalTitle">Adaugă furnizor nou</h2>
+      <button class="modal-close" onclick="closeSupplierModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="supplierForm" onsubmit="return saveSupplier(event)">
+        <input type="hidden" id="supplierId" value="" />
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="supplierName">Nume furnizor *</label>
+            <input type="text" id="supplierName" required maxlength="200" placeholder="Ex: Distribuții Hotel SRL" />
+          </div>
+          <div class="form-group">
+            <label for="supplierContact">Persoană de contact</label>
+            <input type="text" id="supplierContact" maxlength="200" placeholder="Ex: Ion Popescu" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="supplierPhone">Telefon</label>
+            <input type="text" id="supplierPhone" maxlength="50" placeholder="Ex: 0722 123 456" />
+          </div>
+          <div class="form-group">
+            <label for="supplierEmail">Email</label>
+            <input type="email" id="supplierEmail" maxlength="255" placeholder="Ex: contact@distributii.ro" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="supplierAddress">Adresă</label>
+          <textarea id="supplierAddress" rows="2" maxlength="500" placeholder="Adresa completă a furnizorului..."></textarea>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="supplierPaymentTerms">Termeni de plată</label>
+            <select id="supplierPaymentTerms">
+              <% paymentTerms.forEach(function(term) { %>
+                <option value="<%= term %>" <%= term === '30 zile' ? 'selected' : '' %>><%= term.charAt(0).toUpperCase() + term.slice(1) %></option>
+              <% }); %>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="supplierRating">Rating (0-5)</label>
+            <input type="number" id="supplierRating" min="0" max="5" step="0.1" placeholder="Ex: 4.5" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="supplierStatus">Status</label>
+            <select id="supplierStatus">
+              <option value="active">Activ</option>
+              <option value="inactive">Inactiv</option>
+              <option value="blacklisted">Blacklistat</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="supp

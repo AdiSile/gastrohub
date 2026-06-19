@@ -1,0 +1,352 @@
+// ---------------------------------------------------------------------------
+// GET /api/reservations/status/:status
+// ---------------------------------------------------------------------------
+
+/**
+ * @route   GET /api/reservations/status/:status
+ * @desc    Listare rezervãri dupã status
+ * @access  Privat (autentificare necesarã)
+ *
+ * Query params:
+ *   - tip    {string}  op?ional – filtrare dupã tip
+ *   - sort   {string}  op?ional – câmp dupã care se sorteazã
+ *   - limit  {number}  op?ional – numãr maxim de rezultate
+ *   - skip   {number}  op?ional – câte rezultate se sar
+ *
+ * Rãspuns (200):
+ *   { success: true, data: { reservations } }
+ */
+router.get(
+  '/status/:status',
+  authenticate,
+  authorizeMinLevel('recep?ie'),
+  [
+    param('status')
+      .isIn(VALID_RESERVATION_STATUSES)
+      .withMessage(`Statusul trebuie sã fie unul dintre: ${VALID_RESERVATION_STATUSES.join(', ')}.`),
+    query('tip')
+      .optional()
+      .isIn(VALID_RESERVATION_TYPES)
+      .withMessage(`Tipul trebuie sã fie unul dintre: ${VALID_RESERVATION_TYPES.join(', ')}.`),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
+    try {
+      const tenantId = resolveUserTenantId(req);
+      if (!tenantId) {
+        return next(new AppError('Nu ai un tenant asociat.', 400, 'MISSING_TENANT_ID'));
+      }
+
+      const { status } = req.params;
+      const { tip, sort, limit, skip } = req.query;
+
+      const options = {};
+      if (tip) options.tip = tip;
+      if (sort) options.sort = sort;
+      if (limit) options.limit = limit ? parseInt(limit, 10) : undefined;
+      if (skip) options.skip = skip ? parseInt(skip, 10) : undefined;
+
+      const reservations = await findReservationsByStatus(status, tenantId, options);
+
+      res.status(200).json({
+        success: true,
+        data: { reservations },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// GET /api/reservations/person/search
+// ---------------------------------------------------------------------------
+
+/**
+ * @route   GET /api/reservations/person/search
+ * @desc    Cãutare rezervãri dupã persoanã (nume, telefon sau email)
+ * @access  Privat (autentificare necesarã)
+ *
+ * Query params (cel pu?in unul obligatoriu):
+ *   - numePersoana  {string}  op?ional – numele persoanei
+ *   - telefon       {string}  op?ional – numãrul de telefon
+ *   - email         {string}  op?ional – adresa de email
+ *
+ * Rãspuns (200):
+ *   { success: true, data: { reservations } }
+ */
+router.get(
+  '/person/search',
+  authenticate,
+  authorizeMinLevel('recep?ie'),
+  [
+    query('numePersoana')
+      .optional()
+      .isString()
+      .trim()
+      .isLength({ min: 1 })
+      .withMessage('Numele persoanei trebuie sã aibã cel pu?in 1 caracter.'),
+    query('telefon')
+      .optional()
+      .isString()
+      .trim()
+      .isLength({ min: 1 })
+      .withMessage('Telefonul trebuie sã aibã cel pu?in 1 caracter.'),
+    query('email')
+      .optional()
+      .isEmail()
+      .withMessage('Emailul nu este valid.')
+      .normalizeEmail(),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
+    try {
+      const tenantId = resolveUserTenantId(req);
+      if (!tenantId) {
+        return next(new AppError('Nu ai un tenant asociat.', 400, 'MISSING_TENANT_ID'));
+      }
+
+      const { numePersoana, telefon, email } = req.query;
+
+      // Verificare cã mãcar un criteriu a fost furnizat
+      if (!numePersoana && !telefon && !email) {
+        return next(new AppError(
+          'Trebuie sã furniza?i cel pu?in un criteriu de cãutare (nume, telefon sau email).',
+          400,
+          'MISSING_SEARCH_CRITERIA'
+        ));
+      }
+
+      const searchCriteria = {};
+      if (numePersoana) searchCriteria.numePersoana = numePersoana.trim();
+      if (telefon) searchCriteria.telefon = telefon.trim();
+      if (email) searchCriteria.email = email.trim();
+
+      const reservations = await findReservationsByPerson(searchCriteria, tenantId);
+
+      res.status(200).json({
+        success: true,
+        data: { reservations },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// GET /api/reservations/:id
+// ---------------------------------------------------------------------------
+
+/**
+ * @route   GET /api/reservations/:id
+ * @desc    Ob?ine detaliile unei rezervãri dupã ID
+ * @access  Privat (autentificare necesarã)
+ *
+ * Rãspuns (200):
+ *   { success: true, data: { reservation } }
+ */
+router.get(
+  '/:id',
+  authenticate,
+  authorizeMinLevel('recep?ie'),
+  [
+    param('id')
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('ID-ul rezervãrii este obligatoriu.'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
+    try {
+      const tenantId = resolveUserTenantId(req);
+      if (!tenantId) {
+        return next(new AppError('Nu ai un tenant asociat.', 400, 'MISSING_TENANT_ID'));
+      }
+
+      const { id } = req.params;
+      const reservation = await findReservationById(id, tenantId);
+
+      if (!reservation) {
+        return next(new AppError(
+          'Rezervarea nu a fost gãsitã.',
+          404,
+          'RESERVATION_NOT_FOUND'
+        ));
+      }
+
+      res.status(200).json({
+        success: true,
+        data: { reservation },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// POST /api/reservations
+// ---------------------------------------------------------------------------
+
+/**
+ * @route   POST /api/reservations
+ * @desc    Creeazã o rezervare nouã
+ * @access  Privat (autentificare + rol recep?ie, ospãtar, manager, owner, super_admin)
+ *
+ * Body (JSON):
+ *   - tip            {string}  obligatoriu – 'restaurant' | 'hotel'
+ *   - restaurantId   {string}  obligatoriu (pentru tip='restaurant')
+ *   - hotelId        {string}  obligatoriu (pentru tip='hotel')
+ *   - masa           {number}  op?ional – numãrul mesei
+ *   - camera         {string}  op?ional – identificatorul camerei
+ *   - numePersoana   {string}  obligatoriu – numele persoanei
+ *   - telefon        {string}  op?ional – numãrul de telefon
+ *   - email          {string}  op?ional – adresa de email
+ *   - data           {string}  obligatoriu – data rezervãrii (YYYY-MM-DD)
+ *   - ora            {string}  op?ional – ora rezervãrii (HH:MM)
+ *   - numarPersoane  {number}  obligatoriu – numãrul de persoane
+ *   - status         {string}  op?ional – statusul (implicit 'confirmatã')
+ *   - note           {string}  op?ional – note adi?ionale
+ *   - checkInData    {string}  op?ional – data check-in (pentru hotel, YYYY-MM-DD)
+ *   - checkOutData   {string}  op?ional – data check-out (pentru hotel, YYYY-MM-DD)
+ *   - guestId        {string}  op?ional – ID-ul guest-ului (pentru hotel)
+ *
+ * Rãspuns (201):
+ *   { success: true, data: { reservation } }
+ */
+router.post(
+  '/',
+  authenticate,
+  authorizeMinLevel('ospãtar'),
+  [
+    body('tip')
+      .isString()
+      .trim()
+      .notEmpty()
+      .isIn(VALID_RESERVATION_TYPES)
+      .withMessage(`Tipul rezervãrii trebuie sã fie unul dintre: ${VALID_RESERVATION_TYPES.join(', ')}.`),
+    body('numePersoana')
+      .isString()
+      .trim()
+      .isLength({ min: 2, max: 200 })
+      .withMessage('Numele persoanei trebuie sã aibã între 2 ?i 200 de caractere.'),
+    body('telefon')
+      .optional({ values: 'null' })
+      .isString()
+      .withMessage('Telefonul trebuie sã fie un ?ir de caractere.'),
+    body('email')
+      .optional({ values: 'null' })
+      .isEmail()
+      .withMessage('Adresa de email nu este validã.')
+      .normalizeEmail(),
+    body('data')
+      .isString()
+      .trim()
+      .notEmpty()
+      .matches(/^\d{4}-\d{2}-\d{2}$/)
+      .withMessage('Data rezervãrii trebuie sã fie în format YYYY-MM-DD.'),
+    body('ora')
+      .optional({ values: 'null' })
+      .matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
+      .withMessage('Ora rezervãrii trebuie sã fie în format HH:MM (24h).'),
+    body('numarPersoane')
+      .isInt({ min: 1, max: 999 })
+      .withMessage('Numãrul de persoane trebuie sã fie un numãr întreg între 1 ?i 999.'),
+    body('status')
+      .optional()
+      .isIn(VALID_RESERVATION_STATUSES)
+      .withMessage(`Statusul trebuie sã fie unul dintre: ${VALID_RESERVATION_STATUSES.join(', ')}.`),
+    body('note')
+      .optional()
+      .isString()
+      .isLength({ max: 2000 })
+      .withMessage('Notele pot avea maximum 2000 de caractere.'),
+    body('masa')
+      .optional({ values: 'null' })
+      .isInt({ min: 1 })
+      .withMessage('Numãrul mesei trebuie sã fie un numãr întreg pozitiv.'),
+    body('camera')
+      .optional({ values: 'null' })
+      .isString()
+      .trim()
+      .withMessage('Camera trebuie sã fie un ?ir de caractere.'),
+    body('restaurantId')
+      .optional({ values: 'null' })
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('ID-ul restaurantului trebuie sã fie un ?ir nevid.'),
+    body('hotelId')
+      .optional({ values: 'null' })
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('ID-ul hotelului trebuie sã fie un ?ir nevid.'),
+    body('checkInData')
+      .optional({ values: 'null' })
+      .matches(/^\d{4}-\d{2}-\d{2}$/)
+      .withMessage('Data check-in trebuie sã fie în format YYYY-MM-DD.'),
+    body('checkOutData')
+      .optional({ values: 'null' })
+      .matches(/^\d{4}-\d{2}-\d{2}$/)
+      .withMessage('Data check-out trebuie sã fie în format YYYY-MM-DD.'),
+    body('guestId')
+      .optional({ values: 'null' })
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('ID-ul guest-ului trebuie sã fie un ?ir nevid.'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
+    try {
+      const tenantId = resolveUserTenantId(req);
+      if (!tenantId) {
+        return next(new AppError('Nu ai un tenant asociat.', 400, 'MISSING_TENANT_ID'));
+      }
+
+      const {
+        tip,
+        restaurantId,
+        hotelId,
+        masa,
+        camera,
+        numePersoana,
+        telefon,
+        email,
+        data,
+        ora,
+        numarPersoane,
+        status,
+        note,
+        checkInData,
+        checkOutData,
+        guestId,
+      } = req.body;
+
+      // Validare specificã tipului
+      if (tip === 'restaurant' && !restaurantId) {
+        return next(new AppError(
+          'ID-ul restaurantului este obligatoriu pentru rezervãrile de tip restaurant.',
+          400,
+          'MISSING_RESTAURANT_ID'
+        ));
+      }
+
+      if (tip === 'hotel' && !hotelId) {
+        return next(new AppError(
+          'ID-ul hotelului este obligatoriu pentru rezervãrile de tip hotel.',
+          400,
+          'MISSING_HOTEL_ID'
+        ));
+      }
+
+      const reservationData = {
+        tip,
+        tenantId,
+        numePersoana: numePersoana.trim(),
+        telefon: telefon || '',
+        email: email || '',
+        data,

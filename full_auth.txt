@@ -1,0 +1,316 @@
+1:/**
+2: * ============================================================
+3: * middleware/auth.js - Middleware de autentificare JWT
+4: * ============================================================
+5: *
+6: * Responsabilități:
+7: *  1. Verifică token-ul JWT din cookie-ul 'token' sau din header-ul
+8: *     Authorization (Bearer <token>)
+9: *  2. Decodifică token-ul și populază req.user cu datele utilizatorului
+10: *  3. Expune middleware-ul `authenticate` (obligatoriu) și `optionalAuth`
+11: *     (autentificare opțională)
+12: *  4. Expune funcția `generateToken` pentru crearea de token-uri JWT
+13: *  5. Expune funcția `setTokenCookie` / `clearTokenCookie` pentru gestionarea
+14: *     cookie-urilor
+15: *
+16: * Folosire:
+17: *    const { authenticate, optionalAuth, generateToken, setTokenCookie,
+18: *           clearTokenCookie } = require('../middleware/auth');
+19: *
+20: *    // Protejează o rută
+21: *    router.get('/me', authenticate, userController.getMe);
+22: *
+23: *    // Autentificare opțională
+24: *    router.get('/public', optionalAuth, controller.publicEndpoint);
+25: *
+26: * ============================================================
+27: */
+29:const jwt = require('jsonwebtoken');
+30:const { AppError } = require('./errorHandler');
+31:const { users } = require('../config/db');
+32:const { promisify } = require('util');
+34:// ---------------------------------------------------------------------------
+35:// Constante
+36:// ---------------------------------------------------------------------------
+38:/**
+39: * Numele cookie-ului folosit pentru stocarea token-ului JWT.
+40: * @type {string}
+41: */
+42:const TOKEN_COOKIE_NAME = 'token';
+44:/**
+45: * Timpul implicit de expirare a token-ului (7 zile).
+46: * @type {string}
+47: */
+48:const DEFAULT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+50:// ---------------------------------------------------------------------------
+51:// Funcție internă: căutare utilizator după ID
+52:// ---------------------------------------------------------------------------
+54:/**
+55: * Caută un utilizator în baza de date după ID-ul extras din token.
+56: * Întoarce o promisiune pentru a putea fi folosit cu async/await.
+57: *
+58: * @param {string} id - ID-ul utilizatorului
+59: * @returns {Promise<Object|null>}
+60: */
+61:function findUserById(id) {
+62:  return new Promise((resolve, reject) => {
+63:    users.findOne({ _id: id }, (err, doc) => {
+64:      if (err) return reject(err);
+65:      resolve(doc || null);
+66:    });
+67:  });
+68:}
+70:// ---------------------------------------------------------------------------
+71:// Generare token JWT
+72:// ---------------------------------------------------------------------------
+74:/**
+75: * Creează un token JWT semnat cu datele utilizatorului.
+76: *
+77: * @param {Object}  user         - Obiectul utilizator (minim: _id, email, role, tenantId)
+78: * @param {string}  [expiresIn]  - Durata de valabilitate (ex: '7d', '24h')
+79: * @returns {string} Token JWT
+80: */
+81:function generateToken(user, expiresIn = DEFAULT_EXPIRES_IN) {
+82:  const secret = process.env.JWT_SECRET;
+84:  if (!secret) {
+85:    throw new Error('[auth] JWT_SECRET nu este configurat în variabilele de mediu.');
+86:  }
+88:  const payload = {
+89:    sub: user._id,
+90:    email: user.email,
+91:    role: user.role,
+92:    tenantId: user.tenantId || null,
+93:  };
+95:  return jwt.sign(payload, secret, { expiresIn });
+96:}
+98:// ---------------------------------------------------------------------------
+99:// Gestionare cookie-uri
+100:// ---------------------------------------------------------------------------
+102:/**
+103: * Setează cookie-ul cu token-ul JWT pe răspuns.
+104: *
+105: * @param {Object} res    - Obiectul response Express
+106: * @param {string} token  - Token-ul JWT
+107: */
+108:function setTokenCookie(res, token) {
+109:  const cookieOptions = {
+110:    httpOnly: true,               // Inaccesibil din JavaScript (XSS)
+111:    secure: process.env.NODE_ENV === 'production',  // Doar HTTPS în producție
+112:    sameSite: 'strict',           // Protecție CSRF
+113:    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 zile în milisecunde
+114:    path: '/',
+115:  };
+117:  res.cookie(TOKEN_COOKIE_NAME, token, cookieOptions);
+118:}
+120:/**
+121: * Șterge cookie-ul cu token-ul JWT (folosit la logout).
+122: *
+123: * @param {Object} res - Obiectul response Express
+124: */
+125:function clearTokenCookie(res) {
+126:  res.clearCookie(TOKEN_COOKIE_NAME, {
+127:    httpOnly: true,
+128:    secure: process.env.NODE_ENV === 'production',
+129:    sameSite: 'strict',
+130:    path: '/',
+131:  });
+132:}
+134:// ---------------------------------------------------------------------------
+135:// Funcție internă: extragere token din request
+136:// ---------------------------------------------------------------------------
+138:/**
+139: * Extrage token-ul JWT din request, în ordinea:
+140: *  1. Cookie 'token'
+141: *  2. Header-ul Authorization: Bearer <token>
+142: *
+143: * @param {Object} req - Obiectul request Express
+144: * @returns {string|null} Token-ul sau null dacă nu există
+145: */
+146:function extractToken(req) {
+147:  // 1. Încercare din cookie
+148:  if (req.cookies && req.cookies[TOKEN_COOKIE_NAME]) {
+149:    return req.cookies[TOKEN_COOKIE_NAME];
+150:  }
+152:  // 2. Încercare din header-ul Authorization
+153:  const authHeader = req.headers.authorization;
+154:  if (authHeader && authHeader.startsWith('Bearer ')) {
+155:    return authHeader.split(' ')[1];
+156:  }
+158:  return null;
+159:}
+161:// ---------------------------------------------------------------------------
+162:// Middleware: autentificare obligatorie
+163:// ---------------------------------------------------------------------------
+165:/**
+166: * Middleware care blochează request-urile neautentificate.
+167: *
+168: * @param {Object}   req   - Obiectul request Express
+169: * @param {Object}   res   - Obiectul response Express
+170: * @param {Function} next  - Următorul middleware
+171: *
+172: * @throws {AppError} 401 - dacă token-ul lipsește, e invalid sau expirat
+173: */
+174:async function authenticate(req, res, next) {
+175:  try {
+176:    // -----------------------------------------------------------------------
+177:    // 1. Extragere token
+178:    // -----------------------------------------------------------------------
+179:    const token = extractToken(req);
+181:    if (!token) {
+182:      return next(new AppError(
+183:        'Autentificare necesară. Token-ul JWT lipsește.',
+184:        401,
+185:        'TOKEN_MISSING'
+186:      ));
+187:    }
+189:    // -----------------------------------------------------------------------
+190:    // 2. Verificare token (decodare + verificare semnătură + expirare)
+191:    // -----------------------------------------------------------------------
+192:    const secret = process.env.JWT_SECRET;
+194:    if (!secret) {
+195:      console.error('[auth] JWT_SECRET nu este configurat.');
+196:      return next(new AppError('Eroare de configurare a serverului.', 500, 'SERVER_CONFIG_ERROR'));
+197:    }
+199:    let decoded;
+200:    try {
+201:      decoded = jwt.verify(token, secret);
+202:    } catch (jwtError) {
+203:      if (jwtError.name === 'TokenExpiredError') {
+204:        return next(new AppError(
+205:          'Token-ul a expirat. Te rugăm să te autentifici din nou.',
+206:          401,
+207:          'TOKEN_EXPIRED'
+208:        ));
+209:      }
+210:      if (jwtError.name === 'JsonWebTokenError') {
+211:        return next(new AppError(
+212:          'Token-ul JWT este invalid.',
+213:          401,
+214:          'TOKEN_INVALID'
+215:        ));
+216:      }
+217:      throw jwtError; // Eroare neașteptată
+218:    }
+220:    // -----------------------------------------------------------------------
+221:    // 3. Verificare existență utilizator în baza de date
+222:    // -----------------------------------------------------------------------
+223:    const user = await findUserById(decoded.sub);
+225:    if (!user) {
+226:      return next(new AppError(
+227:        'Utilizatorul asociat acestui token nu mai există.',
+228:        401,
+229:        'USER_NOT_FOUND'
+230:      ));
+231:    }
+233:    // -----------------------------------------------------------------------
+234:    // 4. Populare req.user cu datele utilizatorului (fără parolă)
+235:    // -----------------------------------------------------------------------
+236:    req.user = {
+237:      _id: user._id,
+238:      email: user.email,
+239:      role: user.role,
+240:      tenantId: user.tenantId || null,
+241:      restaurante: user.restaurante || [],
+242:      createdAt: user.createdAt,
+243:    };
+245:    // Adăugăm token-ul și în req pentru alte middlevare
+246:    req.token = token;
+248:    next();
+249:  } catch (err) {
+250:    console.error('[auth] Eroare neașteptată în middleware-ul authenticate:', err);
+251:    return next(new AppError('Eroare internă de autentificare.', 500, 'AUTH_INTERNAL_ERROR'));
+252:  }
+253:}
+255:// ---------------------------------------------------------------------------
+256:// Middleware: autentificare opțională
+257:// ---------------------------------------------------------------------------
+259:/**
+260: * Middleware care încearcă să autentifice utilizatorul, dar nu blochează
+261: * request-ul dacă token-ul lipsește sau este invalid.
+262: *
+263: * Utilitate: rute publice unde prezența utilizatorului autentificat
+264: *            personalizează răspunsul (ex: preîncărcare date pentru
+265: *            utilizatorul logat).
+266: *
+267: * @param {Object}   req   - Obiectul request Express
+268: * @param {Object}   res   - Obiectul response Express
+269: * @param {Function} next  - Următorul middleware
+270: */
+271:async function optionalAuth(req, res, next) {
+272:  try {
+273:    const token = extractToken(req);
+275:    if (!token) {
+276:      req.user = null;
+277:      req.token = null;
+278:      return next();
+279:    }
+281:    const secret = process.env.JWT_SECRET;
+282:    if (!secret) {
+283:      req.user = null;
+284:      req.token = null;
+285:      return next();
+286:    }
+288:    let decoded;
+289:    try {
+290:      decoded = jwt.verify(token, secret);
+291:    } catch (jwtError) {
+292:      // Token invalid sau expirat – nu blocăm, setăm user = null
+293:      req.user = null;
+294:      req.token = null;
+295:      return next();
+296:    }
+298:    const user = await findUserById(decoded.sub);
+299:    if (!user) {
+300:      req.user = null;
+301:      req.token = null;
+302:      return next();
+303:    }
+305:    req.user = {
+306:      _id: user._id,
+307:      email: user.email,
+308:      role: user.role,
+309:      tenantId: user.tenantId || null,
+310:      restaurante: user.restaurante || [],
+311:      createdAt: user.createdAt,
+312:    };
+313:    req.token = token;
+315:    next();
+316:  } catch (err) {
+317:    // Orice eroare neașteptată – nu blocăm, continuăm fără utilizator
+318:    console.error('[auth] Eroare în optionalAuth:', err);
+319:    req.user = null;
+320:    req.token = null;
+321:    next();
+322:  }
+323:}
+325:// ---------------------------------------------------------------------------
+326:// Token refresh helper
+327:// ---------------------------------------------------------------------------
+329:/**
+330: * Reîmprospătează token-ul JWT dacă utilizatorul este deja autentificat.
+331: * Util pentru prelungirea sesiunii înainte de expirare.
+332: *
+333: * @param {Object} req - Obiectul request Express (trebuie să aibă req.user populat)
+334: * @param {Object} res - Obiectul response Express
+335: * @returns {string|null} Noul token sau null dacă utilizatorul nu e autentificat
+336: */
+337:function refreshToken(req, res) {
+338:  if (!req.user) {
+339:    return null;
+340:  }
+342:  const newToken = generateToken(req.user);
+343:  setTokenCookie(res, newToken);
+344:  return newToken;
+345:}
+347:// ---------------------------------------------------------------------------
+348:// Exporturi
+349:// ---------------------------------------------------------------------------
+351:module.exports = {
+352:  authenticate,
+353:  optionalAuth,
+354:  generateToken,
+355:  setTokenCookie,
+356:  clearTokenCookie,
+357:  refreshToken,
+358:  TOKEN_COOKIE_NAME,
+359:};

@@ -1,0 +1,247 @@
+<%
+  // Hotel Layout – Extinde layout-ul principal restaurant/views/layout
+  // Se ocupă de adăugarea secțiunii Hotel în sidebar și variabile hotel
+%>
+
+<!-- Adaugă script pentru activarea tab-ului hotel în sidebar -->
+<% if (locals.currentPage && currentPage.startsWith('hotel')) { %>
+  <% /* Marchează link-ul Hotel ca active în sidebar */ %>
+<% } %>
+
+<!-- Adaugă stiluri specifice hotelului care completează layout-ul principal -->
+<style>
+  /* ============================================================
+     HOTEL-SPECIFIC EXTENSIONS TO THE GLOBAL LAYOUT
+     ============================================================ */
+
+  /* Sidebar hotel section */
+  .sidebar-nav .nav-section.hotel {
+    margin-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    padding-top: 12px;
+  }
+
+  .sidebar-nav a.hotel-link {
+    border-left-color: transparent;
+  }
+
+  .sidebar-nav a.hotel-link:hover,
+  .sidebar-nav a.hotel-link.active {
+    border-left-color: #1abc9c;
+    background: rgba(26, 188, 156, 0.08);
+  }
+
+  .sidebar-nav a.hotel-link i {
+    color: #1abc9c;
+  }
+
+  /* Hotel badge in sidebar */
+  .sidebar-nav a .hotel-badge {
+    margin-left: auto;
+    background: #1abc9c;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+  }
+
+  /* Hotel selector dropdown styling */
+  .hotel-selector-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.06);
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    margin: 0 12px 8px;
+  }
+
+  .hotel-selector-wrapper i {
+    color: rgba(255,255,255,0.4);
+    font-size: 14px;
+  }
+
+  .hotel-selector-wrapper select {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 13px;
+    font-family: var(--font-family);
+    padding: 4px 0;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
+  .hotel-selector-wrapper select option {
+    background: var(--color-secondary);
+    color: #fff;
+  }
+
+  .hotel-selector-wrapper select:focus {
+    outline: none;
+  }
+
+  /* Hotel-specific page title colors */
+  .page-title.hotel i {
+    color: #1abc9c;
+  }
+
+  /* Room status badges in tables */
+  .room-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .room-status-badge.available {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  .room-status-badge.occupied {
+    background: #fff3e0;
+    color: #e65100;
+  }
+
+  .room-status-badge.maintenance {
+    background: #fce4ec;
+    color: #c62828;
+  }
+
+  .room-status-badge.cleaning {
+    background: #f3e5f5;
+    color: #6a1b9a;
+  }
+
+  .room-status-badge.reserved {
+    background: #e0f2f1;
+    color: #00695c;
+  }
+
+  .room-status-badge.out-of-order {
+    background: #eceff1;
+    color: #546e7a;
+  }
+
+  /* Guest status badges */
+  .guest-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 12px;
+  }
+
+  .guest-status-badge.checked-in {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  .guest-status-badge.checked-out {
+    background: #eceff1;
+    color: #546e7a;
+  }
+
+  .guest-status-badge.pending {
+    background: #fff8e1;
+    color: #f57f17;
+  }
+
+  .guest-status-badge.cancelled {
+    background: #fce4ec;
+    color: #c62828;
+  }
+
+  /* Hotel page header actions */
+  .hotel-actions-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* Room type icon helper */
+  .room-type-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    background: var(--color-bg);
+    color: var(--color-primary);
+    border: 1px solid var(--color-border);
+  }
+
+  /* Responsive adjustments for hotel pages */
+  @media (max-width: 768px) {
+    .hotel-actions-bar {
+      width: 100%;
+      justify-content: flex-start;
+    }
+
+    .hotel-selector-wrapper {
+      margin: 0 8px 8px;
+      padding: 4px 8px;
+    }
+  }
+</style>
+
+<!-- Injectează link-urile Hotel în sidebar după secțiunea "Administrare" -->
+<script>
+  (function() {
+    // Această funcție adaugă link-urile hotel în sidebar după încărcarea paginii
+    document.addEventListener('DOMContentLoaded', function() {
+      // Găsim ultimul link din secțiunea "Administrare" din sidebar
+      var adminSection = document.querySelector('.sidebar-nav .nav-section:last-child');
+      if (!adminSection) return;
+
+      // Găsim grupul de link-uri existente
+      var navContainer = adminSection.parentNode;
+
+      // Verificăm dacă secțiunea hotel există deja
+      var existingHotelSection = navContainer.querySelector('.nav-section.hotel');
+      if (existingHotelSection) return;
+
+      // Adăugăm separator și secțiunea Hotel
+      var hotelSection = document.createElement('div');
+      hotelSection.className = 'nav-section hotel';
+      hotelSection.textContent = 'Hotel';
+
+      var hotelLinks = [
+        { href: '/hotel/dashboard', icon: 'fa-hotel', label: 'Dashboard', page: 'hotel' },
+        { href: '/hotel/rooms', icon: 'fa-door-open', label: 'Camere', page: 'hotel-rooms' },
+        { href: '/hotel/reservations', icon: 'fa-calendar-check', label: 'Rezervări', page: 'hotel-reservations' },
+        { href: '/hotel/guests', icon: 'fa-users', label: 'Oaspeți', page: 'hotel-guests' },
+        { href: '/hotel/settings', icon: 'fa-cog', label: 'Setări', page: 'hotel-settings' },
+      ];
+
+      navContainer.appendChild(hotelSection);
+
+      var currentPage = '<%= locals.currentPage || "" %>';
+
+      hotelLinks.forEach(function(link) {
+        var a = document.createElement('a');
+        a.href = link.href;
+        a.className = 'hotel-link';
+        if (currentPage === link.page) {
+          a.classList.add('active');
+        }
+        a.innerHTML = '<i class="fas ' + link.icon + '"></i> ' + link.label;
+        navContainer.appendChild(a);
+      });
+    });
+  })();
+</script>

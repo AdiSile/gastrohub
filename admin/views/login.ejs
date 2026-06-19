@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= locals.title ? title + ' - GastroHub Admin' : 'Autentificare - GastroHub Admin' %></title>
+
+  <!-- SEO & Meta -->
+  <meta name="description" content="GastroHub - Panou de administrare - Autentificare" />
+  <meta name="theme-color" content="#0d1117" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+
+  <style>
+    /* ============================================================
+       RESET & BASE — Login Super Admin
+       ============================================================ */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --color-primary: #6f42c1;
+      --color-primary-dark: #5a32a3;
+      --color-primary-light: #8b5cf6;
+      --color-secondary: #0d1117;
+      --color-accent: #161b22;
+      --color-bg: #f0f2f5;
+      --color-surface: #ffffff;
+      --color-text: #1f2937;
+      --color-text-muted: #6b7280;
+      --color-border: #e5e7eb;
+      --color-success: #10b981;
+      --color-warning: #f59e0b;
+      --color-danger: #ef4444;
+      --color-info: #3b82f6;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.1);
+      --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
+      --transition: 0.2s ease;
+      --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    html {
+      font-size: 16px;
+      scroll-behavior: smooth;
+      height: 100%;
+    }
+
+    body {
+      font-family: var(--font-family);
+      background: linear-gradient(135deg, var(--color-secondary) 0%, var(--color-accent) 50%, #1a1a2e 100%);
+      color: var(--color-text);
+      line-height: 1.6;
+      min-height: 100vh;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    a {
+      color: var(--color-primary-light);
+      text-decoration: none;
+      transition: color var(--transition);
+    }
+
+    a:hover {
+      color: #a78bfa;
+    }
+
+    /* ============================================================
+       LOGIN CONTAINER
+       ============================================================ */
+    .login-wrapper {
+      width: 100%;
+      max-width: 440px;
+    }
+
+    /* ============================================================
+       LOGIN CARD
+       ============================================================ */
+    .login-card {
+      background: var(--color-surface);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255,255,255,0.05);
+      padding: 40px 36px;
+      width: 100%;
+    }
+
+    /* Brand / Logo */
+    .login-brand {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .login-brand .brand-icon {
+      width: 56px;
+      height: 56px;
+      background: var(--color-primary);
+      border-radius: var(--radius-md);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+
+    .login-brand h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--color-text);
+      letter-spacing: 0.3px;
+    }
+
+    .login-brand .brand-sub {
+      font-size: 13px;
+      color: var(--color-text-muted);
+      font-weight: 500;
+      margin-top: 4px;
+    }
+
+    .login-brand .brand-sub i {
+      color: var(--color-primary);
+      margin-right: 4px;
+    }
+
+    /* ============================================================
+       FLASH MESSAGES
+       ============================================================ */
+    .login-alert {
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      animation: slideDown 0.3s ease;
+    }
+
+    .login-alert-error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
+    .login-alert-success {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+
+    .login-alert-warning {
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #fde68a;
+    }
+
+    .login-alert i {
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    @keyframes slideDown {
+      from { transform: translateY(-10px); opacity: 0; }
+      to   { transform: translateY(0); opacity: 1; }
+    }
+
+    /* ============================================================
+       LOGIN FORM
+       ============================================================ */
+    .login-form .form-group {
+      margin-bottom: 20px;
+    }
+
+    .login-form .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--color-text);
+    }
+
+    .login-form .form-group label .required {
+      color: var(--color-danger);
+      margin-left: 2px;
+    }
+
+    .login-form .input-wrapper {
+      position: relative;
+    }
+
+    .login-form .input-wrapper i {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--color-text-muted);
+      font-size: 16px;
+      pointer-events: none;
+      transition: color var(--transition);
+    }
+
+    .login-form .input-wrapper .toggle-password {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--color-text-muted);
+      cursor: pointer;
+      font-size: 16px;
+      padding: 4px;
+      transition: color var(--transition);
+    }
+
+    .login-form .input-wrapper .toggle-password:hover {
+      color: var(--color-text);
+    }
+
+    .login-form .input-wrapper input {
+      width: 100%;
+      padding: 12px 14px 12px 42px;
+      font-size: 14px;
+      font-family: var(--font-family);
+      border: 1.5px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: var(--color-bg);
+      color: var(--color-text);
+      transition: all var(--transition);
+      outline: none;
+    }
+
+    .login-form .input-wrapper input:focus {
+      border-color: var(--color-primary);
+      background: var(--color-surface);
+      box-shadow: 0 0 0 3px rgba(111, 66, 193, 0.12);
+    }
+
+    .login-form .input-wrapper input:focus + i,
+    .login-form .input-wrapper input:focus ~ i {
+      color: var(--color-primary);
+    }
+
+    .login-form .input-wrapper input::placeholder {
+      color: var(--color-text-muted);
+      opacity: 0.7;
+    }
+
+    .login-form .input-wrapper.has-error input {
+      border-color: var(--color-danger);
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
+    }
+
+    .login-form .form-error {
+      font-size: 12px;
+      color: var(--color-danger);
+      margin-top: 4px;
+      display: none;
+    }
+
+    .login-form .has-error .form-error {
+      display: block;
+    }
+
+    /* ============================================================
+       FORM OPTIONS (Remember me + Forgot)
+       ============================================================ */
+    .login-form .form-options {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .login-form .form-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .login-form .form-check input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--color-primary);
+      cursor: pointer;
+      margin: 0;
+    }
+
+    .login-form .form-check label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-text-muted);
+      cursor: pointer;
+      margin: 0;
+    }
+
+    .login-form .forgot-link {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-primary);
+    }
+
+    .login-form .forgot-link:hover {
+      color: var(--color-primary-dark);
+      text-decoration: underline;
+    }
+
+    /* ============================================================
+       SUBMIT BUTTON
+       ============================================================ */
+    .login-form .btn-login {
+      width: 100%;
+      padding: 13px 24px;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: var(--font-family);
+      border: none;
+      border-radius: var(--radius-sm);
+      background: var(--color-primary);
+      color: #fff;
+      cursor: pointer;
+      transition: all var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      letter-spacing: 0.3px;
+    }
+
+    .login-form .btn-login:hover {
+      background: var(--color-primary-dark);
+      box-shadow: 0 4px 14px rgba(111, 66, 193, 0.35);
+      transform: translateY(-1px);
+    }
+
+    .login-form .btn-login:active {
+      transform: translateY(0);
+      box-shadow: none;
+    }
+
+    .login-form .btn-login:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .login-form .btn-login .spinner-border {
+      display: none;
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    .login-form .btn-login.loading .spinner-border {
+      display: inline-block;
+    }
+
+    .login-form .btn-login.loading .btn-text {
+      opacity: 0.8;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ============================================================
+       DIVIDER
+       ============================================================ */
+    .login-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 24px 0;
+      color: var(--color-text-muted);
+      font-size: 12px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .login-divider::before,
+    .login-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--color-border);
+    }
+
+    /* ============================================================
+       SOCIAL / ALT LOGIN
+       ============================================================ */
+    .login-social {
+      display: flex;
+      gap: 12px;
+    }
+
+    .login-social .social-btn {
+      flex: 1;
+      padding: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      font-family: var(--font-family);
+      border: 1.5px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: var(--color-surface);
+      color: var(--color-text);
+      cursor: pointer;
+      transition: all var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .login-social .social-btn:hover {
+      background: var(--color-bg);
+      border-color: var(--color-primary-light);
+    }
+
+    .login-social .social-btn i {
+      font-size: 16px;
+    }
+
+    .login-social .social-btn .fab.fa-google {
+      color: #ea4335;
+    }
+
+    .login-social .social-btn .fab.fa-github {
+      color: #333;
+    }
+
+    /* ============================================================
+       FOOTER LINK
+       ============================================================ */
+    .login-footer {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 13px;
+      color: var(--color-text-muted);
+    }
+
+    .login-footer a {
+      font-weight: 600;
+    }
+
+    /* ============================================================
+       SECURITY BADGE
+       ============================================================ */
+    .login-security {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .login-security i {
+      font-size: 14px;
+    }
+
+    /* ============================================================
+       RESPONSIVE
+       ============================================================ */
+    @media (max-width: 480px) {
+      body {
+        padding: 16px;
+        background: var(--color-bg);
+      }
+
+      .login-card {
+        padding: 28px 20px;
+        box-shadow: var(--shadow-md);
+      }
+
+      .login-brand h1 {
+        font-size: 20px;
+      }
+
+      .login-form .form-options {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .login-social {
+        flex-direction: column;
+      }
+    }
+
+    @media (max-width: 360px) {
+      .login-card {
+        padding: 20px 16px;
+      }
+
+      .login-brand .brand-icon {
+        width: 48px;
+        height: 48px;
+        font-size: 20px;
+      }
+
+      .login-brand h1 {
+        font-size: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="login-wrapper">
+    <div class="login-card">
+
+      <!-- Brand -->
+      <div class="login-brand">
+        <div class="brand-icon">GH</div>
+        <h1>GastroHub Admin</h1>
+        <div class="brand-sub">
+          <i class="fas fa-shield-alt"></i> Panou Super Administrator
+        </div>
+      </div>
+
+      <!-- Flash Messages -->
+      <% if (locals.success && success) { %>
+        <div class="login-alert login-alert-success">
+          <i class="fas fa-check-circle"></i>
+          <span><%= success %></span>
+        </div>
+      <% } %>
+
+      <% if (locals.error && error) { %>
+        <div class="login-alert login-alert-error">
+          <i class="fas fa-exclamation-circle"></i>
+          <span><%= error %></span>
+        </div>
+      <% } %>
+
+      <% if (locals.warning && warning) { %>
+        <div class="login-alert login-alert-warning">
+          <i class="fas fa-exclamation-triangle"></i>
+          <span><%= warning %></span>
+        </div>
+      <% } %>
+
+      <!-- Login Form -->
+      <form class="login-form" action="<%= locals.action ? action : '/admin/login' %>" method="POST" novalidate>
+        <!-- Email / Username -->
+        <div class="form-group">
+          <label for="email">
+            Adresă Email <span class="required">*</span>
+          </label>
+          <div class="input-wrapper">
+            <input
+              type="email"
+              id="email"
+              name="email"
+              placeholder="admin@gastrohub.ro"
+              value="<%= locals.formData ? formData.email : '' %>"
+              required
+              autocomplete="email"
+              autofocus
+            />
+            <i class="fas fa-envelope"></i>
+          </div>
+          <div class="form-error"></div>
+        </div>
+
+        <!-- Password -->
+        <div class="form-group">
+          <label for="password">
+            Parolă <span class="required">*</span>
+          </label>
+          <div class="input-wrapper">
+            <input
+              type="password"
+              id="password"
+              name="password"
+              placeholder="••••••••"
+              required
+              autocomplete="current-password"
+            />
+            <i class="fas fa-lock"></i>
+            <button type="button" class="toggle-password" id="togglePassword" aria-label="Afișează/ascunde parola">
+              <i class="fas fa-eye"></i>
+            </button>
+          </div>
+          <div class="form-error"></div>
+        </div>
+
+        <!-- Options: Remember me + Forgot -->
+        <div class="form-options">
+          <div class="form-check">
+            <input type="checkbox" id="remember" name="remember" value="1" />
+            <label for="remember">Ține-mă minte</label>
+          </div>
+          <a href="<%= locals.forgotUrl ? forgotUrl : '/admin/forgot-password' %>" class="forgot-link">
+            <i class="fas fa-key"></i> Am uitat parola
+          </a>
+        </div>
+
+        <!-- Submit -->
+        <button type="submit" class="btn-login" id="loginBtn">
+          <span class="spinner-border"></span>
+          <span class="btn-text">
+            <i class="fas fa-sign-in-alt"></i> Autentificare
+          </span>
+        </button>
+
+        <!-- CSRF Token (if applicable) -->
+        <% if (locals.csrfToken) { %>
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <% } %>
+      </form>
+
+      <!-- Divider -->
+      <div class="login-divider">sau autentificare cu</div>
+
+      <!-- Social Login -->
+      <div class="login-social">
+        <button type="button" class="social-btn" id="googleLogin" onclick="window.location.href='/admin/auth/google'">
+          <i class="fab fa-google"></i> Google
+        </button>
+        <button type="button" class="social-btn" id="githubLogin" onclick="window.location.href='/admin/auth/github'">
+          <i class="fab fa-github"></i> GitHub
+        </button>
+      </div>
+
+      <!-- Footer -->
+      <div class="login-footer">
+        <a href="/">&larr; Înapoi la site</a>
+      </div>
+
+    </div>
+
+    <!-- Security Badge -->
+    <div class="login-security">
+      <i class="fas fa-lock"></i>
+      Conexiune securizată &middot; GastroHub v1.0
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      'use strict';
+
+      // ----------------------------------------------------------
+      // Toggle password visibility
+      // ----------------------------------------------------------
+      const togglePassword = document.getElementById('togglePassword');
+      const passwordInput = document.getElementById('password');
+
+      if (togglePassword && passwordInput) {
+        togglePassword.addEventListener('click', function() {
+          const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+          passwordInput.setAttribute('type', type);
+
+          // Toggle the icon
+          const icon = this.querySelector('i');
+          if (icon) {
+            icon.className = type === 'password' ? 'fas fa-eye' : 'fas fa-eye-slash';
+          }
+        });
+      }
+
+      // ----------------------------------------------------------
+      // Form validation & loading state
+      // ----------------------------------------------------------
+      const loginForm = document.querySelector('.login-form');
+      const loginBtn = document.getElementById('loginBtn');
+      const emailInput = document.getElementById('email');
+      const passInput = document.getElementById('password');
+
+      if (loginForm && loginBtn) {
+        loginForm.addEventListener('submit', function(e) {
+          let isValid = true;
+
+          // Reset errors
+          document.querySelectorAll('.form-group').forEach(function(group) {
+            group.classList.remove('has-error');
+          });
+
+          // Validate email
+          if (emailInput) {
+            const emailValue = emailInput.value.trim();
+            const emailError = emailInput.closest('.form-group').querySelector('.form-error');
+            if (!emailValue) {
+              isValid = false;
+              emailInput.closest('.form-group').classList.add('has-error');
+              if (emailError) emailError.textContent = 'Adresa de email este obligatorie.';
+            } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) {
+              isValid = false;
+              emailInput.closest('.form-group').classList.add('has-error');
+              if (emailError) emailError.textContent = 'Adresa de email nu este validă.';
+            } else {
+              if (emailError) emailError.textContent = '';
+            }
+          }
+
+          // Validate password
+          if (passInput) {
+            const passValue = passInput.value.trim();
+            const passError = passInput.closest('.form-group').querySelector('.form-error');
+            if (!passValue) {
+              isValid = false;
+              passInput.closest('.form-group').classList.add('has-error');
+              if (passError) passError.textContent = 'Parola este obligatorie.';
+            } else if (passValue.length < 6) {
+              isValid = false;
+              passInput.closest('.form-group').classList.add('has-error');
+              if (passError) passError.textContent = 'Parola trebuie să aibă cel puțin 6 caractere.';
+            } else {
+              if (passError) passError.textContent = '';
+            }
+          }
+
+          if (!isValid) {
+            e.preventDefault();
+            return false;
+          }
+
+          // Show loading state
+          loginBtn.classList.add('loading');
+          loginBtn.disabled = true;
+          return true;
+        });
+      }
+
+      // ----------------------------------------------------------
+      // Real-time validation feedback
+      // ----------------------------------------------------------
+      if (emailInput) {
+        emailInput.addEventListener('blur', function() {
+          const group = this.closest('.form-group');
+          const errorEl = group.querySelector('.form-error');
+          const val = this.value.trim();
+
+          if (val && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+            group.classList.add('has-error');
+            if (errorEl) errorEl.textContent = 'Adresa de email nu este validă.';
+          } else if (val) {
+            group.classList.remove('has-error');
+            if (errorEl) errorEl.textContent = '';
+          }
+        });
+
+        emailInput.addEventListener('input', function() {
+          const group = this.closest('.form-group');
+          if (group.classList.contains('has-error')) {
+            const errorEl = group.querySelector('.form-error');
+            const val = this.value.trim();
+            if (val && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+              group.classList.remove('has-error');
+              if (errorEl) errorEl.textContent = '';
+            }
+          }
+        });
+      }
+
+      if (passInput) {
+        passInput.addEventListener('blur', function() {
+          const group = this.closest('.form-group');
+          const errorEl = group.querySelector('.form-error');
+          const val = this.value.trim();
+
+          if (val && val.length < 6) {
+            group.classList.add('has-error');
+            if (errorEl) errorEl.textContent = 'Parola trebuie să aibă cel puțin 6 caractere.';
+          } else if (val) {
+            group.classList.remove('has-error');
+            if (errorEl) errorEl.textContent = '';
+          }
+        });
+
+        passInput.addEventListener('input', function() {
+          const group = this.closest('.form-group');
+          if (group.classList.contains('has-error')) {
+            const errorEl = group.querySelector('.form-error');
+            const val = this.value.trim();
+            if (val.length >= 6) {
+              group.classList.remove('has-error');
+              if (errorEl) errorEl.textContent = '';
+            }
+          }
+        });
+      }
+
+      // ----------------------------------------------------------
+      // Auto-hide flash messages after 5 seconds
+      // ----------------------------------------------------------
+      const alerts = document.querySelectorAll('.login-alert');
+      alerts.forEach(function(alert) {
+        setTimeout(function() {
+          alert.style.transition = 'opacity 0.4s ease';
+          alert.style.opacity = '0';
+          setTimeout(function() {
+            alert.style.display = 'none';
+          }, 400);
+        }, 5000);
+      });
+
+    })();
+  </script>
+
+</body>
+</html>

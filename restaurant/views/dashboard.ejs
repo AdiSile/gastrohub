@@ -1,0 +1,1057 @@
+<%
+  // Variabile locale
+  const stats = locals.stats || {};
+  const activeOrders = locals.activeOrders || [];
+  const recentOrders = locals.recentOrders || [];
+  const restaurant = locals.restaurant || null;
+  const loading = locals.loading || false;
+
+  // Inventar
+  const inventoryItems = locals.inventoryItems || [];
+  const lowStockItems = locals.lowStockItems || [];
+
+  // Furnizori și comenzi furnizori
+  const suppliers = locals.suppliers || [];
+  const recentSupplierOrders = locals.recentSupplierOrders || [];
+
+  // Prag minim pentru alertă inventar
+  const INVENTORY_MIN_THRESHOLD = 5;
+
+  // Helpers
+  function getSupplierName(supplierId) {
+    if (!supplierId || !suppliers.length) return '';
+    const match = suppliers.find(function(s) { return s._id === supplierId; });
+    return match ? match.name : '';
+  }
+
+  function getMinThreshold(item) {
+    return item.minThreshold || item.minThreshold === 0 ? item.minThreshold : INVENTORY_MIN_THRESHOLD;
+  }
+
+  function getQtyClass(item) {
+    var qty = item.quantity || 0;
+    var threshold = getMinThreshold(item);
+    if (qty === 0) return 'critical';
+    if (qty < threshold) return 'low';
+    return 'ok';
+  }
+%>
+
+<style>
+  /* ============================================================
+     DASHBOARD STYLES
+     ============================================================ */
+  .dashboard-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .dashboard-header h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .dashboard-header .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--color-text-muted);
+    font-size: 13px;
+  }
+
+  .dashboard-header .header-meta .resto-name {
+    font-weight: 600;
+    color: var(--color-primary);
+  }
+
+  .dashboard-header .header-meta .date-badge {
+    background: var(--color-bg);
+    padding: 4px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+  }
+
+  /* ============================================================
+     STATS CARDS
+     ============================================================ */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  @media (max-width: 1024px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (max-width: 480px) {
+    .stats-grid { grid-template-columns: 1fr; }
+  }
+
+  .stat-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--color-border);
+    transition: all var(--transition);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+  }
+
+  .stat-card .stat-icon {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    opacity: 0.15;
+  }
+
+  .stat-card .stat-icon i {
+    font-size: 24px;
+  }
+
+  .stat-card .stat-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    margin-bottom: 6px;
+  }
+
+  .stat-card .stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--color-text);
+    line-height: 1.2;
+  }
+
+  .stat-card .stat-change {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-top: 6px;
+    padding: 2px 8px;
+    border-radius: 12px;
+  }
+
+  .stat-card .stat-change.up {
+    color: var(--color-success);
+    background: #e8f5e9;
+  }
+
+  .stat-card .stat-change.down {
+    color: var(--color-danger);
+    background: #fce4ec;
+  }
+
+  .stat-card .stat-change.neutral {
+    color: var(--color-text-muted);
+    background: var(--color-bg);
+  }
+
+  /* Card colors */
+  .stat-card.orders { border-left: 4px solid var(--color-primary); }
+  .stat-card.revenue { border-left: 4px solid var(--color-success); }
+  .stat-card.active { border-left: 4px solid var(--color-info); }
+  .stat-card.tables { border-left: 4px solid var(--color-warning); }
+
+  /* ============================================================
+     DASHBOARD LAYOUT – Three columns: Orders, Inventory, Suppliers
+     ============================================================ */
+  .dashboard-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 28px;
+  }
+
+  .dashboard-columns-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 28px;
+  }
+
+  @media (max-width: 1024px) {
+    .dashboard-columns-3 {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .dashboard-columns,
+    .dashboard-columns-3 {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* ============================================================
+     SECTION CARD
+     ============================================================ */
+  .section-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--color-border);
+    overflow: hidden;
+  }
+
+  .section-card .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--color-border);
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .section-card .section-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-card .section-header h2 i {
+    color: var(--color-primary);
+    font-size: 16px;
+  }
+
+  .section-card .section-header .section-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-card .section-body {
+    padding: 16px 20px;
+  }
+
+  .section-card .section-body.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+  }
+
+  .section-card .section-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--color-border);
+    text-align: center;
+  }
+
+  /* ============================================================
+     ORDER LIST
+     ============================================================ */
+  .order-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .order-list .order-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--color-border);
+    transition: background var(--transition);
+    cursor: pointer;
+  }
+
+  .order-list .order-item:last-child {
+    border-bottom: none;
+  }
+
+  .order-list .order-item:hover {
+    background: rgba(0,0,0,0.02);
+    margin: 0 -20px;
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .order-list .order-item .order-table {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--color-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--color-text);
+    flex-shrink: 0;
+    border: 2px solid var(--color-border);
+  }
+
+  .order-list .order-item .order-table.active-table {
+    border-color: var(--color-primary);
+    background: rgba(232, 93, 4, 0.08);
+  }
+
+  .order-list .order-item .order-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .order-list .order-item .order-info .order-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .order-list .order-item .order-info .order-meta .order-id {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .order-list .order-item .order-info .order-meta .order-time {
+    font-size: 11px;
+    color: var(--color-text-muted);
+  }
+
+  .order-list .order-item .order-info .order-items-preview {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+  }
+
+  .order-list .order-item .order-total {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-text);
+    white-space: nowrap;
+  }
+
+  .order-list .order-item .order-waiter {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .order-list .order-item .order-waiter i {
+    font-size: 10px;
+  }
+
+  /* ============================================================
+     TABLE GRID (occupancy)
+     ============================================================ */
+  .tables-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+    gap: 8px;
+    padding: 4px 0;
+  }
+
+  .table-cell {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all var(--transition);
+    border: 2px solid transparent;
+    position: relative;
+  }
+
+  .table-cell.free {
+    background: #e8f5e9;
+    color: var(--color-success);
+    border-color: #c8e6c9;
+  }
+
+  .table-cell.occupied {
+    background: #fff3e0;
+    color: var(--color-warning);
+    border-color: #ffe0b2;
+  }
+
+  .table-cell.busy {
+    background: #fce4ec;
+    color: var(--color-danger);
+    border-color: #f8bbd0;
+  }
+
+  .table-cell:hover {
+    transform: scale(1.1);
+    z-index: 1;
+  }
+
+  .table-cell .table-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--color-secondary);
+    color: #fff;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+    z-index: 10;
+    font-weight: 500;
+  }
+
+  .table-cell:hover .table-tooltip {
+    display: block;
+  }
+
+  /* ============================================================
+     REVENUE CHART PLACEHOLDER
+     ============================================================ */
+  .chart-placeholder {
+    width: 100%;
+    height: 180px;
+    background: linear-gradient(180deg, rgba(232, 93, 4, 0.06) 0%, transparent 100%);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 6px;
+    padding: 16px 8px 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .chart-placeholder .bar {
+    width: 8%;
+    background: var(--color-primary);
+    border-radius: 4px 4px 0 0;
+    opacity: 0.7;
+    transition: height 0.4s ease;
+    min-height: 8px;
+  }
+
+  .chart-placeholder .bar:nth-child(1) { height: 40%; }
+  .chart-placeholder .bar:nth-child(2) { height: 55%; }
+  .chart-placeholder .bar:nth-child(3) { height: 30%; }
+  .chart-placeholder .bar:nth-child(4) { height: 70%; }
+  .chart-placeholder .bar:nth-child(5) { height: 50%; }
+  .chart-placeholder .bar:nth-child(6) { height: 80%; }
+  .chart-placeholder .bar:nth-child(7) { height: 45%; }
+  .chart-placeholder .bar:nth-child(8) { height: 65%; }
+  .chart-placeholder .bar:nth-child(9) { height: 35%; }
+  .chart-placeholder .bar:nth-child(10) { height: 90%; }
+  .chart-placeholder .bar:nth-child(11) { height: 60%; }
+  .chart-placeholder .bar:nth-child(12) { height: 75%; }
+
+  /* ============================================================
+     QUICK ACTIONS
+     ============================================================ */
+  .quick-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .quick-action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: all var(--transition);
+    text-decoration: none;
+    color: var(--color-text);
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .quick-action-btn:hover {
+    border-color: var(--color-primary);
+    background: rgba(232, 93, 4, 0.04);
+    transform: translateY(-1px);
+  }
+
+  .quick-action-btn i {
+    font-size: 22px;
+    color: var(--color-primary);
+  }
+
+  /* ============================================================
+     EMPTY STATE
+     ============================================================ */
+  .empty-orders {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--color-text-muted);
+  }
+
+  .empty-orders i {
+    font-size: 36px;
+    opacity: 0.3;
+    margin-bottom: 12px;
+  }
+
+  .empty-orders p {
+    font-size: 14px;
+    margin: 0;
+  }
+
+  /* ============================================================
+     ALERTS & NOTIFICATIONS
+     ============================================================ */
+  .dashboard-alert {
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+  }
+
+  .dashboard-alert.info {
+    background: #e3f2fd;
+    color: #1565c0;
+    border-left: 4px solid var(--color-info);
+  }
+
+  .dashboard-alert.warning {
+    background: #fff8e1;
+    color: #f57f17;
+    border-left: 4px solid var(--color-warning);
+  }
+
+  .dashboard-alert.success {
+    background: #e8f5e9;
+    color: #2e7d32;
+    border-left: 4px solid var(--color-success);
+  }
+
+  /* ============================================================
+     INVENTORY SECTION — TABLE, THRESHOLD ALERTS, SUPPLIER ORDER BUTTON
+     ============================================================ */
+
+  /* Inventory threshold alert banner at top of inventory card */
+  .inv-threshold-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+  .inv-threshold-banner.danger {
+    background: #fce4ec;
+    color: #c62828;
+    border-left: 4px solid var(--color-danger);
+  }
+  .inv-threshold-banner.warning {
+    background: #fff8e1;
+    color: #f57f17;
+    border-left: 4px solid var(--color-warning);
+  }
+  .inv-threshold-banner.success {
+    background: #e8f5e9;
+    color: #2e7d32;
+    border-left: 4px solid var(--color-success);
+  }
+  .inv-threshold-banner i {
+    font-size: 16px;
+  }
+  .inv-threshold-banner .banner-count {
+    margin-left: auto;
+    background: var(--color-danger);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 10px;
+    border-radius: 12px;
+  }
+  .inv-threshold-banner.success .banner-count {
+    background: var(--color-success);
+  }
+
+  /* Inventory mini table on dashboard */
+  .inv-dash-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .inv-dash-table thead th {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--color-text-muted);
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--color-border);
+    text-align: left;
+  }
+  .inv-dash-table tbody td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .inv-dash-table tbody tr:hover {
+    background: rgba(0,0,0,0.02);
+  }
+  .inv-dash-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .inv-dash-table .inv-name-cell {
+    font-weight: 500;
+    color: var(--color-text);
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .inv-dash-table .inv-qty-cell {
+    font-weight: 600;
+    text-align: center;
+  }
+  .inv-dash-table .inv-qty-cell .qty-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    min-width: 32px;
+  }
+  .inv-dash-table .inv-qty-cell .qty-badge.ok {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+  .inv-dash-table .inv-qty-cell .qty-badge.low {
+    background: #fff8e1;
+    color: #f57f17;
+  }
+  .inv-dash-table .inv-qty-cell .qty-badge.critical {
+    background: #fce4ec;
+    color: #c62828;
+  }
+  .inv-dash-table .inv-threshold-cell {
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 11px;
+  }
+  .inv-dash-table .inv-supplier-cell {
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--color-text-muted);
+    font-size: 11px;
+  }
+  .inv-dash-table .inv-action-cell {
+    text-align: right;
+  }
+  .inv-dash-table .inv-action-cell .btn-order-sm {
+    padding: 3px 10px;
+    font-size: 10px;
+    font-weight: 600;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--color-primary);
+    color: #fff;
+    cursor: pointer;
+    transition: all var(--transition);
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .inv-dash-table .inv-action-cell .btn-order-sm:hover {
+    background: var(--color-primary-dark);
+  }
+  .inv-dash-table .inv-action-cell .btn-order-sm:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* ============================================================
+     SUPPLIER MINI LIST (inventar furnizori)
+     ============================================================ */
+  .supplier-mini-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .supplier-mini-list .sup-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: background var(--transition);
+  }
+  .supplier-mini-list .sup-item:last-child {
+    border-bottom: none;
+  }
+  .supplier-mini-list .sup-item:hover {
+    background: rgba(0,0,0,0.02);
+    margin: 0 -20px;
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+  .supplier-mini-list .sup-item .sup-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+    flex-shrink: 0;
+    color: #fff;
+  }
+  .supplier-mini-list .sup-item .sup-avatar.active {
+    background: var(--color-success);
+  }
+  .supplier-mini-list .sup-item .sup-avatar.inactive {
+    background: var(--color-text-muted);
+  }
+  .supplier-mini-list .sup-item .sup-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .supplier-mini-list .sup-item .sup-info .sup-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+  }
+  .supplier-mini-list .sup-item .sup-info .sup-meta {
+    font-size: 11px;
+    color: var(--color-text-muted);
+  }
+  .supplier-mini-list .sup-item .sup-actions {
+    display: flex;
+    gap: 4px;
+  }
+  .supplier-mini-list .sup-item .sup-actions .btn-icon-sm {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all var(--transition);
+  }
+  .supplier-mini-list .sup-item .sup-actions .btn-icon-sm:hover {
+    background: var(--color-bg);
+  }
+  .supplier-mini-list .sup-item .sup-actions .btn-order {
+    background: var(--color-primary);
+    color: #fff;
+  }
+  .supplier-mini-list .sup-item .sup-actions .btn-order:hover {
+    background: var(--color-primary-dark);
+  }
+
+  /* Supplier order mini list */
+  .sup-order-mini-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .sup-order-mini-list .so-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .sup-order-mini-list .so-item:last-child {
+    border-bottom: none;
+  }
+  .sup-order-mini-list .so-item .so-ref {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text);
+    min-width: 80px;
+  }
+  .sup-order-mini-list .so-item .so-supplier {
+    flex: 1;
+    font-size: 12px;
+    color: var(--color-text-muted);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sup-order-mini-list .so-item .so-total {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+  }
+  .sup-order-mini-list .so-item .so-status {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+  .sup-order-mini-list .so-item .so-status.pending {
+    background: #fff8e1;
+    color: #f57f17;
+  }
+  .sup-order-mini-list .so-item .so-status.confirmed {
+    background: #e3f2fd;
+    color: #1565c0;
+  }
+  .sup-order-mini-list .so-item .so-status.delivered {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+  .sup-order-mini-list .so-item .so-status.cancelled {
+    background: #fce4ec;
+    color: #c62828;
+  }
+
+  /* ============================================================
+     RESPONSIVE ADJUSTMENTS
+     ============================================================ */
+  @media (max-width: 480px) {
+    .dashboard-header h1 {
+      font-size: 20px;
+    }
+
+    .stat-card .stat-value {
+      font-size: 22px;
+    }
+
+    .quick-actions {
+      grid-template-columns: 1fr;
+    }
+
+    .order-list .order-item .order-items-preview {
+      max-width: 120px;
+    }
+
+    .inv-dash-table .inv-supplier-cell {
+      display: none;
+    }
+  }
+</style>
+
+<!-- ============================================================
+     DASHBOARD HEADER
+     ============================================================ -->
+<div class="dashboard-header">
+  <div>
+    <h1>
+      <i class="fas fa-th-large" style="color:var(--color-primary);margin-right:8px;"></i>
+      Dashboard
+    </h1>
+    <div class="header-meta">
+      <% if (restaurant) { %>
+        <span class="resto-name"><i class="fas fa-store"></i> <%= restaurant.name %></span>
+        <span class="text-muted">•</span>
+      <% } %>
+      <span class="date-badge">
+        <i class="far fa-calendar-alt"></i>
+        <%= new Date().toLocaleDateString('ro-RO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) %>
+      </span>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <a href="/restaurant/orders/new" class="btn btn-primary btn-sm">
+      <i class="fas fa-plus"></i> Comandă nouă
+    </a>
+    <button class="btn btn-secondary btn-sm" onclick="refreshDashboard()">
+      <i class="fas fa-sync-alt"></i> Reîmprospătare
+    </button>
+  </div>
+</div>
+
+<!-- ============================================================
+     LOADING OVERLAY
+     ============================================================ -->
+<% if (loading) { %>
+  <div class="spinner"></div>
+<% } else { %>
+
+<!-- ============================================================
+     ALERTS
+     ============================================================ -->
+<% if (locals.alert) { %>
+  <div class="dashboard-alert <%= alert.type || 'info' %>">
+    <i class="fas fa-<%= alert.type === 'warning' ? 'exclamation-triangle' : alert.type === 'success' ? 'check-circle' : 'info-circle' %>"></i>
+    <%= alert.message %>
+  </div>
+<% } %>
+
+<!-- ============================================================
+     STATISTICS CARDS
+     ============================================================ -->
+<div class="stats-grid">
+  <!-- Total comenzi azi -->
+  <div class="stat-card orders">
+    <div class="stat-icon"><i class="fas fa-receipt"></i></div>
+    <div class="stat-label">Comenzi azi</div>
+    <div class="stat-value"><%= stats.ordersToday || 0 %></div>
+    <% if (stats.ordersTrend !== undefined) { %>
+      <span class="stat-change <%= stats.ordersTrend > 0 ? 'up' : stats.ordersTrend < 0 ? 'down' : 'neutral' %>">
+        <i class="fas fa-<%= stats.ordersTrend > 0 ? 'arrow-up' : stats.ordersTrend < 0 ? 'arrow-down' : 'minus' %>"></i>
+        <%= Math.abs(stats.ordersTrend) %>%
+      </span>
+    <% } %>
+  </div>
+
+  <!-- Venituri azi -->
+  <div class="stat-card revenue">
+    <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
+    <div class="stat-label">Venituri azi</div>
+    <div class="stat-value"><%= stats.revenueToday ? stats.revenueToday.toFixed(2) : '0.00' %> lei</div>
+    <% if (stats.revenueTrend !== undefined) { %>
+      <span class="stat-change <%= stats.revenueTrend > 0 ? 'up' : stats.revenueTrend < 0 ? 'down' : 'neutral' %>">
+        <i class="fas fa-<%= stats.revenueTrend > 0 ? 'arrow-up' : stats.revenueTrend < 0 ? 'arrow-down' : 'minus' %>"></i>
+        <%= Math.abs(stats.revenueTrend) %>%
+      </span>
+    <% } %>
+  </div>
+
+  <!-- Comenzi active -->
+  <div class="stat-card active">
+    <div class="stat-icon"><i class="fas fa-spinner"></i></div>
+    <div class="stat-label">Active</div>
+    <div class="stat-value"><%= stats.activeOrders || 0 %></div>
+    <span class="stat-change neutral">
+      <i class="fas fa-clock"></i> În desfășurare
+    </span>
+  </div>
+
+  <!-- Mese ocupate -->
+  <div class="stat-card tables">
+    <div class="stat-icon"><i class="fas fa-chair"></i></div>
+    <div class="stat-label">Mese ocupate</div>
+    <div class="stat-value"><%= stats.occupiedTables || 0 %> / <%= stats.totalTables || 0 %></div>
+    <% if (stats.occupancyPercent !== undefined) { %>
+      <span class="stat-change <%= stats.occupancyPercent > 70 ? 'up' : stats.occupancyPercent > 40 ? 'neutral' : 'down' %>">
+        <%= stats.occupancyPercent %>%
+      </span>
+    <% } %>
+  </div>
+</div>
+
+<!-- ============================================================
+     DASHBOARD THREE COLUMNS: Orders / Inventory / Suppliers
+     ============================================================ -->
+<div class="dashboard-columns-3">
+
+  <!-- ============================================================
+       LEFT COLUMN: Active Orders
+       ============================================================ -->
+  <div class="section-card">
+    <div class="section-header">
+      <h2>
+        <i class="fas fa-bolt"></i>
+        Comenzi active
+        <span class="badge badge-active" style="margin-left:8px;"><%= activeOrders.length %></span>
+      </h2>
+      <div class="section-actions">
+        <a href="/restaurant/orders?status=deschisă" class="btn btn-sm btn-secondary">
+          Vezi toate <i class="fas fa-arrow-right"></i>
+        </a>
+      </div>
+    </div>
+    <div class="section-body">
+      <% if (activeOrders.length === 0) { %>
+        <div class="empty-orders">
+          <i class="fas fa-check-circle" style="color:var(--color-success);opacity:0.5;"></i>
+          <p>Toate comenzile sunt finalizate. <strong>Excelent!</strong></p>
+        </div>
+      <% } else { %>
+        <ul class="order-list">
+          <% activeOrders.forEach(function(order) { %>
+            <li class="order-item" onclick="window.location.href='/restaurant/orders/<%= order._id %>'" title="Vezi comanda">
+              <div class="order-table <%= order.masa > 0 ? 'active-table' : '' %>">
+                <%= order.masa > 0 ? 'M' + order.masa : '★' %>
+              </div>
+              <div class="order-info">
+                <div class="order-meta">
+                  <span class="order-id"><%= order._id.substring(0, 8) %>...</span>
+                  <span class="badge <%= order.status === 'deschisă' ? 'badge-active' : order.status === 'în preparare' ? '' : 'badge-info' %>" 
+                        style="<%= order.status === 'în preparare' ? 'background:#fff8e1;color:#f57f17;' : '' %>">
+                    <%= order.status %>
+                  </span>
+                  <span class="order-time">
+                    <i class="far fa-clock"></i> 
+                    <%= formatDate(order.createdAt) %>
+                  </span>
+                </div>
+                <div class="order-items-preview">
+                  <% if (order.articole && order.articole.length > 0) { %>
+                    <%= order.articole.map(function(a) { return a.cantitate + 'x ' + a.nume; }).join(', ') %>
+                  <% } else { %>
+                    <em>Fără articole</em>
+                  <% } %>
+                </div>
+                <% if (order.ospatar) { %>
+                  <div class="order-waiter">
+                    <i class="fas fa-user-tie"></i> <%= order.ospatar %>
+                  </div>
+                <% } %>
+              </div>
+              <div class="order-total">
+                <%= formatCurrency(order.total || 0) %>
+              </div>
+            </li>
+          <% }); %>
+        </ul>
+      <% } %>
+    </div>
+    <% if (activeOrders.length > 5) { %>
+      <div class="section-footer">
+        <a href="/restaurant/orders?status=deschisă" class="btn btn-sm btn-secondary">
+          Vezi toate cele <%= activeOrders.length %> comenzi active <i class="fas fa-arrow-right"></i>
+        </a>
+      </div>
+    <% } %>
+  </div>
+
+  <!-- ============================================================
+       MIDDLE COLUMN: Inventory Section with Table,
