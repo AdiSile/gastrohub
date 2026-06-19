@@ -4,11 +4,10 @@
 // Model Room – GastroHub
 // Definirea structurii, validărilor și operațiilor CRUD pentru camere de hotel.
 // Câmpuri suportate: tip, număr, preț sezonier, status, hotelId, tenantId
+// Persistență: SQLite via sql.js (config/db)
 // ---------------------------------------------------------------------------
 
-const Datastore = require('nedb');
-const path = require('path');
-const fs = require('fs');
+const { getDb, run, get, all } = require('../config/db');
 
 // ---------------------------------------------------------------------------
 // Tipuri valide de camere
@@ -94,33 +93,20 @@ function isValidPrice(val) {
 }
 
 // ---------------------------------------------------------------------------
-// Clasa RoomModel – operații CRUD pentru camere
+// Clasa RoomModel – operații CRUD pentru camere (SQLite)
 // ---------------------------------------------------------------------------
 
 class RoomModel {
   /**
-   * @param {string} dbDir - Directorul unde se stochează baza de date NeDB
+   * Constructorul nu mai primește dbDir; baza este gestionată de config/db.
    */
-  constructor(dbDir = './data') {
-    // Verifică existența directorului pentru baza de date; îl creează dacă nu există
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir, { recursive: true });
-    }
-
-    this.db = new Datastore({
-      filename: path.join(dbDir, 'rooms.db'),
-      autoload: true,
-      onload: (err) => {
-        if (err) {
-          console.error('Eroare la încărcarea bazei de date rooms.db:', err.message);
-          throw err;
-        }
-      },
-    });
-    this.db.ensureIndex({ fieldName: 'tenantId' });
-    this.db.ensureIndex({ fieldName: 'hotelId' });
-    this.db.ensureIndex({ fieldName: 'număr' });
+  constructor() {
+    // getDb() este apelat leneș în fiecare metodă, după initDb().
   }
+
+  // -------------------------------------------------------------------------
+  // Validare
+  // -------------------------------------------------------------------------
 
   /**
    * Validează datele unei camere înainte de creare.
@@ -190,6 +176,10 @@ class RoomModel {
     };
   }
 
+  // -------------------------------------------------------------------------
+  // CRUD
+  // -------------------------------------------------------------------------
+
   /**
    * Creează o cameră nouă.
    * @param {Object} data
@@ -212,45 +202,50 @@ class RoomModel {
       throw error;
     }
 
-    const doc = {
-      tip: data.tip,
-      număr: data.număr,
-      prețuriSezoniere: Array.isArray(data.prețuriSezoniere) ? data.prețuriSezoniere : [],
-      status: data.status || 'available',
-      hotelId: data.hotelId,
-      tenantId: data.tenantId,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+    const now = new Date().toISOString();
+    const preturiSezoniereJson = JSON.stringify(
+      Array.isArray(data.prețuriSezoniere) ? data.prețuriSezoniere : []
+    );
 
-    return new Promise((resolve, reject) => {
-      this.db.insert(doc, (err, newDoc) => {
-        if (err) {
-          if (err.errorType === 'uniqueViolated') {
-            const error = new Error('Există deja o cameră cu acest număr în acest hotel.');
-            error.statusCode = 409;
-            error.code = 'DUPLICATE_ROOM_NUMBER';
-            return reject(error);
-          }
-          return reject(err);
-        }
-        resolve(newDoc);
-      });
-    });
+    try {
+      const result = run(
+        `INSERT INTO rooms (hotelId, tenantId, tip, numar, preturiSezoniere, status, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          data.hotelId,
+          data.tenantId,
+          data.tip,
+          data.număr,
+          preturiSezoniereJson,
+          data.status || 'available',
+          now,
+          now,
+        ]
+      );
+
+      // Returnează documentul complet
+      const created = get('SELECT * FROM rooms WHERE id = ?', [result.lastInsertRowid]);
+      return created;
+    } catch (err) {
+      // Verificăm dacă e o eroare de unicitate (SQLite constraint)
+      if (err.message && err.message.includes('UNIQUE')) {
+        const error = new Error('Există deja o cameră cu acest număr în acest hotel.');
+        error.statusCode = 409;
+        error.code = 'DUPLICATE_ROOM_NUMBER';
+        throw error;
+      }
+      throw err;
+    }
   }
 
   /**
    * Găsește o cameră după ID.
-   * @param {string} id
+   * @param {string|number} id
    * @returns {Promise<Object|null>}
    */
   async findById(id) {
-    return new Promise((resolve, reject) => {
-      this.db.findOne({ _id: id }, (err, doc) => {
-        if (err) return reject(err);
-        resolve(doc || null);
-      });
-    });
+    const row = get('SELECT * FROM rooms WHERE id = ?', [id]);
+    return row || null;
   }
 
   /**
@@ -259,12 +254,11 @@ class RoomModel {
    * @returns {Promise<Object[]>}
    */
   async findByHotel(hotelId) {
-    return new Promise((resolve, reject) => {
-      this.db.find({ hotelId }).sort({ număr: 1 }).exec((err, docs) => {
-        if (err) return reject(err);
-        resolve(docs || []);
-      });
-    });
+    const rows = all(
+      'SELECT * FROM rooms WHERE hotelId = ? ORDER BY numar ASC',
+      [hotelId]
+    );
+    return rows || [];
   }
 
   /**
@@ -283,12 +277,11 @@ class RoomModel {
       throw error;
     }
 
-    return new Promise((resolve, reject) => {
-      this.db.find({ hotelId, status }).sort({ număr: 1 }).exec((err, docs) => {
-        if (err) return reject(err);
-        resolve(docs || []);
-      });
-    });
+    const rows = all(
+      'SELECT * FROM rooms WHERE hotelId = ? AND status = ? ORDER BY numar ASC',
+      [hotelId, status]
+    );
+    return rows || [];
   }
 
   /**
@@ -307,31 +300,29 @@ class RoomModel {
       throw error;
     }
 
-    return new Promise((resolve, reject) => {
-      this.db.find({ hotelId, tip }).sort({ număr: 1 }).exec((err, docs) => {
-        if (err) return reject(err);
-        resolve(docs || []);
-      });
-    });
+    const rows = all(
+      'SELECT * FROM rooms WHERE hotelId = ? AND tip = ? ORDER BY numar ASC',
+      [hotelId, tip]
+    );
+    return rows || [];
   }
 
   /**
-   * Găsește toate camerele dintr-un tenant.
+   * Găsește toate camerele unui tenant.
    * @param {string} tenantId
    * @returns {Promise<Object[]>}
    */
   async findByTenant(tenantId) {
-    return new Promise((resolve, reject) => {
-      this.db.find({ tenantId }).sort({ hotelId: 1, număr: 1 }).exec((err, docs) => {
-        if (err) return reject(err);
-        resolve(docs || []);
-      });
-    });
+    const rows = all(
+      'SELECT * FROM rooms WHERE tenantId = ? ORDER BY hotelId ASC, numar ASC',
+      [tenantId]
+    );
+    return rows || [];
   }
 
   /**
    * Actualizează o cameră.
-   * @param {string} id
+   * @param {string|number} id
    * @param {Object} updates - Câmpurile de actualizat
    * @returns {Promise<Object|null>}
    */
@@ -343,9 +334,10 @@ class RoomModel {
       throw error;
     }
 
-    // Câmpuri permise pentru actualizare
+    // Câmpuri permise pentru actualizare (mapare nume API → coloană SQL)
     const allowedFields = ['tip', 'număr', 'prețuriSezoniere', 'status'];
-    const $set = {};
+    const setClauses = [];
+    const params = [];
     const errors = [];
 
     for (const [key, value] of Object.entries(updates)) {
@@ -356,7 +348,8 @@ class RoomModel {
           if (!isValidRoomType(value)) {
             errors.push(`Tipul camerei "${value}" nu este valid.`);
           } else {
-            $set.tip = value;
+            setClauses.push('tip = ?');
+            params.push(value);
           }
           break;
 
@@ -364,7 +357,8 @@ class RoomModel {
           if (!isValidPositiveInt(value)) {
             errors.push('Numărul camerei trebuie să fie un număr întreg pozitiv.');
           } else {
-            $set.număr = value;
+            setClauses.push('numar = ?');
+            params.push(value);
           }
           break;
 
@@ -381,7 +375,8 @@ class RoomModel {
               }
             }
             if (valid) {
-              $set.prețuriSezoniere = value;
+              setClauses.push('preturiSezoniere = ?');
+              params.push(JSON.stringify(value));
             }
           }
           break;
@@ -390,7 +385,8 @@ class RoomModel {
           if (!isValidRoomStatus(value)) {
             errors.push(`Statusul "${value}" nu este valid.`);
           } else {
-            $set.status = value;
+            setClauses.push('status = ?');
+            params.push(value);
           }
           break;
 
@@ -405,37 +401,44 @@ class RoomModel {
       throw error;
     }
 
-    if (Object.keys($set).length === 0) {
+    if (setClauses.length === 0) {
       const error = new Error('Nu s-au furnizat câmpuri valide pentru actualizare.');
       error.statusCode = 400;
       error.code = 'NO_VALID_FIELDS';
       throw error;
     }
 
-    $set.updatedAt = new Date();
+    // Adaugă updatedAt
+    const now = new Date().toISOString();
+    setClauses.push('updatedAt = ?');
+    params.push(now);
 
-    return new Promise((resolve, reject) => {
-      this.db.update(
-        { _id: id },
-        { $set },
-        { returnUpdatedDocs: true },
-        (err, numAffected, affectedDocs) => {
-          if (err) return reject(err);
-          if (numAffected === 0) {
-            const error = new Error('Camera nu a fost găsită.');
-            error.statusCode = 404;
-            error.code = 'ROOM_NOT_FOUND';
-            return reject(error);
-          }
-          resolve(affectedDocs);
-        }
-      );
-    });
+    // Adaugă id-ul la finalul parametrilor
+    params.push(id);
+
+    const sql = `UPDATE rooms SET ${setClauses.join(', ')} WHERE id = ?`;
+
+    try {
+      const result = run(sql, params);
+      if (result.changes === 0) {
+        const error = new Error('Camera nu a fost găsită.');
+        error.statusCode = 404;
+        error.code = 'ROOM_NOT_FOUND';
+        throw error;
+      }
+
+      // Returnează documentul actualizat
+      const updated = get('SELECT * FROM rooms WHERE id = ?', [id]);
+      return updated;
+    } catch (err) {
+      if (err.statusCode) throw err; // eroare deja formatată
+      throw err;
+    }
   }
 
   /**
    * Actualizează statusul unei camere.
-   * @param {string} id
+   * @param {string|number} id
    * @param {string} status
    * @returns {Promise<Object|null>}
    */
@@ -454,22 +457,18 @@ class RoomModel {
 
   /**
    * Șterge o cameră.
-   * @param {string} id
+   * @param {string|number} id
    * @returns {Promise<boolean>}
    */
   async remove(id) {
-    return new Promise((resolve, reject) => {
-      this.db.remove({ _id: id }, {}, (err, numRemoved) => {
-        if (err) return reject(err);
-        if (numRemoved === 0) {
-          const error = new Error('Camera nu a fost găsită.');
-          error.statusCode = 404;
-          error.code = 'ROOM_NOT_FOUND';
-          return reject(error);
-        }
-        resolve(true);
-      });
-    });
+    const result = run('DELETE FROM rooms WHERE id = ?', [id]);
+    if (result.changes === 0) {
+      const error = new Error('Camera nu a fost găsită.');
+      error.statusCode = 404;
+      error.code = 'ROOM_NOT_FOUND';
+      throw error;
+    }
+    return true;
   }
 
   /**
@@ -478,12 +477,8 @@ class RoomModel {
    * @returns {Promise<number>} Numărul de camere șterse
    */
   async removeByHotel(hotelId) {
-    return new Promise((resolve, reject) => {
-      this.db.remove({ hotelId }, { multi: true }, (err, numRemoved) => {
-        if (err) return reject(err);
-        resolve(numRemoved || 0);
-      });
-    });
+    const result = run('DELETE FROM rooms WHERE hotelId = ?', [hotelId]);
+    return result.changes || 0;
   }
 
   /**
@@ -492,12 +487,8 @@ class RoomModel {
    * @returns {Promise<number>}
    */
   async countByHotel(hotelId) {
-    return new Promise((resolve, reject) => {
-      this.db.count({ hotelId }, (err, count) => {
-        if (err) return reject(err);
-        resolve(count || 0);
-      });
-    });
+    const row = get('SELECT COUNT(*) AS cnt FROM rooms WHERE hotelId = ?', [hotelId]);
+    return row ? row.cnt : 0;
   }
 
   /**
@@ -516,26 +507,58 @@ class RoomModel {
       throw error;
     }
 
-    return new Promise((resolve, reject) => {
-      this.db.count({ hotelId, status }, (err, count) => {
-        if (err) return reject(err);
-        resolve(count || 0);
-      });
-    });
+    const row = get(
+      'SELECT COUNT(*) AS cnt FROM rooms WHERE hotelId = ? AND status = ?',
+      [hotelId, status]
+    );
+    return row ? row.cnt : 0;
   }
 
   /**
    * Găsește camere după un set de criterii (căutare flexibilă).
-   * @param {Object} query
+   *
+   * Construiește dinamic clauza WHERE pe baza cheilor din `query`.
+   * Suportă câmpurile: hotelId, tenantId, tip, status, numar.
+   *
+   * @param {Object} query - Obiect cu perechi cheie/valoare
    * @returns {Promise<Object[]>}
    */
   async find(query) {
-    return new Promise((resolve, reject) => {
-      this.db.find(query).sort({ număr: 1 }).exec((err, docs) => {
-        if (err) return reject(err);
-        resolve(docs || []);
-      });
-    });
+    if (!query || typeof query !== 'object' || Object.keys(query).length === 0) {
+      // Fără criterii, returnează tot (cu limită de precauție)
+      const rows = all('SELECT * FROM rooms ORDER BY numar ASC LIMIT 1000');
+      return rows || [];
+    }
+
+    const clauses = [];
+    const params = [];
+
+    // Mapare câmpuri query → coloane SQL
+    const fieldMap = {
+      hotelId: 'hotelId',
+      tenantId: 'tenantId',
+      tip: 'tip',
+      status: 'status',
+      număr: 'numar',
+      numar: 'numar',
+    };
+
+    for (const [key, value] of Object.entries(query)) {
+      const col = fieldMap[key];
+      if (col) {
+        clauses.push(`${col} = ?`);
+        params.push(value);
+      }
+    }
+
+    if (clauses.length === 0) {
+      const rows = all('SELECT * FROM rooms ORDER BY numar ASC LIMIT 1000');
+      return rows || [];
+    }
+
+    const sql = `SELECT * FROM rooms WHERE ${clauses.join(' AND ')} ORDER BY numar ASC`;
+    const rows = all(sql, params);
+    return rows || [];
   }
 }
 

@@ -5,7 +5,7 @@
  *
  * Responsabilități:
  *  1. Identifică tenant-ul curent din request (subdomeniu, header, query param)
- *  2. Validează existența tenant-ului în baza de date
+ *  2. Validează existența tenant-ului în baza de date (SQLite)
  *  3. Populează req.tenant cu datele și configurația tenant-ului
  *  4. Populează req.tenantDb cu baza de date dedicată tenant-ului
  *  5. Expune middleware-ul `resolveTenant` (obligatoriu) și `optionalTenant`
@@ -16,6 +16,9 @@
  *  2. Subdomeniu (ex: restaurant-abc.exemplu.com)
  *  3. Query parameter ?tenant=<slug>
  *  4. Utilizator autentificat – tenantId din token (req.user.tenantId)
+ *
+ * Backend: SQLite (prin get() din config/db).
+ * Tabela: tenants
  *
  * Folosire:
  *    const { resolveTenant, optionalTenant } = require('../middleware/tenant');
@@ -31,7 +34,7 @@
 
 const { AppError } = require('./errorHandler');
 const { getTenantConfig, getTenantDb, DEFAULT_TENANT_CONFIG } = require('../config/tenant');
-const { tenants } = require('../config/db');
+const { get } = require('../config/db');
 
 // ---------------------------------------------------------------------------
 // Constante
@@ -94,19 +97,74 @@ function isValidSlug(slug) {
 }
 
 /**
- * Caută un tenant în baza de date după slug.
- * Întoarce o promisiune.
+ * Caută un tenant în baza de date (SQLite) după slug.
+ * Returnează documentul tenant-ului sau null.
  *
  * @param {string} slug - Slug-ul tenant-ului
- * @returns {Promise<Object|null>}
+ * @returns {Object|null} Documentul tenant-ului (cu _id, slug, name, config) sau null
  */
 function findTenantBySlug(slug) {
-  return new Promise((resolve, reject) => {
-    tenants.findOne({ slug }, (err, doc) => {
-      if (err) return reject(err);
-      resolve(doc || null);
-    });
-  });
+  if (!slug || !isValidSlug(slug)) return null;
+
+  const row = get(
+    'SELECT id, name, slug, settings, createdAt FROM tenants WHERE slug = ?',
+    [slug]
+  );
+
+  if (!row) return null;
+
+  // Parsează settings (JSON) în config
+  let config = {};
+  if (row.settings) {
+    try {
+      config = typeof row.settings === 'string' ? JSON.parse(row.settings) : row.settings;
+    } catch (_parseErr) {
+      config = {};
+    }
+  }
+
+  return {
+    _id: String(row.id),
+    slug: row.slug,
+    name: row.name,
+    config,
+    createdAt: row.createdAt,
+  };
+}
+
+/**
+ * Caută un tenant în baza de date (SQLite) după _id.
+ * Returnează documentul tenant-ului sau null.
+ *
+ * @param {string} id - ID-ul tenant-ului
+ * @returns {Object|null} Documentul tenant-ului sau null
+ */
+function findTenantById(id) {
+  if (!id) return null;
+
+  const row = get(
+    'SELECT id, name, slug, settings, createdAt FROM tenants WHERE CAST(id AS TEXT) = ?',
+    [String(id)]
+  );
+
+  if (!row) return null;
+
+  let config = {};
+  if (row.settings) {
+    try {
+      config = typeof row.settings === 'string' ? JSON.parse(row.settings) : row.settings;
+    } catch (_parseErr) {
+      config = {};
+    }
+  }
+
+  return {
+    _id: String(row.id),
+    slug: row.slug,
+    name: row.name,
+    config,
+    createdAt: row.createdAt,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -165,12 +223,7 @@ async function identifyTenantSlug(req) {
     } else {
       // Altfel, căutăm tenant-ul după _id
       try {
-        const tenantDoc = await new Promise((resolve, reject) => {
-          tenants.findOne({ _id: req.user.tenantId }, (err, doc) => {
-            if (err) return reject(err);
-            resolve(doc || null);
-          });
-        });
+        const tenantDoc = findTenantById(req.user.tenantId);
         if (tenantDoc && tenantDoc.slug) {
           slug = tenantDoc.slug;
         }
@@ -226,9 +279,9 @@ async function resolveTenant(req, res, next) {
     }
 
     // -----------------------------------------------------------------------
-    // 3. Verificare existență tenant în baza de date
+    // 3. Verificare existență tenant în baza de date (SQLite)
     // -----------------------------------------------------------------------
-    const tenantDoc = await findTenantBySlug(slug);
+    const tenantDoc = findTenantBySlug(slug);
 
     if (!tenantDoc) {
       return next(new AppError(
@@ -316,8 +369,8 @@ async function optionalTenant(req, res, next) {
       return next();
     }
 
-    // Căutare tenant în baza de date
-    const tenantDoc = await findTenantBySlug(slug);
+    // Căutare tenant în baza de date (SQLite)
+    const tenantDoc = findTenantBySlug(slug);
 
     if (!tenantDoc) {
       // Tenant-ul nu există – nu blocăm, setăm null

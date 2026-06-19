@@ -2,46 +2,17 @@
 
 // ---------------------------------------------------------------------------
 // Model Delivery – GastroHub
-// Model NeDB pentru livrări simulate de la furnizori.
+// Model SQLite pentru livrări simulate de la furnizori.
 // Câmpuri suportate: supplierId, items (array de {itemId, itemName, quantity,
 // unit, price}), status (comandată, în tranzit, livrată, anulată), orderDate,
 // estimatedDelivery, actualDelivery, notes, locationId, locationType, tenantId
+//
+// Backend: SQLite (prin run, get, all din config/db).
+// Tabela: deliveries
 // ---------------------------------------------------------------------------
 
-const { deliveries } = require('../config/db');
+const { run, get, all } = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
-
-// ---------------------------------------------------------------------------
-// Indexuri specifice modelului (cele generice – tenantId, status, supplierId –
-// sunt deja definite în config/db.js pe colecția partajată).
-// ---------------------------------------------------------------------------
-
-/**
- * Index pentru căutarea livrărilor după locationId.
- */
-deliveries.ensureIndex({ fieldName: 'locationId' }, (err) => {
-  if (err) {
-    console.error('[deliveryModel] Eroare la crearea indexului pe locationId:', err.message);
-  }
-});
-
-/**
- * Index pentru căutarea livrărilor după locationType.
- */
-deliveries.ensureIndex({ fieldName: 'locationType' }, (err) => {
-  if (err) {
-    console.error('[deliveryModel] Eroare la crearea indexului pe locationType:', err.message);
-  }
-});
-
-/**
- * Index pentru căutarea livrărilor după orderDate.
- */
-deliveries.ensureIndex({ fieldName: 'orderDate' }, (err) => {
-  if (err) {
-    console.error('[deliveryModel] Eroare la crearea indexului pe orderDate:', err.message);
-  }
-});
 
 // ---------------------------------------------------------------------------
 // Statusuri valide pentru o livrare
@@ -76,6 +47,62 @@ const VALID_UNITS = [
   'bax',
   'kg/l',
 ];
+
+// ---------------------------------------------------------------------------
+// Coloanele tabelului deliveries (pentru construire SELECT-uri)
+// ---------------------------------------------------------------------------
+
+const DELIVERY_COLUMNS = [
+  'id', 'supplierId', 'items', 'status', 'totalValue',
+  'orderDate', 'estimatedDelivery', 'actualDelivery', 'notes',
+  'locationId', 'locationType', 'tenantId', 'createdAt', 'updatedAt',
+].join(', ');
+
+// ---------------------------------------------------------------------------
+// Helper: transformă un rând SQL → obiect delivery (backward compatibil)
+// ---------------------------------------------------------------------------
+
+/**
+ * Parsează coloana items (JSON) într-un array.
+ * @param {string|null} raw
+ * @returns {Array}
+ */
+function parseItemsJson(raw) {
+  if (!raw || typeof raw !== 'string') return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_e) {
+    return [];
+  }
+}
+
+/**
+ * Transformă un rând SQL brut în obiectul delivery așteptat de controllere.
+ * @param {Object|null} row
+ * @returns {Object|null}
+ */
+function rowToDelivery(row) {
+  if (!row) return null;
+
+  return {
+    _id: row.id != null ? String(row.id) : null,
+    id: row.id != null ? String(row.id) : null,
+    supplierId: row.supplierId,
+    items: parseItemsJson(row.items),
+    status: row.status,
+    totalValue: row.totalValue != null ? row.totalValue : 0,
+    orderDate: row.orderDate,
+    estimatedDelivery: row.estimatedDelivery || null,
+    actualDelivery: row.actualDelivery || null,
+    notes: row.notes || '',
+    locationId: row.locationId,
+    locationType: row.locationType,
+    tenantId: row.tenantId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Funcții de validare
@@ -203,8 +230,23 @@ function calculateTotalValue(items) {
   return +total.toFixed(2);
 }
 
+/**
+ * Curăță itemii (trim pe stringuri) și returnează o copie curată.
+ * @param {Array} items
+ * @returns {Array}
+ */
+function cleanItems(items) {
+  return items.map((item) => ({
+    itemId: item.itemId.trim(),
+    itemName: item.itemName.trim(),
+    quantity: item.quantity,
+    unit: item.unit,
+    price: item.price,
+  }));
+}
+
 // ---------------------------------------------------------------------------
-// Operații CRUD – Deliveries
+// Operații CRUD – Deliveries (SQLite)
 // ---------------------------------------------------------------------------
 
 /**
@@ -343,59 +385,59 @@ function createDelivery(deliveryData) {
     }
 
     // -----------------------------------------------------------------------
-    // Calcul valoare totală
+    // Calcul valoare totală + curățare itemi
     // -----------------------------------------------------------------------
-    const totalValue = calculateTotalValue(items);
-
-    // -----------------------------------------------------------------------
-    // Curățare itemi
-    // -----------------------------------------------------------------------
-    const cleanedItems = items.map((item) => ({
-      itemId: item.itemId.trim(),
-      itemName: item.itemName.trim(),
-      quantity: item.quantity,
-      unit: item.unit,
-      price: item.price,
-    }));
-
-    // -----------------------------------------------------------------------
-    // Creare document livrare
-    // -----------------------------------------------------------------------
+    const cleanedItems = cleanItems(items);
+    const totalValue = calculateTotalValue(cleanedItems);
+    const itemsJson = JSON.stringify(cleanedItems);
     const now = new Date().toISOString();
 
-    const deliveryDoc = {
-      supplierId,
-      items: cleanedItems,
-      status: finalStatus,
-      totalValue,
-      orderDate: finalOrderDate,
-      estimatedDelivery: finalEstimatedDelivery,
-      actualDelivery: finalActualDelivery,
-      notes: finalNotes,
-      locationId,
-      locationType,
-      tenantId,
-      createdAt: now,
-      updatedAt: now,
-    };
+    // -----------------------------------------------------------------------
+    // INSERT SQL
+    // -----------------------------------------------------------------------
+    try {
+      const result = run(
+        `INSERT INTO deliveries
+           (supplierId, items, status, totalValue, orderDate,
+            estimatedDelivery, actualDelivery, notes,
+            locationId, locationType, tenantId, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          supplierId,
+          itemsJson,
+          finalStatus,
+          totalValue,
+          finalOrderDate,
+          finalEstimatedDelivery,
+          finalActualDelivery,
+          finalNotes,
+          locationId,
+          locationType,
+          tenantId,
+          now,
+          now,
+        ]
+      );
 
-    deliveries.insert(deliveryDoc, (insertErr, newDelivery) => {
-      if (insertErr) {
-        return reject(new AppError(
-          `Eroare la crearea livrării: ${insertErr.message}`,
-          500,
-          'DB_INSERT_ERROR'
-        ));
-      }
+      const created = get(
+        `SELECT ${DELIVERY_COLUMNS} FROM deliveries WHERE id = ?`,
+        [result.lastInsertRowid]
+      );
 
-      resolve(newDelivery);
-    });
+      resolve(rowToDelivery(created));
+    } catch (err) {
+      return reject(new AppError(
+        `Eroare la crearea livrării: ${err.message}`,
+        500,
+        'DB_INSERT_ERROR'
+      ));
+    }
   });
 }
 
 /**
  * Găsește o livrare după ID.
- * @param {string} id - ID-ul NeDB
+ * @param {string} id - ID-ul SQLite
  * @returns {Promise<Object|null>} Documentul livrării sau null
  */
 function findDeliveryById(id) {
@@ -404,16 +446,19 @@ function findDeliveryById(id) {
       return reject(new AppError('ID-ul livrării este invalid.', 400, 'INVALID_DELIVERY_ID'));
     }
 
-    deliveries.findOne({ _id: id }, (err, delivery) => {
-      if (err) {
-        return reject(new AppError(
-          `Eroare la căutarea livrării: ${err.message}`,
-          500,
-          'DB_QUERY_ERROR'
-        ));
-      }
-      resolve(delivery || null);
-    });
+    try {
+      const row = get(
+        `SELECT ${DELIVERY_COLUMNS} FROM deliveries WHERE id = ?`,
+        [id]
+      );
+      resolve(rowToDelivery(row));
+    } catch (err) {
+      return reject(new AppError(
+        `Eroare la căutarea livrării: ${err.message}`,
+        500,
+        'DB_QUERY_ERROR'
+      ));
+    }
   });
 }
 
@@ -437,62 +482,80 @@ function findDeliveriesByTenant(tenantId, options = {}) {
       return reject(new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID'));
     }
 
-    const filter = { tenantId };
-
-    if (options.status) {
-      if (!isValidDeliveryStatus(options.status)) {
-        return reject(new AppError(
-          `Statusul "${options.status}" nu este valid. Statusuri permise: ${VALID_DELIVERY_STATUSES.join(', ')}.`,
-          400,
-          'INVALID_DELIVERY_STATUS'
-        ));
-      }
-      filter.status = options.status;
+    // Validare opțiuni
+    if (options.status && !isValidDeliveryStatus(options.status)) {
+      return reject(new AppError(
+        `Statusul "${options.status}" nu este valid. Statusuri permise: ${VALID_DELIVERY_STATUSES.join(', ')}.`,
+        400,
+        'INVALID_DELIVERY_STATUS'
+      ));
     }
 
-    if (options.supplierId) {
-      filter.supplierId = options.supplierId;
+    if (options.locationType && !isValidLocationType(options.locationType)) {
+      return reject(new AppError(
+        `Tipul locației trebuie să fie "restaurant" sau "hotel".`,
+        400,
+        'INVALID_LOCATION_TYPE'
+      ));
     }
 
-    if (options.locationId) {
-      filter.locationId = options.locationId;
-    }
+    try {
+      const conditions = ['tenantId = ?'];
+      const params = [tenantId];
 
-    if (options.locationType) {
-      if (!isValidLocationType(options.locationType)) {
-        return reject(new AppError(
-          `Tipul locației trebuie să fie "restaurant" sau "hotel".`,
-          400,
-          'INVALID_LOCATION_TYPE'
-        ));
-      }
-      filter.locationType = options.locationType;
-    }
-
-    const sortField = options.sortBy || 'orderDate';
-    const sortDir = options.sortOrder === 'asc' ? 1 : -1;
-
-    let query = deliveries.find(filter).sort({ [sortField]: sortDir });
-
-    if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
-      query = query.limit(options.limit);
-    }
-
-    if (options.skip && Number.isInteger(options.skip) && options.skip > 0) {
-      query = query.skip(options.skip);
-    }
-
-    query.exec((err, deliveryList) => {
-      if (err) {
-        return reject(new AppError(
-          `Eroare la căutarea livrărilor: ${err.message}`,
-          500,
-          'DB_QUERY_ERROR'
-        ));
+      if (options.status) {
+        conditions.push('status = ?');
+        params.push(options.status);
       }
 
-      resolve(deliveryList || []);
-    });
+      if (options.supplierId) {
+        conditions.push('supplierId = ?');
+        params.push(options.supplierId);
+      }
+
+      if (options.locationId) {
+        conditions.push('locationId = ?');
+        params.push(options.locationId);
+      }
+
+      if (options.locationType) {
+        conditions.push('locationType = ?');
+        params.push(options.locationType);
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      // Sortare
+      const sortField = options.sortBy || 'orderDate';
+      // Validează câmpul de sortare pentru a preveni SQL injection
+      const allowedSortFields = [
+        'orderDate', 'createdAt', 'updatedAt', 'status',
+        'totalValue', 'supplierId', 'locationId', 'locationType',
+      ];
+      const safeSortField = allowedSortFields.includes(sortField) ? sortField : 'orderDate';
+      const sortDir = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
+
+      let sql = `SELECT ${DELIVERY_COLUMNS} FROM deliveries WHERE ${whereClause} ORDER BY ${safeSortField} ${sortDir}`;
+
+      if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
+        sql += ' LIMIT ?';
+        params.push(options.limit);
+
+        if (options.skip && Number.isInteger(options.skip) && options.skip > 0) {
+          sql += ' OFFSET ?';
+          params.push(options.skip);
+        }
+      }
+
+      const rows = all(sql, params);
+      resolve((rows || []).map(rowToDelivery));
+    } catch (err) {
+      return reject(new AppError(
+        `Eroare la căutarea livrărilor: ${err.message}`,
+        500,
+        'DB_QUERY_ERROR'
+      ));
+    }
   });
 }
 
@@ -512,25 +575,30 @@ function findDeliveriesByStatus(status, tenantId) {
       ));
     }
 
-    const filter = { status };
+    try {
+      const conditions = ['status = ?'];
+      const params = [status];
 
-    if (tenantId) {
-      filter.tenantId = tenantId;
+      if (tenantId) {
+        conditions.push('tenantId = ?');
+        params.push(tenantId);
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      const rows = all(
+        `SELECT ${DELIVERY_COLUMNS} FROM deliveries WHERE ${whereClause} ORDER BY orderDate DESC`,
+        params
+      );
+
+      resolve((rows || []).map(rowToDelivery));
+    } catch (err) {
+      return reject(new AppError(
+        `Eroare la căutarea livrărilor după status: ${err.message}`,
+        500,
+        'DB_QUERY_ERROR'
+      ));
     }
-
-    deliveries.find(filter)
-      .sort({ orderDate: -1 })
-      .exec((err, deliveryList) => {
-        if (err) {
-          return reject(new AppError(
-            `Eroare la căutarea livrărilor după status: ${err.message}`,
-            500,
-            'DB_QUERY_ERROR'
-          ));
-        }
-
-        resolve(deliveryList || []);
-      });
   });
 }
 
@@ -546,25 +614,30 @@ function findDeliveriesBySupplier(supplierId, tenantId) {
       return reject(new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID'));
     }
 
-    const filter = { supplierId };
+    try {
+      const conditions = ['supplierId = ?'];
+      const params = [supplierId];
 
-    if (tenantId) {
-      filter.tenantId = tenantId;
+      if (tenantId) {
+        conditions.push('tenantId = ?');
+        params.push(tenantId);
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      const rows = all(
+        `SELECT ${DELIVERY_COLUMNS} FROM deliveries WHERE ${whereClause} ORDER BY orderDate DESC`,
+        params
+      );
+
+      resolve((rows || []).map(rowToDelivery));
+    } catch (err) {
+      return reject(new AppError(
+        `Eroare la căutarea livrărilor după furnizor: ${err.message}`,
+        500,
+        'DB_QUERY_ERROR'
+      ));
     }
-
-    deliveries.find(filter)
-      .sort({ orderDate: -1 })
-      .exec((err, deliveryList) => {
-        if (err) {
-          return reject(new AppError(
-            `Eroare la căutarea livrărilor după furnizor: ${err.message}`,
-            500,
-            'DB_QUERY_ERROR'
-          ));
-        }
-
-        resolve(deliveryList || []);
-      });
   });
 }
 
@@ -589,25 +662,30 @@ function findDeliveriesByLocation(locationId, locationType, tenantId) {
       ));
     }
 
-    const filter = { locationId, locationType };
+    try {
+      const conditions = ['locationId = ?', 'locationType = ?'];
+      const params = [locationId, locationType];
 
-    if (tenantId) {
-      filter.tenantId = tenantId;
+      if (tenantId) {
+        conditions.push('tenantId = ?');
+        params.push(tenantId);
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      const rows = all(
+        `SELECT ${DELIVERY_COLUMNS} FROM deliveries WHERE ${whereClause} ORDER BY orderDate DESC`,
+        params
+      );
+
+      resolve((rows || []).map(rowToDelivery));
+    } catch (err) {
+      return reject(new AppError(
+        `Eroare la căutarea livrărilor după locație: ${err.message}`,
+        500,
+        'DB_QUERY_ERROR'
+      ));
     }
-
-    deliveries.find(filter)
-      .sort({ orderDate: -1 })
-      .exec((err, deliveryList) => {
-        if (err) {
-          return reject(new AppError(
-            `Eroare la căutarea livrărilor după locație: ${err.message}`,
-            500,
-            'DB_QUERY_ERROR'
-          ));
-        }
-
-        resolve(deliveryList || []);
-      });
   });
 }
 
@@ -628,30 +706,30 @@ function findDeliveriesByDateRange(startDate, endDate, tenantId) {
       return reject(new AppError('Data de sfârșit este invalidă.', 400, 'INVALID_END_DATE'));
     }
 
-    const filter = {
-      orderDate: {
-        $gte: startDate,
-        $lte: endDate,
-      },
-    };
+    try {
+      const conditions = ['orderDate >= ?', 'orderDate <= ?'];
+      const params = [startDate, endDate];
 
-    if (tenantId) {
-      filter.tenantId = tenantId;
+      if (tenantId) {
+        conditions.push('tenantId = ?');
+        params.push(tenantId);
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      const rows = all(
+        `SELECT ${DELIVERY_COLUMNS} FROM deliveries WHERE ${whereClause} ORDER BY orderDate DESC`,
+        params
+      );
+
+      resolve((rows || []).map(rowToDelivery));
+    } catch (err) {
+      return reject(new AppError(
+        `Eroare la căutarea livrărilor în interval: ${err.message}`,
+        500,
+        'DB_QUERY_ERROR'
+      ));
     }
-
-    deliveries.find(filter)
-      .sort({ orderDate: -1 })
-      .exec((err, deliveryList) => {
-        if (err) {
-          return reject(new AppError(
-            `Eroare la căutarea livrărilor în interval: ${err.message}`,
-            500,
-            'DB_QUERY_ERROR'
-          ));
-        }
-
-        resolve(deliveryList || []);
-      });
   });
 }
 
@@ -683,7 +761,8 @@ function updateDelivery(id, updateData) {
       'estimatedDelivery', 'actualDelivery', 'notes',
       'locationId', 'locationType',
     ];
-    const setFields = {};
+    const setClauses = [];
+    const params = [];
     const errors = [];
 
     for (const [key, value] of Object.entries(updateData)) {
@@ -696,7 +775,8 @@ function updateDelivery(id, updateData) {
           if (!value || typeof value !== 'string' || value.trim().length === 0) {
             errors.push('ID-ul furnizorului este obligatoriu.');
           } else {
-            setFields.supplierId = value.trim();
+            setClauses.push('supplierId = ?');
+            params.push(value.trim());
           }
           break;
 
@@ -710,16 +790,12 @@ function updateDelivery(id, updateData) {
             if (!valResult.valid) {
               errors.push(valResult.errors.join(' '));
             } else {
-              const cleanedItems = value.map((item) => ({
-                itemId: item.itemId.trim(),
-                itemName: item.itemName.trim(),
-                quantity: item.quantity,
-                unit: item.unit,
-                price: item.price,
-              }));
-              setFields.items = cleanedItems;
-              // Recalculăm valoarea totală
-              setFields.totalValue = calculateTotalValue(cleanedItems);
+              const cleanedItems = cleanItems(value);
+              const newTotalValue = calculateTotalValue(cleanedItems);
+              setClauses.push('items = ?');
+              params.push(JSON.stringify(cleanedItems));
+              setClauses.push('totalValue = ?');
+              params.push(newTotalValue);
             }
           }
           break;
@@ -728,7 +804,8 @@ function updateDelivery(id, updateData) {
           if (!isValidDeliveryStatus(value)) {
             errors.push(`Statusul "${value}" nu este valid. Statusuri permise: ${VALID_DELIVERY_STATUSES.join(', ')}.`);
           } else {
-            setFields.status = value;
+            setClauses.push('status = ?');
+            params.push(value);
           }
           break;
 
@@ -736,7 +813,8 @@ function updateDelivery(id, updateData) {
           if (value && !isValidISODate(value)) {
             errors.push('Data comenzii (orderDate) nu este o dată validă.');
           } else {
-            setFields.orderDate = value || new Date().toISOString();
+            setClauses.push('orderDate = ?');
+            params.push(value || new Date().toISOString());
           }
           break;
 
@@ -744,7 +822,8 @@ function updateDelivery(id, updateData) {
           if (value && !isValidISODate(value)) {
             errors.push('Data estimată de livrare (estimatedDelivery) nu este o dată validă.');
           } else {
-            setFields.estimatedDelivery = value || null;
+            setClauses.push('estimatedDelivery = ?');
+            params.push(value || null);
           }
           break;
 
@@ -752,7 +831,8 @@ function updateDelivery(id, updateData) {
           if (value && !isValidISODate(value)) {
             errors.push('Data efectivă de livrare (actualDelivery) nu este o dată validă.');
           } else {
-            setFields.actualDelivery = value || null;
+            setClauses.push('actualDelivery = ?');
+            params.push(value || null);
           }
           break;
 
@@ -760,7 +840,8 @@ function updateDelivery(id, updateData) {
           if (value !== null && value !== undefined && String(value).length > 2000) {
             errors.push('Notele pot avea maximum 2000 de caractere.');
           } else {
-            setFields.notes = value !== null && value !== undefined ? String(value).trim() : '';
+            setClauses.push('notes = ?');
+            params.push(value !== null && value !== undefined ? String(value).trim() : '');
           }
           break;
 
@@ -768,7 +849,8 @@ function updateDelivery(id, updateData) {
           if (!value || typeof value !== 'string' || value.trim().length === 0) {
             errors.push('ID-ul locației este obligatoriu.');
           } else {
-            setFields.locationId = value.trim();
+            setClauses.push('locationId = ?');
+            params.push(value.trim());
           }
           break;
 
@@ -776,7 +858,8 @@ function updateDelivery(id, updateData) {
           if (!value || !isValidLocationType(value)) {
             errors.push(`Tipul locației trebuie să fie "restaurant" sau "hotel".`);
           } else {
-            setFields.locationType = value;
+            setClauses.push('locationType = ?');
+            params.push(value);
           }
           break;
 
@@ -788,7 +871,7 @@ function updateDelivery(id, updateData) {
       return reject(new AppError(errors.join(' '), 400, 'VALIDATION_ERROR'));
     }
 
-    if (Object.keys(setFields).length === 0) {
+    if (setClauses.length === 0) {
       return reject(new AppError(
         'Nu s-au furnizat câmpuri valide pentru actualizare.',
         400,
@@ -797,30 +880,38 @@ function updateDelivery(id, updateData) {
     }
 
     // -----------------------------------------------------------------------
-    // Actualizare document
+    // Actualizare SQL
     // -----------------------------------------------------------------------
-    setFields.updatedAt = new Date().toISOString();
+    const now = new Date().toISOString();
+    setClauses.push('updatedAt = ?');
+    params.push(now);
 
-    deliveries.update(
-      { _id: id },
-      { $set: setFields },
-      { returnUpdatedDocs: true },
-      (updateErr, numUpdated, updatedDelivery) => {
-        if (updateErr) {
-          return reject(new AppError(
-            `Eroare la actualizarea livrării: ${updateErr.message}`,
-            500,
-            'DB_UPDATE_ERROR'
-          ));
-        }
+    // Adăugăm id-ul la final
+    params.push(id);
 
-        if (numUpdated === 0) {
-          return reject(new AppError('Livrarea nu a fost găsită.', 404, 'DELIVERY_NOT_FOUND'));
-        }
+    try {
+      const result = run(
+        `UPDATE deliveries SET ${setClauses.join(', ')} WHERE id = ?`,
+        params
+      );
 
-        resolve(updatedDelivery);
+      if (result.changes === 0) {
+        return reject(new AppError('Livrarea nu a fost găsită.', 404, 'DELIVERY_NOT_FOUND'));
       }
-    );
+
+      const updated = get(
+        `SELECT ${DELIVERY_COLUMNS} FROM deliveries WHERE id = ?`,
+        [id]
+      );
+
+      resolve(rowToDelivery(updated));
+    } catch (err) {
+      return reject(new AppError(
+        `Eroare la actualizarea livrării: ${err.message}`,
+        500,
+        'DB_UPDATE_ERROR'
+      ));
+    }
   });
 }
 
@@ -844,36 +935,42 @@ function updateDeliveryStatus(id, status) {
       ));
     }
 
-    const setFields = {
-      status,
-      updatedAt: new Date().toISOString(),
-    };
+    const now = new Date().toISOString();
+    const setClauses = ['status = ?', 'updatedAt = ?'];
+    const params = [status, now];
 
     // Dacă statusul este 'livrată' și nu există actualDelivery, o setăm acum
     if (status === 'livrată') {
-      setFields.actualDelivery = new Date().toISOString();
+      setClauses.push('actualDelivery = ?');
+      params.push(now);
     }
 
-    deliveries.update(
-      { _id: id },
-      { $set: setFields },
-      { returnUpdatedDocs: true },
-      (updateErr, numUpdated, updatedDelivery) => {
-        if (updateErr) {
-          return reject(new AppError(
-            `Eroare la actualizarea statusului livrării: ${updateErr.message}`,
-            500,
-            'DB_UPDATE_ERROR'
-          ));
-        }
+    // Adăugăm id-ul
+    params.push(id);
 
-        if (numUpdated === 0) {
-          return reject(new AppError('Livrarea nu a fost găsită.', 404, 'DELIVERY_NOT_FOUND'));
-        }
+    try {
+      const result = run(
+        `UPDATE deliveries SET ${setClauses.join(', ')} WHERE id = ?`,
+        params
+      );
 
-        resolve(updatedDelivery);
+      if (result.changes === 0) {
+        return reject(new AppError('Livrarea nu a fost găsită.', 404, 'DELIVERY_NOT_FOUND'));
       }
-    );
+
+      const updated = get(
+        `SELECT ${DELIVERY_COLUMNS} FROM deliveries WHERE id = ?`,
+        [id]
+      );
+
+      resolve(rowToDelivery(updated));
+    } catch (err) {
+      return reject(new AppError(
+        `Eroare la actualizarea statusului livrării: ${err.message}`,
+        500,
+        'DB_UPDATE_ERROR'
+      ));
+    }
   });
 }
 
@@ -888,21 +985,21 @@ function deleteDelivery(id) {
       return reject(new AppError('ID-ul livrării este invalid.', 400, 'INVALID_DELIVERY_ID'));
     }
 
-    deliveries.remove({ _id: id }, {}, (removeErr, numRemoved) => {
-      if (removeErr) {
-        return reject(new AppError(
-          `Eroare la ștergerea livrării: ${removeErr.message}`,
-          500,
-          'DB_DELETE_ERROR'
-        ));
-      }
+    try {
+      const result = run('DELETE FROM deliveries WHERE id = ?', [id]);
 
-      if (numRemoved === 0) {
+      if (result.changes === 0) {
         return reject(new AppError('Livrarea nu a fost găsită.', 404, 'DELIVERY_NOT_FOUND'));
       }
 
       resolve(true);
-    });
+    } catch (err) {
+      return reject(new AppError(
+        `Eroare la ștergerea livrării: ${err.message}`,
+        500,
+        'DB_DELETE_ERROR'
+      ));
+    }
   });
 }
 
@@ -919,29 +1016,38 @@ function countDeliveries(tenantId, options = {}) {
       return resolve(0);
     }
 
-    const filter = { tenantId };
-
-    if (options.status) {
-      if (!isValidDeliveryStatus(options.status)) {
-        return reject(new AppError(
-          `Statusul "${options.status}" nu este valid. Statusuri permise: ${VALID_DELIVERY_STATUSES.join(', ')}.`,
-          400,
-          'INVALID_DELIVERY_STATUS'
-        ));
-      }
-      filter.status = options.status;
+    if (options.status && !isValidDeliveryStatus(options.status)) {
+      return reject(new AppError(
+        `Statusul "${options.status}" nu este valid. Statusuri permise: ${VALID_DELIVERY_STATUSES.join(', ')}.`,
+        400,
+        'INVALID_DELIVERY_STATUS'
+      ));
     }
 
-    deliveries.count(filter, (err, count) => {
-      if (err) {
-        return reject(new AppError(
-          `Eroare la numărarea livrărilor: ${err.message}`,
-          500,
-          'DB_COUNT_ERROR'
-        ));
+    try {
+      const conditions = ['tenantId = ?'];
+      const params = [tenantId];
+
+      if (options.status) {
+        conditions.push('status = ?');
+        params.push(options.status);
       }
-      resolve(count || 0);
-    });
+
+      const whereClause = conditions.join(' AND ');
+
+      const row = get(
+        `SELECT COUNT(*) AS cnt FROM deliveries WHERE ${whereClause}`,
+        params
+      );
+
+      resolve(row ? row.cnt : 0);
+    } catch (err) {
+      return reject(new AppError(
+        `Eroare la numărarea livrărilor: ${err.message}`,
+        500,
+        'DB_COUNT_ERROR'
+      ));
+    }
   });
 }
 
@@ -958,34 +1064,39 @@ function getTotalDeliveryValue(tenantId, options = {}) {
       return resolve(0);
     }
 
-    const filter = { tenantId };
-
-    if (options.status) {
-      if (!isValidDeliveryStatus(options.status)) {
-        return reject(new AppError(
-          `Statusul "${options.status}" nu este valid. Statusuri permise: ${VALID_DELIVERY_STATUSES.join(', ')}.`,
-          400,
-          'INVALID_DELIVERY_STATUS'
-        ));
-      }
-      filter.status = options.status;
+    if (options.status && !isValidDeliveryStatus(options.status)) {
+      return reject(new AppError(
+        `Statusul "${options.status}" nu este valid. Statusuri permise: ${VALID_DELIVERY_STATUSES.join(', ')}.`,
+        400,
+        'INVALID_DELIVERY_STATUS'
+      ));
     }
 
-    deliveries.find(filter).exec((err, deliveryList) => {
-      if (err) {
-        return reject(new AppError(
-          `Eroare la obținerea valorii totale: ${err.message}`,
-          500,
-          'DB_QUERY_ERROR'
-        ));
+    try {
+      const conditions = ['tenantId = ?'];
+      const params = [tenantId];
+
+      if (options.status) {
+        conditions.push('status = ?');
+        params.push(options.status);
       }
 
-      const total = (deliveryList || []).reduce((sum, delivery) => {
-        return sum + (delivery.totalValue || 0);
-      }, 0);
+      const whereClause = conditions.join(' AND ');
 
-      resolve(+total.toFixed(2));
-    });
+      const row = get(
+        `SELECT COALESCE(SUM(totalValue), 0) AS total FROM deliveries WHERE ${whereClause}`,
+        params
+      );
+
+      const total = row ? row.total : 0;
+      resolve(+Number(total).toFixed(2));
+    } catch (err) {
+      return reject(new AppError(
+        `Eroare la obținerea valorii totale: ${err.message}`,
+        500,
+        'DB_QUERY_ERROR'
+      ));
+    }
   });
 }
 
@@ -1000,32 +1111,31 @@ function getDeliveryStatsByStatus(tenantId) {
       return resolve({});
     }
 
-    deliveries.find({ tenantId }).exec((err, deliveryList) => {
-      if (err) {
-        return reject(new AppError(
-          `Eroare la obținerea statisticilor: ${err.message}`,
-          500,
-          'DB_QUERY_ERROR'
-        ));
-      }
+    try {
+      const rows = all(
+        `SELECT status, COUNT(*) AS cnt, COALESCE(SUM(totalValue), 0) AS totalValue
+         FROM deliveries
+         WHERE tenantId = ?
+         GROUP BY status`,
+        [tenantId]
+      );
 
       const stats = {};
-      for (const delivery of (deliveryList || [])) {
-        const status = delivery.status || 'necunoscut';
-        if (!stats[status]) {
-          stats[status] = { count: 0, totalValue: 0 };
-        }
-        stats[status].count += 1;
-        stats[status].totalValue += (delivery.totalValue || 0);
-      }
-
-      // Rotunjim valorile
-      for (const key of Object.keys(stats)) {
-        stats[key].totalValue = +stats[key].totalValue.toFixed(2);
+      for (const row of (rows || [])) {
+        stats[row.status] = {
+          count: row.cnt,
+          totalValue: +Number(row.totalValue).toFixed(2),
+        };
       }
 
       resolve(stats);
-    });
+    } catch (err) {
+      return reject(new AppError(
+        `Eroare la obținerea statisticilor: ${err.message}`,
+        500,
+        'DB_QUERY_ERROR'
+      ));
+    }
   });
 }
 
@@ -1040,17 +1150,16 @@ function deleteDeliveriesByTenant(tenantId) {
       return resolve(0);
     }
 
-    deliveries.remove({ tenantId }, { multi: true }, (err, numRemoved) => {
-      if (err) {
-        return reject(new AppError(
-          `Eroare la ștergerea livrărilor: ${err.message}`,
-          500,
-          'DB_DELETE_ERROR'
-        ));
-      }
-
-      resolve(numRemoved || 0);
-    });
+    try {
+      const result = run('DELETE FROM deliveries WHERE tenantId = ?', [tenantId]);
+      resolve(result.changes || 0);
+    } catch (err) {
+      return reject(new AppError(
+        `Eroare la ștergerea livrărilor: ${err.message}`,
+        500,
+        'DB_DELETE_ERROR'
+      ));
+    }
   });
 }
 

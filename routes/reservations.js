@@ -49,8 +49,6 @@ const {
   deleteReservation,
   findReservationsByGuestId,
   updateReservationBilling,
-  findReservationsByCheckInDate,
-  findReservationsByCheckOutDate,
   checkInReservation,
   checkOutReservation,
   getReservationBillingSummary,

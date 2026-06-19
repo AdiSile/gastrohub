@@ -24,6 +24,7 @@ const {
   createUser,
   findUserByEmail,
   comparePassword,
+  VALID_ROLES,
 } = require('../models/userModel');
 
 const {
@@ -86,7 +87,7 @@ router.post(
       .withMessage('Parola trebuie să aibă între 6 și 128 de caractere.'),
     body('role')
       .optional()
-      .isIn(['super_admin', 'owner', 'manager', 'recepție', 'ospătar', 'bucătar', 'client'])
+      .isIn(VALID_ROLES)
       .withMessage('Rolul specificat nu este valid.'),
     body('tenantId')
       .optional({ values: 'null' })

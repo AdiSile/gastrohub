@@ -5,9 +5,10 @@
 // Model pentru cupoane de reducere generate automat
 // Suportă: generare automată de cupoane cu cod unic, validare, expirare,
 // aplicare discount, anulare, istoric, reguli de utilizare
+// Persistență: SQLite via sql.js (config/db) – tabela coupons
 // ---------------------------------------------------------------------------
 
-const { v4: uuidv4 } = require('uuid');
+const { getDb, run, get, all } = require('../config/db');
 
 // ---------------------------------------------------------------------------
 // Configurare implicită
@@ -41,10 +42,64 @@ const VALID_COUPON_STATUSES = ['active', 'used', 'expired', 'cancelled'];
 const VALID_DISCOUNT_TYPES = ['percent', 'fixed'];
 
 // ---------------------------------------------------------------------------
-// Stocare în-memory (înlocuiește cu DB real în producție)
+// Asigură existența tabelei coupons (idempotent)
 // ---------------------------------------------------------------------------
 
-const coupons = new Map();
+let _tablesEnsured = false;
+
+function ensureTables() {
+  if (_tablesEnsured) return;
+  run(`
+    CREATE TABLE IF NOT EXISTS coupons (
+      id                TEXT PRIMARY KEY,
+      code              TEXT NOT NULL UNIQUE,
+      userId            TEXT NOT NULL,
+      discountType      TEXT NOT NULL DEFAULT 'percent',
+      discountValue     REAL NOT NULL DEFAULT 10,
+      validityDays      INTEGER NOT NULL DEFAULT 90,
+      minOrderAmount    REAL,
+      maxUsageCount     INTEGER NOT NULL DEFAULT 1,
+      currentUsageCount INTEGER NOT NULL DEFAULT 0,
+      description       TEXT DEFAULT '',
+      restaurantId      TEXT,
+      hotelId           TEXT,
+      createdBy         TEXT,
+      status            TEXT NOT NULL DEFAULT 'active',
+      createdAt         TEXT DEFAULT (datetime('now')),
+      updatedAt         TEXT DEFAULT (datetime('now')),
+      expiresAt         TEXT,
+      usedAt            TEXT,
+      usedOnOrders      TEXT DEFAULT '[]',
+      cancelledAt       TEXT,
+      cancelledBy       TEXT,
+      cancelledReason   TEXT DEFAULT ''
+    );
+  `);
+  run('CREATE INDEX IF NOT EXISTS idx_coupons_userId ON coupons(userId);');
+  run('CREATE INDEX IF NOT EXISTS idx_coupons_code ON coupons(code);');
+  run('CREATE INDEX IF NOT EXISTS idx_coupons_status ON coupons(status);');
+  run('CREATE INDEX IF NOT EXISTS idx_coupons_userId_status ON coupons(userId, status);');
+  _tablesEnsured = true;
+}
+
+// ---------------------------------------------------------------------------
+// Generator intern de ID-uri unice (înlocuiește uuid)
+// ---------------------------------------------------------------------------
+
+/**
+ * Generează un ID unic fără dependențe externe.
+ * Bazat pe timestamp și entropie Math.random.
+ * @returns {string} ID unic
+ */
+function generateId() {
+  return (
+    Date.now().toString(36) +
+    '-' +
+    Math.random().toString(36).substring(2, 10) +
+    '-' +
+    Math.random().toString(36).substring(2, 6)
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Funcții de validare
@@ -205,7 +260,7 @@ function calculateExpiryDate(validityDays = COUPON_CONFIG.DEFAULT_VALIDITY_DAYS)
  * @returns {string} Codul cuponului
  */
 function generateCouponCode(prefix = COUPON_CONFIG.CODE_PREFIX) {
-  const unique = uuidv4().replace(/-/g, '').substring(0, COUPON_CONFIG.CODE_LENGTH).toUpperCase();
+  const unique = generateId().replace(/-/g, '').substring(0, COUPON_CONFIG.CODE_LENGTH).toUpperCase();
   return `${prefix}-${unique}`;
 }
 
@@ -220,12 +275,20 @@ function normalizeCouponCode(code) {
 }
 
 /**
- * Găsește un cupon după codul normalizat.
- * @param {string} normalizedCode - Codul deja normalizat
- * @returns {Object|undefined}
+ * Parses the usedOnOrders JSON field into an array.
+ * @param {Object} row - Database row
+ * @returns {Object} Row with parsed usedOnOrders
  */
-function findCouponByNormalizedCode(normalizedCode) {
-  return Array.from(coupons.values()).find(c => c.code === normalizedCode);
+function parseUsedOnOrders(row) {
+  if (!row) return row;
+  if (typeof row.usedOnOrders === 'string') {
+    try {
+      row.usedOnOrders = JSON.parse(row.usedOnOrders);
+    } catch (_) {
+      row.usedOnOrders = [];
+    }
+  }
+  return row;
 }
 
 // ---------------------------------------------------------------------------
@@ -252,92 +315,94 @@ function findCouponByNormalizedCode(normalizedCode) {
  */
 function createCoupon(options = {}) {
   return new Promise((resolve, reject) => {
-    // --- Validare userId ---
-    if (!options.userId || !isValidUserId(options.userId)) {
-      return reject(new Error('ID-ul utilizatorului este invalid.'));
-    }
-
-    // --- Validare discountType ---
-    const discountType = options.discountType || 'percent';
-    if (!isValidDiscountType(discountType)) {
-      return reject(new Error(`Tipul de discount trebuie să fie 'percent' sau 'fixed'.`));
-    }
-
-    // --- Validare discountValue ---
-    let discountValue = options.discountValue !== undefined ? options.discountValue : COUPON_CONFIG.DEFAULT_DISCOUNT_PERCENT;
-    if (discountType === 'percent') {
-      if (!isValidDiscountPercent(discountValue)) {
-        return reject(new Error(`Procentajul de discount trebuie să fie între ${COUPON_CONFIG.MIN_DISCOUNT_PERCENT} și ${COUPON_CONFIG.MAX_DISCOUNT_PERCENT}.`));
+    try {
+      // --- Validare userId ---
+      if (!options.userId || !isValidUserId(options.userId)) {
+        return reject(new Error('ID-ul utilizatorului este invalid.'));
       }
-    } else {
-      if (!isValidDiscountAmount(discountValue)) {
-        return reject(new Error('Suma discountului trebuie să fie un număr pozitiv.'));
+
+      // --- Validare discountType ---
+      const discountType = options.discountType || 'percent';
+      if (!isValidDiscountType(discountType)) {
+        return reject(new Error(`Tipul de discount trebuie să fie 'percent' sau 'fixed'.`));
       }
-    }
 
-    // --- Validare validityDays ---
-    const validityDays = options.validityDays !== undefined ? options.validityDays : COUPON_CONFIG.DEFAULT_VALIDITY_DAYS;
-    if (!isValidValidityDays(validityDays)) {
-      return reject(new Error(`Valabilitatea trebuie să fie între ${COUPON_CONFIG.MIN_VALIDITY_DAYS} și ${COUPON_CONFIG.MAX_VALIDITY_DAYS} zile.`));
-    }
-
-    // --- Validare minOrderAmount ---
-    if (options.minOrderAmount !== undefined && !isValidPositiveNumber(options.minOrderAmount)) {
-      return reject(new Error('Suma minimă a comenzii trebuie să fie un număr pozitiv.'));
-    }
-
-    // --- Validare maxUsageCount ---
-    const maxUsageCount = options.maxUsageCount !== undefined ? options.maxUsageCount : 1;
-    if (!isValidNonNegativeInt(maxUsageCount)) {
-      return reject(new Error('Numărul maxim de utilizări trebuie să fie un număr întreg mai mare sau egal cu 0.'));
-    }
-
-    // --- Generare cod cupon ---
-    let couponCode;
-    if (options.code) {
-      if (!isValidCouponCode(options.code)) {
-        return reject(new Error(`Codul cuponului trebuie să aibă între ${COUPON_CONFIG.MIN_CODE_LENGTH} și ${COUPON_CONFIG.MAX_CODE_LENGTH} caractere.`));
+      // --- Validare discountValue ---
+      let discountValue = options.discountValue !== undefined ? options.discountValue : COUPON_CONFIG.DEFAULT_DISCOUNT_PERCENT;
+      if (discountType === 'percent') {
+        if (!isValidDiscountPercent(discountValue)) {
+          return reject(new Error(`Procentajul de discount trebuie să fie între ${COUPON_CONFIG.MIN_DISCOUNT_PERCENT} și ${COUPON_CONFIG.MAX_DISCOUNT_PERCENT}.`));
+        }
+      } else {
+        if (!isValidDiscountAmount(discountValue)) {
+          return reject(new Error('Suma discountului trebuie să fie un număr pozitiv.'));
+        }
       }
-      couponCode = normalizeCouponCode(options.code);
-      // Verificăm unicitatea codului
-      if (findCouponByNormalizedCode(couponCode)) {
-        return reject(new Error('Codul cuponului există deja.'));
+
+      // --- Validare validityDays ---
+      const validityDays = options.validityDays !== undefined ? options.validityDays : COUPON_CONFIG.DEFAULT_VALIDITY_DAYS;
+      if (!isValidValidityDays(validityDays)) {
+        return reject(new Error(`Valabilitatea trebuie să fie între ${COUPON_CONFIG.MIN_VALIDITY_DAYS} și ${COUPON_CONFIG.MAX_VALIDITY_DAYS} zile.`));
       }
-    } else {
-      // Generăm cod unic
-      do {
-        couponCode = generateCouponCode();
-      } while (findCouponByNormalizedCode(couponCode));
+
+      // --- Validare minOrderAmount ---
+      if (options.minOrderAmount !== undefined && !isValidPositiveNumber(options.minOrderAmount)) {
+        return reject(new Error('Suma minimă a comenzii trebuie să fie un număr pozitiv.'));
+      }
+
+      // --- Validare maxUsageCount ---
+      const maxUsageCount = options.maxUsageCount !== undefined ? options.maxUsageCount : 1;
+      if (!isValidNonNegativeInt(maxUsageCount)) {
+        return reject(new Error('Numărul maxim de utilizări trebuie să fie un număr întreg mai mare sau egal cu 0.'));
+      }
+
+      ensureTables();
+
+      // --- Generare cod cupon ---
+      let couponCode;
+      if (options.code) {
+        if (!isValidCouponCode(options.code)) {
+          return reject(new Error(`Codul cuponului trebuie să aibă între ${COUPON_CONFIG.MIN_CODE_LENGTH} și ${COUPON_CONFIG.MAX_CODE_LENGTH} caractere.`));
+        }
+        couponCode = normalizeCouponCode(options.code);
+        // Verificăm unicitatea codului
+        const existing = get('SELECT id FROM coupons WHERE code = ?', [couponCode]);
+        if (existing) {
+          return reject(new Error('Codul cuponului există deja.'));
+        }
+      } else {
+        // Generăm cod unic
+        do {
+          couponCode = generateCouponCode();
+        } while (get('SELECT id FROM coupons WHERE code = ?', [couponCode]));
+      }
+
+      // --- Creare cupon ---
+      const id = generateId();
+      const userId = options.userId.trim();
+      const now = new Date().toISOString();
+      const expiresAt = calculateExpiryDate(validityDays);
+
+      run(
+        `INSERT INTO coupons (
+          id, code, userId, discountType, discountValue, validityDays,
+          minOrderAmount, maxUsageCount, currentUsageCount, description,
+          restaurantId, hotelId, createdBy, status, createdAt, updatedAt, expiresAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'active', ?, ?, ?)`,
+        [
+          id, couponCode, userId, discountType, discountValue, validityDays,
+          options.minOrderAmount || null, maxUsageCount,
+          options.description || '', options.restaurantId || null,
+          options.hotelId || null, options.createdBy || userId,
+          now, now, expiresAt
+        ]
+      );
+
+      const coupon = get('SELECT * FROM coupons WHERE id = ?', [id]);
+      resolve(parseUsedOnOrders(coupon));
+    } catch (err) {
+      reject(err);
     }
-
-    // --- Creare obiect cupon ---
-    const coupon = {
-      id: uuidv4(),
-      code: couponCode,
-      userId: options.userId.trim(),
-      discountType,
-      discountValue,
-      validityDays,
-      minOrderAmount: options.minOrderAmount || null,
-      maxUsageCount,
-      currentUsageCount: 0,
-      description: options.description || '',
-      restaurantId: options.restaurantId || null,
-      hotelId: options.hotelId || null,
-      createdBy: options.createdBy || options.userId.trim(),
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      expiresAt: calculateExpiryDate(validityDays),
-      usedAt: null,
-      usedOnOrders: [],
-      cancelledAt: null,
-      cancelledBy: null,
-    };
-
-    coupons.set(coupon.id, coupon);
-
-    resolve({ ...coupon });
   });
 }
 
@@ -349,16 +414,22 @@ function createCoupon(options = {}) {
  */
 function getCouponById(couponId) {
   return new Promise((resolve, reject) => {
-    if (!couponId || typeof couponId !== 'string') {
-      return reject(new Error('ID-ul cuponului este invalid.'));
-    }
+    try {
+      if (!couponId || typeof couponId !== 'string') {
+        return reject(new Error('ID-ul cuponului este invalid.'));
+      }
 
-    const coupon = coupons.get(couponId);
-    if (!coupon) {
-      return reject(new Error('Cuponul nu a fost găsit.'));
-    }
+      ensureTables();
 
-    resolve({ ...coupon });
+      const coupon = get('SELECT * FROM coupons WHERE id = ?', [couponId]);
+      if (!coupon) {
+        return reject(new Error('Cuponul nu a fost găsit.'));
+      }
+
+      resolve(parseUsedOnOrders(coupon));
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 
@@ -370,18 +441,24 @@ function getCouponById(couponId) {
  */
 function getCouponByCode(code) {
   return new Promise((resolve, reject) => {
-    if (!isValidCouponCode(code)) {
-      return reject(new Error(`Codul cuponului este invalid (minim ${COUPON_CONFIG.MIN_CODE_LENGTH} caractere, maxim ${COUPON_CONFIG.MAX_CODE_LENGTH}).`));
+    try {
+      if (!isValidCouponCode(code)) {
+        return reject(new Error(`Codul cuponului este invalid (minim ${COUPON_CONFIG.MIN_CODE_LENGTH} caractere, maxim ${COUPON_CONFIG.MAX_CODE_LENGTH}).`));
+      }
+
+      ensureTables();
+
+      const normalizedCode = normalizeCouponCode(code);
+      const coupon = get('SELECT * FROM coupons WHERE code = ?', [normalizedCode]);
+
+      if (!coupon) {
+        return reject(new Error('Cuponul nu a fost găsit.'));
+      }
+
+      resolve(parseUsedOnOrders(coupon));
+    } catch (err) {
+      reject(err);
     }
-
-    const normalizedCode = normalizeCouponCode(code);
-    const coupon = findCouponByNormalizedCode(normalizedCode);
-
-    if (!coupon) {
-      return reject(new Error('Cuponul nu a fost găsit.'));
-    }
-
-    resolve({ ...coupon });
   });
 }
 
@@ -406,56 +483,62 @@ function getCouponByCode(code) {
  */
 function validateCoupon(code, userId, options = {}) {
   return new Promise((resolve, reject) => {
-    if (!isValidCouponCode(code)) {
-      return reject(new Error('Codul cuponului este invalid.'));
-    }
-
-    if (!isValidUserId(userId)) {
-      return reject(new Error('ID-ul utilizatorului este invalid.'));
-    }
-
-    const normalizedCode = normalizeCouponCode(code);
-    const coupon = findCouponByNormalizedCode(normalizedCode);
-
-    if (!coupon) {
-      return reject(new Error('Cuponul nu există.'));
-    }
-
-    if (coupon.userId !== userId) {
-      return reject(new Error('Acest cupon nu aparține utilizatorului curent.'));
-    }
-
-    // Verificare expirare
-    if (isCouponExpired(coupon)) {
-      return reject(new Error('Cuponul a expirat.'));
-    }
-
-    // Verificare status used
-    if (isCouponUsed(coupon)) {
-      return reject(new Error('Cuponul a fost deja folosit.'));
-    }
-
-    // Verificare status cancelled
-    if (isCouponCancelled(coupon)) {
-      return reject(new Error('Cuponul a fost anulat.'));
-    }
-
-    // Verificare limită de utilizări
-    if (coupon.maxUsageCount > 0 && coupon.currentUsageCount >= coupon.maxUsageCount) {
-      return reject(new Error('Cuponul și-a epuizat numărul maxim de utilizări.'));
-    }
-
-    // Verificare sumă minimă comandă
-    if (options.orderAmount !== undefined) {
-      if (!isValidPositiveNumber(options.orderAmount)) {
-        return reject(new Error('Suma comenzii trebuie să fie un număr pozitiv.'));
+    try {
+      if (!isValidCouponCode(code)) {
+        return reject(new Error('Codul cuponului este invalid.'));
       }
-      if (coupon.minOrderAmount !== null && options.orderAmount < coupon.minOrderAmount) {
-        return reject(new Error(`Suma minimă a comenzii pentru acest cupon este de ${coupon.minOrderAmount}.`));
-      }
-    }
 
-    resolve({ ...coupon });
+      if (!isValidUserId(userId)) {
+        return reject(new Error('ID-ul utilizatorului este invalid.'));
+      }
+
+      ensureTables();
+
+      const normalizedCode = normalizeCouponCode(code);
+      const coupon = get('SELECT * FROM coupons WHERE code = ?', [normalizedCode]);
+
+      if (!coupon) {
+        return reject(new Error('Cuponul nu există.'));
+      }
+
+      if (coupon.userId !== userId) {
+        return reject(new Error('Acest cupon nu aparține utilizatorului curent.'));
+      }
+
+      // Verificare expirare
+      if (isCouponExpired(coupon)) {
+        return reject(new Error('Cuponul a expirat.'));
+      }
+
+      // Verificare status used
+      if (isCouponUsed(coupon)) {
+        return reject(new Error('Cuponul a fost deja folosit.'));
+      }
+
+      // Verificare status cancelled
+      if (isCouponCancelled(coupon)) {
+        return reject(new Error('Cuponul a fost anulat.'));
+      }
+
+      // Verificare limită de utilizări
+      if (coupon.maxUsageCount > 0 && coupon.currentUsageCount >= coupon.maxUsageCount) {
+        return reject(new Error('Cuponul și-a epuizat numărul maxim de utilizări.'));
+      }
+
+      // Verificare sumă minimă comandă
+      if (options.orderAmount !== undefined) {
+        if (!isValidPositiveNumber(options.orderAmount)) {
+          return reject(new Error('Suma comenzii trebuie să fie un număr pozitiv.'));
+        }
+        if (coupon.minOrderAmount !== null && options.orderAmount < coupon.minOrderAmount) {
+          return reject(new Error(`Suma minimă a comenzii pentru acest cupon este de ${coupon.minOrderAmount}.`));
+        }
+      }
+
+      resolve(parseUsedOnOrders(coupon));
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 
@@ -478,28 +561,48 @@ async function useCoupon(code, userId, orderDetails = {}) {
     throw err;
   }
 
-  // Incrementare contor utilizări
-  coupon.currentUsageCount += 1;
+  return new Promise((resolve, reject) => {
+    try {
+      ensureTables();
 
-  // Dacă s-a atins maxUsageCount, marcăm ca used
-  if (coupon.maxUsageCount > 0 && coupon.currentUsageCount >= coupon.maxUsageCount) {
-    coupon.status = 'used';
-    coupon.usedAt = new Date().toISOString();
-  }
+      const now = new Date().toISOString();
+      const newCount = coupon.currentUsageCount + 1;
 
-  // Adăugăm comanda la istoric
-  if (orderDetails.orderId) {
-    coupon.usedOnOrders.push({
-      orderId: orderDetails.orderId,
-      usedAt: new Date().toISOString(),
-      orderAmount: orderDetails.orderAmount || null,
-    });
-  }
+      // Actualizăm usedOnOrders
+      let usedOnOrders = [];
+      if (typeof coupon.usedOnOrders === 'string') {
+        try { usedOnOrders = JSON.parse(coupon.usedOnOrders); } catch (_) { usedOnOrders = []; }
+      } else if (Array.isArray(coupon.usedOnOrders)) {
+        usedOnOrders = coupon.usedOnOrders;
+      }
 
-  coupon.updatedAt = new Date().toISOString();
-  coupons.set(coupon.id, coupon);
+      if (orderDetails.orderId) {
+        usedOnOrders.push({
+          orderId: orderDetails.orderId,
+          usedAt: now,
+          orderAmount: orderDetails.orderAmount || null,
+        });
+      }
 
-  return { ...coupon };
+      // Dacă s-a atins maxUsageCount, marcăm ca used
+      if (coupon.maxUsageCount > 0 && newCount >= coupon.maxUsageCount) {
+        run(
+          'UPDATE coupons SET currentUsageCount = ?, status = ?, usedAt = ?, usedOnOrders = ?, updatedAt = ? WHERE id = ?',
+          [newCount, 'used', now, JSON.stringify(usedOnOrders), now, coupon.id]
+        );
+      } else {
+        run(
+          'UPDATE coupons SET currentUsageCount = ?, usedOnOrders = ?, updatedAt = ? WHERE id = ?',
+          [newCount, JSON.stringify(usedOnOrders), now, coupon.id]
+        );
+      }
+
+      const updated = get('SELECT * FROM coupons WHERE id = ?', [coupon.id]);
+      resolve(parseUsedOnOrders(updated));
+    } catch (err) {
+      reject(err);
+    }
+  });
 }
 
 /**
@@ -513,43 +616,48 @@ async function useCoupon(code, userId, orderDetails = {}) {
  */
 function cancelCoupon(code, userId, reason = '') {
   return new Promise((resolve, reject) => {
-    if (!isValidCouponCode(code)) {
-      return reject(new Error('Codul cuponului este invalid.'));
+    try {
+      if (!isValidCouponCode(code)) {
+        return reject(new Error('Codul cuponului este invalid.'));
+      }
+
+      if (!isValidUserId(userId)) {
+        return reject(new Error('ID-ul utilizatorului este invalid.'));
+      }
+
+      ensureTables();
+
+      const normalizedCode = normalizeCouponCode(code);
+      const coupon = get('SELECT * FROM coupons WHERE code = ?', [normalizedCode]);
+
+      if (!coupon) {
+        return reject(new Error('Cuponul nu există.'));
+      }
+
+      if (coupon.userId !== userId) {
+        return reject(new Error('Acest cupon nu aparține utilizatorului curent.'));
+      }
+
+      if (coupon.status !== 'active') {
+        return reject(new Error('Doar cupoanele cu status "active" pot fi anulate.'));
+      }
+
+      if (isCouponExpired(coupon)) {
+        return reject(new Error('Cuponul a expirat deja și nu mai poate fi anulat.'));
+      }
+
+      // Anulare cupon
+      const now = new Date().toISOString();
+      run(
+        'UPDATE coupons SET status = ?, cancelledAt = ?, cancelledBy = ?, cancelledReason = ?, updatedAt = ? WHERE id = ?',
+        ['cancelled', now, userId, reason || '', now, coupon.id]
+      );
+
+      const updated = get('SELECT * FROM coupons WHERE id = ?', [coupon.id]);
+      resolve(parseUsedOnOrders(updated));
+    } catch (err) {
+      reject(err);
     }
-
-    if (!isValidUserId(userId)) {
-      return reject(new Error('ID-ul utilizatorului este invalid.'));
-    }
-
-    const normalizedCode = normalizeCouponCode(code);
-    const coupon = findCouponByNormalizedCode(normalizedCode);
-
-    if (!coupon) {
-      return reject(new Error('Cuponul nu există.'));
-    }
-
-    if (coupon.userId !== userId) {
-      return reject(new Error('Acest cupon nu aparține utilizatorului curent.'));
-    }
-
-    if (coupon.status !== 'active') {
-      return reject(new Error('Doar cupoanele cu status "active" pot fi anulate.'));
-    }
-
-    if (isCouponExpired(coupon)) {
-      return reject(new Error('Cuponul a expirat deja și nu mai poate fi anulat.'));
-    }
-
-    // Anulare cupon
-    coupon.status = 'cancelled';
-    coupon.cancelledAt = new Date().toISOString();
-    coupon.cancelledBy = userId;
-    coupon.cancelledReason = reason || '';
-    coupon.updatedAt = new Date().toISOString();
-
-    coupons.set(coupon.id, coupon);
-
-    resolve({ ...coupon });
   });
 }
 
@@ -605,15 +713,23 @@ async function calculateDiscount(couponCode, orderAmount, userId) {
  */
 function getActiveCoupons(userId) {
   return new Promise((resolve, reject) => {
-    if (!isValidUserId(userId)) {
-      return reject(new Error('ID-ul utilizatorului este invalid.'));
+    try {
+      if (!isValidUserId(userId)) {
+        return reject(new Error('ID-ul utilizatorului este invalid.'));
+      }
+
+      ensureTables();
+
+      const now = new Date().toISOString();
+      const rows = all(
+        "SELECT * FROM coupons WHERE userId = ? AND status = 'active' AND expiresAt > ? ORDER BY expiresAt ASC",
+        [userId, now]
+      );
+
+      resolve(rows.map(r => parseUsedOnOrders(r)));
+    } catch (err) {
+      reject(err);
     }
-
-    const userCoupons = Array.from(coupons.values())
-      .filter(c => c.userId === userId && isCouponActive(c))
-      .sort((a, b) => new Date(a.expiresAt) - new Date(b.expiresAt));
-
-    resolve(userCoupons.map(c => ({ ...c })));
   });
 }
 
@@ -629,37 +745,41 @@ function getActiveCoupons(userId) {
  */
 function getAllCouponsForUser(userId, options = {}) {
   return new Promise((resolve, reject) => {
-    if (!isValidUserId(userId)) {
-      return reject(new Error('ID-ul utilizatorului este invalid.'));
-    }
-
-    let userCoupons = Array.from(coupons.values()).filter(c => c.userId === userId);
-
-    // Filtrare după status
-    if (options.status) {
-      if (!isValidCouponStatus(options.status)) {
-        return reject(new Error(`Statusul "${options.status}" nu este valid.`));
+    try {
+      if (!isValidUserId(userId)) {
+        return reject(new Error('ID-ul utilizatorului este invalid.'));
       }
-      userCoupons = userCoupons.filter(c => c.status === options.status);
-    }
 
-    // Sortare
-    const sortBy = options.sortBy || 'createdAt';
-    const sortOrder = options.sortOrder || 'desc';
-    const validSortFields = ['createdAt', 'updatedAt', 'expiresAt', 'discountValue', 'status'];
+      ensureTables();
 
-    if (validSortFields.includes(sortBy)) {
-      userCoupons.sort((a, b) => {
-        const valA = a[sortBy] || '';
-        const valB = b[sortBy] || '';
-        if (sortOrder === 'asc') {
-          return valA > valB ? 1 : -1;
+      let sql = 'SELECT * FROM coupons WHERE userId = ?';
+      const params = [userId];
+
+      // Filtrare după status
+      if (options.status) {
+        if (!isValidCouponStatus(options.status)) {
+          return reject(new Error(`Statusul "${options.status}" nu este valid.`));
         }
-        return valA < valB ? 1 : -1;
-      });
-    }
+        sql += ' AND status = ?';
+        params.push(options.status);
+      }
 
-    resolve(userCoupons.map(c => ({ ...c })));
+      // Sortare
+      const sortBy = options.sortBy || 'createdAt';
+      const sortOrder = (options.sortOrder || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+      const validSortFields = ['createdAt', 'updatedAt', 'expiresAt', 'discountValue', 'status'];
+
+      if (validSortFields.includes(sortBy)) {
+        sql += ` ORDER BY ${sortBy} ${sortOrder}`;
+      } else {
+        sql += ' ORDER BY createdAt DESC';
+      }
+
+      const rows = all(sql, params);
+      resolve(rows.map(r => parseUsedOnOrders(r)));
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 
@@ -671,24 +791,23 @@ function getAllCouponsForUser(userId, options = {}) {
  */
 function cleanupExpiredCoupons(userId) {
   return new Promise((resolve, reject) => {
-    if (!isValidUserId(userId)) {
-      return reject(new Error('ID-ul utilizatorului este invalid.'));
-    }
-
-    let cleanedCount = 0;
-    const userCoupons = Array.from(coupons.values())
-      .filter(c => c.userId === userId && c.status === 'active');
-
-    for (const coupon of userCoupons) {
-      if (isCouponExpired(coupon)) {
-        coupon.status = 'expired';
-        coupon.updatedAt = new Date().toISOString();
-        coupons.set(coupon.id, coupon);
-        cleanedCount++;
+    try {
+      if (!isValidUserId(userId)) {
+        return reject(new Error('ID-ul utilizatorului este invalid.'));
       }
-    }
 
-    resolve(cleanedCount);
+      ensureTables();
+
+      const now = new Date().toISOString();
+      const result = run(
+        "UPDATE coupons SET status = 'expired', updatedAt = ? WHERE userId = ? AND status = 'active' AND expiresAt <= ?",
+        [now, userId, now]
+      );
+
+      resolve(result.changes || 0);
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 
@@ -703,47 +822,59 @@ function cleanupExpiredCoupons(userId) {
  */
 function extendCouponValidity(code, userId, extraDays) {
   return new Promise((resolve, reject) => {
-    if (!isValidCouponCode(code)) {
-      return reject(new Error('Codul cuponului este invalid.'));
+    try {
+      if (!isValidCouponCode(code)) {
+        return reject(new Error('Codul cuponului este invalid.'));
+      }
+
+      if (!isValidUserId(userId)) {
+        return reject(new Error('ID-ul utilizatorului este invalid.'));
+      }
+
+      if (!isValidNonNegativeInt(extraDays) || extraDays < 1) {
+        return reject(new Error('Numărul de zile adiționale trebuie să fie un număr întreg pozitiv.'));
+      }
+
+      if (extraDays > COUPON_CONFIG.MAX_VALIDITY_DAYS) {
+        return reject(new Error(`Nu se pot adăuga mai mult de ${COUPON_CONFIG.MAX_VALIDITY_DAYS} zile.`));
+      }
+
+      ensureTables();
+
+      const normalizedCode = normalizeCouponCode(code);
+      const coupon = get('SELECT * FROM coupons WHERE code = ?', [normalizedCode]);
+
+      if (!coupon) {
+        return reject(new Error('Cuponul nu există.'));
+      }
+
+      if (coupon.userId !== userId) {
+        return reject(new Error('Acest cupon nu aparține utilizatorului curent.'));
+      }
+
+      if (coupon.status !== 'active') {
+        return reject(new Error('Doar cupoanele active pot fi extinse.'));
+      }
+
+      // Extindem expirarea
+      const currentExpiry = new Date(coupon.expiresAt);
+      currentExpiry.setDate(currentExpiry.getDate() + extraDays);
+      const newExpiresAt = currentExpiry.toISOString();
+      const newValidityDays = coupon.validityDays + extraDays;
+      const now = new Date().toISOString();
+
+      run(
+        'UPDATE coupons SET expiresAt = ?, validityDays = ?, updatedAt = ? WHERE id = ?',
+        [newExpiresAt, newValidityDays, now, coupon.id]
+      );
+
+      const updated = get('SELECT * FROM coupons WHERE id = ?', [coupon.id]);
+      const result = parseUsedOnOrders(updated);
+      result.extraDays = extraDays;
+      resolve(result);
+    } catch (err) {
+      reject(err);
     }
-
-    if (!isValidUserId(userId)) {
-      return reject(new Error('ID-ul utilizatorului este invalid.'));
-    }
-
-    if (!isValidNonNegativeInt(extraDays) || extraDays < 1) {
-      return reject(new Error('Numărul de zile adiționale trebuie să fie un număr întreg pozitiv.'));
-    }
-
-    if (extraDays > COUPON_CONFIG.MAX_VALIDITY_DAYS) {
-      return reject(new Error(`Nu se pot adăuga mai mult de ${COUPON_CONFIG.MAX_VALIDITY_DAYS} zile.`));
-    }
-
-    const normalizedCode = normalizeCouponCode(code);
-    const coupon = findCouponByNormalizedCode(normalizedCode);
-
-    if (!coupon) {
-      return reject(new Error('Cuponul nu există.'));
-    }
-
-    if (coupon.userId !== userId) {
-      return reject(new Error('Acest cupon nu aparține utilizatorului curent.'));
-    }
-
-    if (coupon.status !== 'active') {
-      return reject(new Error('Doar cupoanele active pot fi extinse.'));
-    }
-
-    // Extindem expirarea
-    const currentExpiry = new Date(coupon.expiresAt);
-    currentExpiry.setDate(currentExpiry.getDate() + extraDays);
-    coupon.expiresAt = currentExpiry.toISOString();
-    coupon.validityDays += extraDays;
-    coupon.updatedAt = new Date().toISOString();
-
-    coupons.set(coupon.id, coupon);
-
-    resolve({ ...coupon, extraDays });
   });
 }
 
@@ -755,25 +886,33 @@ function extendCouponValidity(code, userId, extraDays) {
  */
 function getCouponStats(userId) {
   return new Promise((resolve, reject) => {
-    if (!isValidUserId(userId)) {
-      return reject(new Error('ID-ul utilizatorului este invalid.'));
+    try {
+      if (!isValidUserId(userId)) {
+        return reject(new Error('ID-ul utilizatorului este invalid.'));
+      }
+
+      ensureTables();
+
+      const now = new Date().toISOString();
+
+      const total = get('SELECT COUNT(*) as count FROM coupons WHERE userId = ?', [userId]);
+      const active = get("SELECT COUNT(*) as count FROM coupons WHERE userId = ? AND status = 'active' AND expiresAt > ?", [userId, now]);
+      const used = get("SELECT COUNT(*) as count FROM coupons WHERE userId = ? AND status = 'used'", [userId]);
+      const expired = get("SELECT COUNT(*) as count FROM coupons WHERE userId = ? AND (status = 'expired' OR (status = 'active' AND expiresAt <= ?))", [userId, now]);
+      const cancelled = get("SELECT COUNT(*) as count FROM coupons WHERE userId = ? AND status = 'cancelled'", [userId]);
+      const discountSum = get("SELECT COALESCE(SUM(discountValue), 0) as total FROM coupons WHERE userId = ? AND status = 'used'", [userId]);
+
+      resolve({
+        total: total.count,
+        active: active.count,
+        used: used.count,
+        expired: expired.count,
+        cancelled: cancelled.count,
+        totalDiscountValue: discountSum.total,
+      });
+    } catch (err) {
+      reject(err);
     }
-
-    const userCoupons = Array.from(coupons.values()).filter(c => c.userId === userId);
-    const now = new Date();
-
-    const stats = {
-      total: userCoupons.length,
-      active: userCoupons.filter(c => c.status === 'active' && new Date(c.expiresAt) >= now).length,
-      used: userCoupons.filter(c => c.status === 'used').length,
-      expired: userCoupons.filter(c => c.status === 'expired' || (c.status === 'active' && new Date(c.expiresAt) < now)).length,
-      cancelled: userCoupons.filter(c => c.status === 'cancelled').length,
-      totalDiscountValue: userCoupons
-        .filter(c => c.status === 'used')
-        .reduce((sum, c) => sum + c.discountValue, 0),
-    };
-
-    resolve(stats);
   });
 }
 
@@ -787,29 +926,35 @@ function getCouponStats(userId) {
  */
 function deleteCoupon(couponId, userId) {
   return new Promise((resolve, reject) => {
-    if (!couponId || typeof couponId !== 'string') {
-      return reject(new Error('ID-ul cuponului este invalid.'));
-    }
+    try {
+      if (!couponId || typeof couponId !== 'string') {
+        return reject(new Error('ID-ul cuponului este invalid.'));
+      }
 
-    if (!isValidUserId(userId)) {
-      return reject(new Error('ID-ul utilizatorului este invalid.'));
-    }
+      if (!isValidUserId(userId)) {
+        return reject(new Error('ID-ul utilizatorului este invalid.'));
+      }
 
-    const coupon = coupons.get(couponId);
-    if (!coupon) {
-      return reject(new Error('Cuponul nu a fost găsit.'));
-    }
+      ensureTables();
 
-    if (coupon.userId !== userId) {
-      return reject(new Error('Acest cupon nu aparține utilizatorului curent.'));
-    }
+      const coupon = get('SELECT * FROM coupons WHERE id = ?', [couponId]);
+      if (!coupon) {
+        return reject(new Error('Cuponul nu a fost găsit.'));
+      }
 
-    if (coupon.status === 'used') {
-      return reject(new Error('Cupoanele deja folosite nu pot fi șterse.'));
-    }
+      if (coupon.userId !== userId) {
+        return reject(new Error('Acest cupon nu aparține utilizatorului curent.'));
+      }
 
-    coupons.delete(couponId);
-    resolve(true);
+      if (coupon.status === 'used') {
+        return reject(new Error('Cupoanele deja folosite nu pot fi șterse.'));
+      }
+
+      run('DELETE FROM coupons WHERE id = ?', [couponId]);
+      resolve(true);
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 
@@ -819,8 +964,14 @@ function deleteCoupon(couponId, userId) {
  */
 function resetAllData() {
   return new Promise((resolve) => {
-    coupons.clear();
-    resolve(true);
+    try {
+      ensureTables();
+      run('DELETE FROM coupons');
+      resolve(true);
+    } catch (err) {
+      // Dacă tabela nu există încă, ignorăm eroarea
+      resolve(true);
+    }
   });
 }
 
@@ -829,8 +980,14 @@ function resetAllData() {
  * @returns {Promise<number>}
  */
 function getTotalCouponCount() {
-  return new Promise((resolve) => {
-    resolve(coupons.size);
+  return new Promise((resolve, reject) => {
+    try {
+      ensureTables();
+      const result = get('SELECT COUNT(*) as count FROM coupons');
+      resolve(result.count);
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 

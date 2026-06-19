@@ -5,51 +5,94 @@
 // Model pentru gestionarea clienților și autentificarea portalului.
 // Suportă: înregistrare clienți, autentificare portal, gestionare profil,
 // istoric comenzi/rezervări, adrese livrare, preferințe.
-// Câmpuri suportate: email, password (hash), nume, telefon, adrese,
-// preferințe, dataÎnregistrării, ultimaAutentificare, status, tenantId,
-// type (pentru diferențierea documentelor în DB-ul per-tenant).
 //
-// Compatibilitate: config/db.js (NeDB + SQLite) și config/tenant.js
-// (izolare multi-tenant cu DB per organizație).
+// Backend: exclusiv SQLite (prin getDb(), run(), get(), all() din config/db).
 // ---------------------------------------------------------------------------
 
 const bcrypt = require('bcryptjs');
-const { v4: uuidv4 } = require('uuid');
+const { getDb, run, get, all } = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
 
 // ---------------------------------------------------------------------------
-// Configurări externe — compatibilitate cu config/db.js și config/tenant.js
+// Statusuri valide pentru un client
 // ---------------------------------------------------------------------------
 
-const { getTenantDb, getTenantConfig, DEFAULT_TENANT_CONFIG } = require('../config/tenant');
-const {
-  users,
-  tenants,
-  restaurants,
-  hotels,
-  reservations,
-  inventoryItems,
-  inventoryTransactions,
-  suppliers,
-  deliveries,
-  dataDir,
-  run,
-  get,
-  all,
-} = require('../config/db');
-
-// ---------------------------------------------------------------------------
-// Constante
-// ---------------------------------------------------------------------------
-
-/** Tipul de document în colecția per-tenant (diferențiere multi-tip). */
-const DOC_TYPE = 'customer';
-
-/** Statusuri valide pentru un client */
 const VALID_CUSTOMER_STATUSES = ['active', 'inactive', 'suspended', 'deleted'];
 
-/** Cache intern pentru instanțele NeDB per-tenant (complementar celui din config/tenant.js). */
-const _customerDbCache = new Map();
+// ---------------------------------------------------------------------------
+// Detecție backend SQLite – întotdeauna true (NeDB a fost eliminat)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returnează `true` – SQLite este singurul backend.
+ * @returns {boolean}
+ */
+function _isSqlAvailable() {
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers de conversie rând SQL → document compatibil
+// ---------------------------------------------------------------------------
+
+/**
+ * Convertește un rând SQL (id INTEGER) într-un obiect cu _id string.
+ * Parsează câmpurile JSON: adrese, preferinte.
+ * @param {Object} row
+ * @returns {Object}
+ */
+function _sqlRowToDoc(row) {
+  if (!row) return row;
+  const doc = {};
+  const keys = Object.keys(row);
+  for (let i = 0; i < keys.length; i++) {
+    doc[keys[i]] = row[keys[i]];
+  }
+  doc._id = String(row.id);
+
+  // Parsează adrese din JSON dacă există
+  if (typeof doc.adrese === 'string') {
+    try {
+      doc.adrese = JSON.parse(doc.adrese);
+    } catch (_e) {
+      doc.adrese = [];
+    }
+  }
+  if (!Array.isArray(doc.adrese)) {
+    doc.adrese = [];
+  }
+
+  // Parsează preferinte din JSON dacă există
+  if (typeof doc.preferinte === 'string') {
+    try {
+      doc.preferinte = JSON.parse(doc.preferinte);
+    } catch (_e) {
+      doc.preferinte = {};
+    }
+  }
+  if (!doc.preferinte || typeof doc.preferinte !== 'object' || Array.isArray(doc.preferinte)) {
+    doc.preferinte = {};
+  }
+
+  return doc;
+}
+
+/**
+ * Elimină parola dintr-un document, returnând o copie sigură.
+ * @param {Object} doc
+ * @returns {Object}
+ */
+function _stripPassword(doc) {
+  if (!doc) return doc;
+  const safe = {};
+  const keys = Object.keys(doc);
+  for (let i = 0; i < keys.length; i++) {
+    if (keys[i] !== 'password') {
+      safe[keys[i]] = doc[keys[i]];
+    }
+  }
+  return safe;
+}
 
 // ---------------------------------------------------------------------------
 // Funcții de validare
@@ -119,69 +162,7 @@ function isValidPositiveNumber(val) {
 }
 
 // ---------------------------------------------------------------------------
-// Funcții de inițializare a colecției per-tenant
-// ---------------------------------------------------------------------------
-
-/**
- * Obține colecția NeDB pentru clienții unui tenant.
- * Folosește baza de date per-tenant din config/tenant.js,
- * adăugând un index pe `email` dacă acesta nu există deja.
- *
- * @param {string} tenantSlug - Identificatorul unic al tenant-ului (slug)
- * @param {boolean} [forceNew=false] - Dacă `true`, ignoră cache-ul local
- * @returns {Datastore} Instanța NeDB pentru acel tenant
- */
-function getCustomersDb(tenantSlug, forceNew = false) {
-  // Validare parametru
-  if (!tenantSlug || typeof tenantSlug !== 'string') {
-    throw new Error('[customerModel] getCustomersDb: tenantSlug trebuie să fie un string nevid.');
-  }
-
-  // Cache local (complementar cache-ului din config/tenant.js)
-  const cacheKey = `customers:${tenantSlug}`;
-  if (!forceNew && _customerDbCache.has(cacheKey)) {
-    return _customerDbCache.get(cacheKey);
-  }
-
-  // Obține instanța per-tenant (delegare către config/tenant.js)
-  const db = getTenantDb(tenantSlug, forceNew);
-
-  // Asigură indexarea pe `email` (unicitate în cadrul tenant-ului + tip document)
-  db.ensureIndex({ fieldName: 'email', sparse: true }, (err) => {
-    if (err) {
-      console.error(`[customerModel] Eroare index email pentru ${tenantSlug}:`, err.message);
-    }
-  });
-
-  // Asigură indexarea pe `type` (diferențiere documente per-tip în DB-ul multi-colecție)
-  db.ensureIndex({ fieldName: 'type', sparse: true }, (err) => {
-    if (err) {
-      console.error(`[customerModel] Eroare index type pentru ${tenantSlug}:`, err.message);
-    }
-  });
-
-  // Asigură index compus pe tenantId + status pentru căutări rapide
-  db.ensureIndex({ fieldName: 'tenantId_status', fieldName: ['tenantId', 'status'] }, (err) => {
-    if (err) {
-      console.error(`[customerModel] Eroare index tenantId+status pentru ${tenantSlug}:`, err.message);
-    }
-  });
-
-  _customerDbCache.set(cacheKey, db);
-  return db;
-}
-
-/**
- * Invalidare cache pentru un tenant (util la ștergerea tenant-ului sau reîncărcare).
- * @param {string} tenantSlug - Identificatorul unic al tenant-ului
- */
-function invalidateCustomerDbCache(tenantSlug) {
-  const cacheKey = `customers:${tenantSlug}`;
-  _customerDbCache.delete(cacheKey);
-}
-
-// ---------------------------------------------------------------------------
-// Operații CRUD – Customers
+// Operații CRUD – Customers (SQLite)
 // ---------------------------------------------------------------------------
 
 /**
@@ -196,7 +177,7 @@ function invalidateCustomerDbCache(tenantSlug) {
  * @param {Array} [customerData.adrese=[]] - Lista de adrese
  * @param {Object} [customerData.preferinte={}] - Preferințe client
  * @param {string} [customerData.status='active'] - Statusul clientului
- * @param {string} customerData.tenantId - ID-ul tenant-ului (obligatoriu) – compatibil și cu tenantSlug
+ * @param {string} customerData.tenantId - ID-ul tenant-ului (obligatoriu)
  * @param {string} [customerData.restaurantId] - ID-ul restaurantului preferat
  * @param {string} [customerData.hotelId] - ID-ul hotelului preferat
  * @returns {Promise<Object>} Documentul clientului creat (fără password hash)
@@ -224,7 +205,7 @@ function createCustomer(customerData) {
       hotelId,
     } = customerData;
 
-    // Validare tenantId (slug)
+    // Validare tenantId
     if (!tenantId) {
       return reject(new AppError(
         'ID-ul tenant-ului este obligatoriu.',
@@ -332,80 +313,85 @@ function createCustomer(customerData) {
     }
 
     // -----------------------------------------------------------------------
-    // Verificare dacă email-ul există deja în acest tenant
+    // Hash parolă
     // -----------------------------------------------------------------------
-    const customersDb = getCustomersDb(tenantId);
-    customersDb.findOne({ email: email.toLowerCase().trim(), tenantId, type: DOC_TYPE }, (findErr, existingCustomer) => {
-      if (findErr) {
-        return reject(new AppError(
-          `Eroare la verificarea email-ului: ${findErr.message}`,
-          500,
-          'DB_QUERY_ERROR'
-        ));
+    bcrypt.hash(password, 10, (hashErr, hashedPassword) => {
+      if (hashErr) {
+        return reject(new AppError('Eroare internă la hash-uirea parolei.', 500, 'HASH_ERROR'));
       }
 
-      if (existingCustomer) {
-        return reject(new AppError(
-          'Există deja un client cu această adresă de email în acest tenant.',
-          409,
-          'DUPLICATE_EMAIL'
-        ));
-      }
+      const now = new Date().toISOString();
+      const normalizedEmail = email.toLowerCase().trim();
+      const finalNume = nume.trim();
+      const adreseJson = JSON.stringify(finalAdrese);
+      const preferinteJson = JSON.stringify(finalPreferinte);
 
-      // -----------------------------------------------------------------------
-      // Hash parolă
-      // -----------------------------------------------------------------------
-      bcrypt.hash(password, 10, (hashErr, hashedPassword) => {
-        if (hashErr) {
-          return reject(new AppError('Eroare internă la hash-uirea parolei.', 500, 'HASH_ERROR'));
+      // -------------------------------------------------------------------
+      // SQLite
+      // -------------------------------------------------------------------
+      try {
+        // Verificare duplicat email în același tenant
+        const existing = get(
+          'SELECT id FROM customers WHERE email = ? AND tenantId = ?',
+          [normalizedEmail, tenantId]
+        );
+        if (existing) {
+          return reject(new AppError(
+            'Există deja un client cu această adresă de email în acest tenant.',
+            409,
+            'DUPLICATE_EMAIL'
+          ));
         }
 
-        // -----------------------------------------------------------------------
-        // Creare document client
-        // -----------------------------------------------------------------------
-        const now = new Date().toISOString();
+        const result = run(
+          `INSERT INTO customers
+           (email, password, nume, telefon, adrese, preferinte, status, tenantId,
+            restaurantId, hotelId, ultimaAutentificare, dataInregistrarii, createdAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+          [
+            normalizedEmail,
+            hashedPassword,
+            finalNume,
+            finalTelefon,
+            adreseJson,
+            preferinteJson,
+            finalStatus,
+            tenantId,
+            restaurantId || null,
+            hotelId || null,
+            now,
+            now,
+            now,
+          ]
+        );
 
-        const customerDoc = {
-          type: DOC_TYPE,
-          email: email.toLowerCase().trim(),
-          password: hashedPassword,
-          nume: nume.trim(),
-          telefon: finalTelefon,
-          adrese: finalAdrese,
-          preferinte: finalPreferinte,
-          status: finalStatus,
-          tenantId,
-          restaurantId: restaurantId || null,
-          hotelId: hotelId || null,
-          ultimaAutentificare: null,
-          dataInregistrarii: now,
-          createdAt: now,
-          updatedAt: now,
-        };
-
-        customersDb.insert(customerDoc, (insertErr, newCustomer) => {
-          if (insertErr) {
-            return reject(new AppError(
-              `Eroare la crearea clientului: ${insertErr.message}`,
-              500,
-              'DB_INSERT_ERROR'
-            ));
-          }
-
-          // Returnăm clientul fără parolă
-          const safeCustomer = { ...newCustomer };
-          delete safeCustomer.password;
-          resolve(safeCustomer);
-        });
-      });
+        const newId = result.lastInsertRowid;
+        const newRow = get('SELECT * FROM customers WHERE id = ?', [newId]);
+        const doc = _sqlRowToDoc(newRow);
+        return resolve(_stripPassword(doc));
+      } catch (sqlErr) {
+        // Duplicat email prins de constraint-ul UNIQUE
+        if (sqlErr.message && sqlErr.message.indexOf('UNIQUE') !== -1) {
+          return reject(new AppError(
+            'Există deja un client cu această adresă de email în acest tenant.',
+            409,
+            'DUPLICATE_EMAIL'
+          ));
+        }
+        return reject(new AppError(
+          'Eroare la crearea clientului (SQL): ' + sqlErr.message,
+          500,
+          'DB_INSERT_ERROR'
+        ));
+      }
     });
   });
 }
 
 /**
  * Găsește un client după ID.
- * @param {string} id - ID-ul NeDB
- * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @param {string} id - ID-ul clientului
+ * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Object|null>} Documentul clientului (cu tot cu password hash) sau null
  */
 function findCustomerById(id, tenantId) {
@@ -418,24 +404,32 @@ function findCustomerById(id, tenantId) {
       return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
     }
 
-    const customersDb = getCustomersDb(tenantId);
-    customersDb.findOne({ _id: id, tenantId, type: DOC_TYPE }, (err, customer) => {
-      if (err) {
-        return reject(new AppError(
-          `Eroare la căutarea clientului: ${err.message}`,
-          500,
-          'DB_QUERY_ERROR'
-        ));
+    try {
+      const numericId = parseInt(id, 10);
+      let row;
+      if (isNaN(numericId)) {
+        row = get(
+          'SELECT * FROM customers WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
+          [String(id), tenantId]
+        );
+      } else {
+        row = get('SELECT * FROM customers WHERE id = ? AND tenantId = ?', [numericId, tenantId]);
       }
-      resolve(customer || null);
-    });
+      return resolve(row ? _sqlRowToDoc(row) : null);
+    } catch (sqlErr) {
+      return reject(new AppError(
+        'Eroare la căutarea clientului (SQL): ' + sqlErr.message,
+        500,
+        'DB_QUERY_ERROR'
+      ));
+    }
   });
 }
 
 /**
  * Găsește un client după adresa de email (în cadrul unui tenant).
  * @param {string} email - Adresa de email
- * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Object|null>} Documentul clientului (cu tot cu password hash) sau null
  */
 function findCustomerByEmail(email, tenantId) {
@@ -448,23 +442,26 @@ function findCustomerByEmail(email, tenantId) {
       return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
     }
 
-    const customersDb = getCustomersDb(tenantId);
-    customersDb.findOne({ email: email.toLowerCase().trim(), tenantId, type: DOC_TYPE }, (err, customer) => {
-      if (err) {
-        return reject(new AppError(
-          `Eroare la căutarea clientului după email: ${err.message}`,
-          500,
-          'DB_QUERY_ERROR'
-        ));
-      }
-      resolve(customer || null);
-    });
+    try {
+      const normalizedEmail = email.toLowerCase().trim();
+      const row = get(
+        'SELECT * FROM customers WHERE email = ? AND tenantId = ?',
+        [normalizedEmail, tenantId]
+      );
+      return resolve(row ? _sqlRowToDoc(row) : null);
+    } catch (sqlErr) {
+      return reject(new AppError(
+        'Eroare la căutarea clientului după email (SQL): ' + sqlErr.message,
+        500,
+        'DB_QUERY_ERROR'
+      ));
+    }
   });
 }
 
 /**
  * Găsește toți clienții dintr-un tenant.
- * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @param {string} tenantId - ID-ul tenant-ului
  * @param {Object} [options={}] - Opțiuni de căutare (sort, limit, skip, status, fields)
  * @returns {Promise<Array>} Lista de clienți (fără password hash)
  */
@@ -473,8 +470,6 @@ function findCustomersByTenant(tenantId, options = {}) {
     if (!tenantId) {
       return reject(new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID'));
     }
-
-    const filter = { tenantId, type: DOC_TYPE };
 
     // Filtrare opțională după status
     if (options.status) {
@@ -485,59 +480,68 @@ function findCustomersByTenant(tenantId, options = {}) {
           'INVALID_CUSTOMER_STATUS'
         ));
       }
-      filter.status = options.status;
     }
 
-    const customersDb = getCustomersDb(tenantId);
-    let query = customersDb.find(filter);
-
-    // Proiecție câmpuri (dacă se specifică)
-    if (options.fields && typeof options.fields === 'object') {
-      query = query.projection(options.fields);
-    }
-
-    // Sortare
-    if (options.sort) {
-      query = query.sort(options.sort);
-    } else {
-      query = query.sort({ dataInregistrarii: -1 });
-    }
-
-    // Limit
-    if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
-      query = query.limit(options.limit);
-    }
-
-    // Skip
-    if (options.skip && Number.isInteger(options.skip) && options.skip > 0) {
-      query = query.skip(options.skip);
-    }
-
-    query.exec((err, customerList) => {
-      if (err) {
-        return reject(new AppError(
-          `Eroare la căutarea clienților: ${err.message}`,
-          500,
-          'DB_QUERY_ERROR'
-        ));
+    try {
+      // Proiecție câmpuri
+      let selectClause = '*';
+      if (options.fields && typeof options.fields === 'object') {
+        const fieldKeys = Object.keys(options.fields);
+        if (fieldKeys.length > 0) {
+          selectClause = fieldKeys.join(', ');
+        }
       }
 
-      // Eliminăm parolele din rezultate
-      const safeCustomers = (customerList || []).map((c) => {
-        const safe = { ...c };
-        delete safe.password;
-        return safe;
-      });
+      let sql = `SELECT ${selectClause} FROM customers WHERE tenantId = ?`;
+      const params = [tenantId];
 
-      resolve(safeCustomers);
-    });
+      if (options.status) {
+        sql += ' AND status = ?';
+        params.push(options.status);
+      }
+
+      // Sortare
+      if (options.sort && typeof options.sort === 'object') {
+        const sortKeys = Object.keys(options.sort);
+        if (sortKeys.length > 0) {
+          const sortClauses = sortKeys.map((k) => `${k} ${options.sort[k] === -1 ? 'DESC' : 'ASC'}`);
+          sql += ' ORDER BY ' + sortClauses.join(', ');
+        } else {
+          sql += ' ORDER BY dataInregistrarii DESC';
+        }
+      } else {
+        sql += ' ORDER BY dataInregistrarii DESC';
+      }
+
+      // Limit
+      if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
+        sql += ' LIMIT ?';
+        params.push(options.limit);
+      }
+
+      // Offset (skip)
+      if (options.skip && Number.isInteger(options.skip) && options.skip > 0) {
+        sql += ' OFFSET ?';
+        params.push(options.skip);
+      }
+
+      const rows = all(sql, params);
+      const safeCustomers = rows.map((r) => _stripPassword(_sqlRowToDoc(r)));
+      return resolve(safeCustomers);
+    } catch (sqlErr) {
+      return reject(new AppError(
+        'Eroare la căutarea clienților (SQL): ' + sqlErr.message,
+        500,
+        'DB_QUERY_ERROR'
+      ));
+    }
   });
 }
 
 /**
  * Caută clienți după nume (căutare parțială, case-insensitive).
  * @param {string} searchTerm - Termenul de căutare
- * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Array>} Lista de clienți găsiți (fără password hash)
  */
 function searchCustomersByName(searchTerm, tenantId) {
@@ -554,35 +558,27 @@ function searchCustomersByName(searchTerm, tenantId) {
       return reject(new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID'));
     }
 
-    const regex = new RegExp(searchTerm.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-
-    const customersDb = getCustomersDb(tenantId);
-    customersDb.find({ tenantId, type: DOC_TYPE, nume: regex })
-      .sort({ nume: 1 })
-      .exec((err, customerList) => {
-        if (err) {
-          return reject(new AppError(
-            `Eroare la căutarea clienților: ${err.message}`,
-            500,
-            'DB_QUERY_ERROR'
-          ));
-        }
-
-        const safeCustomers = (customerList || []).map((c) => {
-          const safe = { ...c };
-          delete safe.password;
-          return safe;
-        });
-
-        resolve(safeCustomers);
-      });
+    try {
+      const rows = all(
+        'SELECT * FROM customers WHERE tenantId = ? AND nume LIKE ? ORDER BY nume ASC',
+        [tenantId, `%${searchTerm.trim()}%`]
+      );
+      const safeCustomers = rows.map((r) => _stripPassword(_sqlRowToDoc(r)));
+      return resolve(safeCustomers);
+    } catch (sqlErr) {
+      return reject(new AppError(
+        'Eroare la căutarea clienților (SQL): ' + sqlErr.message,
+        500,
+        'DB_QUERY_ERROR'
+      ));
+    }
   });
 }
 
 /**
  * Caută clienți după număr de telefon.
  * @param {string} telefon - Numărul de telefon căutat
- * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Array>} Lista de clienți găsiți (fără password hash)
  */
 function searchCustomersByPhone(telefon, tenantId) {
@@ -599,32 +595,26 @@ function searchCustomersByPhone(telefon, tenantId) {
       return reject(new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID'));
     }
 
-    const customersDb = getCustomersDb(tenantId);
-    customersDb.find({ tenantId, type: DOC_TYPE, telefon })
-      .sort({ nume: 1 })
-      .exec((err, customerList) => {
-        if (err) {
-          return reject(new AppError(
-            `Eroare la căutarea clienților după telefon: ${err.message}`,
-            500,
-            'DB_QUERY_ERROR'
-          ));
-        }
-
-        const safeCustomers = (customerList || []).map((c) => {
-          const safe = { ...c };
-          delete safe.password;
-          return safe;
-        });
-
-        resolve(safeCustomers);
-      });
+    try {
+      const rows = all(
+        'SELECT * FROM customers WHERE tenantId = ? AND telefon = ? ORDER BY nume ASC',
+        [tenantId, telefon]
+      );
+      const safeCustomers = rows.map((r) => _stripPassword(_sqlRowToDoc(r)));
+      return resolve(safeCustomers);
+    } catch (sqlErr) {
+      return reject(new AppError(
+        'Eroare la căutarea clienților după telefon (SQL): ' + sqlErr.message,
+        500,
+        'DB_QUERY_ERROR'
+      ));
+    }
   });
 }
 
 /**
  * Numără clienții dintr-un tenant (opțional filtrat după status).
- * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @param {string} tenantId - ID-ul tenant-ului
  * @param {string} [status] - Status opțional pentru filtrare
  * @returns {Promise<number>} Numărul de clienți
  */
@@ -634,7 +624,6 @@ function countCustomers(tenantId, status) {
       return reject(new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID'));
     }
 
-    const filter = { tenantId, type: DOC_TYPE };
     if (status) {
       if (!isValidCustomerStatus(status)) {
         return reject(new AppError(
@@ -643,20 +632,28 @@ function countCustomers(tenantId, status) {
           'INVALID_CUSTOMER_STATUS'
         ));
       }
-      filter.status = status;
     }
 
-    const customersDb = getCustomersDb(tenantId);
-    customersDb.count(filter, (err, count) => {
-      if (err) {
-        return reject(new AppError(
-          `Eroare la numărarea clienților: ${err.message}`,
-          500,
-          'DB_QUERY_ERROR'
-        ));
+    try {
+      let sql;
+      const params = [tenantId];
+
+      if (status) {
+        sql = 'SELECT COUNT(*) AS cnt FROM customers WHERE tenantId = ? AND status = ?';
+        params.push(status);
+      } else {
+        sql = 'SELECT COUNT(*) AS cnt FROM customers WHERE tenantId = ?';
       }
-      resolve(count);
-    });
+
+      const row = get(sql, params);
+      return resolve(row ? row.cnt : 0);
+    } catch (sqlErr) {
+      return reject(new AppError(
+        'Eroare la numărarea clienților (SQL): ' + sqlErr.message,
+        500,
+        'DB_COUNT_ERROR'
+      ));
+    }
   });
 }
 
@@ -689,7 +686,7 @@ function comparePassword(plainPassword, hashedPassword) {
  * Autentifică un client pe portal (verifică email + parolă).
  * @param {string} email - Adresa de email
  * @param {string} password - Parola în clar
- * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Object>} Clientul autentificat (fără password hash)
  * @throws {AppError} Dacă autentificarea eșuează
  */
@@ -711,23 +708,23 @@ function authenticateCustomer(email, password, tenantId) {
       return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
     }
 
-    const customersDb = getCustomersDb(tenantId);
-    customersDb.findOne({ email: email.toLowerCase().trim(), tenantId, type: DOC_TYPE }, (err, customer) => {
-      if (err) {
-        return reject(new AppError(
-          `Eroare la căutarea clientului: ${err.message}`,
-          500,
-          'DB_QUERY_ERROR'
-        ));
-      }
+    const normalizedEmail = email.toLowerCase().trim();
 
-      if (!customer) {
+    try {
+      const row = get(
+        'SELECT * FROM customers WHERE email = ? AND tenantId = ?',
+        [normalizedEmail, tenantId]
+      );
+
+      if (!row) {
         return reject(new AppError(
           'Email sau parolă incorectă.',
           401,
           'INVALID_CREDENTIALS'
         ));
       }
+
+      const customer = _sqlRowToDoc(row);
 
       // Verificare status
       if (customer.status === 'suspended') {
@@ -762,25 +759,36 @@ function authenticateCustomer(email, password, tenantId) {
 
         // Actualizăm ultima autentificare
         const now = new Date().toISOString();
-        customersDb.update(
-          { _id: customer._id, type: DOC_TYPE },
-          { $set: { ultimaAutentificare: now, updatedAt: now } },
-          {},
-          (updateErr) => {
-            if (updateErr) {
-              // Non-fatal – log doar
-              console.error('[customerModel] Eroare la actualizarea ultimei autentificări:', updateErr.message);
-            }
+        try {
+          const numericId = parseInt(customer._id, 10);
+          if (!isNaN(numericId)) {
+            run(
+              'UPDATE customers SET ultimaAutentificare = ?, updatedAt = ? WHERE id = ?',
+              [now, now, numericId]
+            );
+          } else {
+            run(
+              'UPDATE customers SET ultimaAutentificare = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ?',
+              [now, now, String(customer._id)]
+            );
           }
-        );
+        } catch (updateErr) {
+          // Non-fatal – log doar
+          console.error('[customerModel] Eroare la actualizarea ultimei autentificări:', updateErr.message);
+        }
 
         // Returnăm clientul fără parolă
-        const safeCustomer = { ...customer };
-        delete safeCustomer.password;
+        const safeCustomer = _stripPassword(customer);
         safeCustomer.ultimaAutentificare = now;
-        resolve(safeCustomer);
+        return resolve(safeCustomer);
       });
-    });
+    } catch (sqlErr) {
+      return reject(new AppError(
+        'Eroare la căutarea clientului (SQL): ' + sqlErr.message,
+        500,
+        'DB_QUERY_ERROR'
+      ));
+    }
   });
 }
 
@@ -792,7 +800,7 @@ function authenticateCustomer(email, password, tenantId) {
  * Actualizează profilul unui client (câmpuri permise: nume, telefon, adrese, preferințe).
  * @param {string} id - ID-ul clientului
  * @param {Object} updateData - Câmpurile de actualizat
- * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Object>} Clientul actualizat (fără password hash)
  * @throws {AppError} Dacă validarea eșuează
  */
@@ -873,7 +881,7 @@ function updateCustomerProfile(id, updateData, tenantId) {
             if (adreseErrors.length > 0) {
               errors.push(adreseErrors.join(' '));
             } else {
-              setFields.adrese = value;
+              setFields.adrese = JSON.stringify(value);
             }
           }
           break;
@@ -882,7 +890,7 @@ function updateCustomerProfile(id, updateData, tenantId) {
           if (!value || typeof value !== 'object' || Array.isArray(value)) {
             errors.push('Preferințele trebuie să fie un obiect valid.');
           } else {
-            setFields.preferinte = value;
+            setFields.preferinte = JSON.stringify(value);
           }
           break;
 
@@ -911,33 +919,53 @@ function updateCustomerProfile(id, updateData, tenantId) {
     }
 
     // -----------------------------------------------------------------------
-    // Actualizare document
+    // Actualizare SQL
     // -----------------------------------------------------------------------
-    setFields.updatedAt = new Date().toISOString();
+    const now = new Date().toISOString();
 
-    const customersDb = getCustomersDb(tenantId);
-    customersDb.update(
-      { _id: id, tenantId, type: DOC_TYPE },
-      { $set: setFields },
-      { returnUpdatedDocs: true },
-      (updateErr, numUpdated, updatedCustomer) => {
-        if (updateErr) {
-          return reject(new AppError(
-            `Eroare la actualizarea profilului clientului: ${updateErr.message}`,
-            500,
-            'DB_UPDATE_ERROR'
-          ));
-        }
+    try {
+      const numericId = parseInt(id, 10);
 
-        if (numUpdated === 0) {
-          return reject(new AppError('Clientul nu a fost găsit.', 404, 'CUSTOMER_NOT_FOUND'));
-        }
+      // Construim interogarea SQL dinamic
+      const setClauses = Object.keys(setFields).map((k) => `${k} = ?`);
+      setClauses.push('updatedAt = ?');
+      const allParams = Object.values(setFields);
+      allParams.push(now);
 
-        const safeCustomer = { ...updatedCustomer };
-        delete safeCustomer.password;
-        resolve(safeCustomer);
+      let result;
+      if (!isNaN(numericId)) {
+        allParams.push(numericId, tenantId);
+        result = run(
+          `UPDATE customers SET ${setClauses.join(', ')} WHERE id = ? AND tenantId = ?`,
+          allParams
+        );
+      } else {
+        allParams.push(String(id), tenantId);
+        result = run(
+          `UPDATE customers SET ${setClauses.join(', ')} WHERE CAST(id AS TEXT) = ? AND tenantId = ?`,
+          allParams
+        );
       }
-    );
+
+      if (result.changes === 0) {
+        return reject(new AppError('Clientul nu a fost găsit.', 404, 'CUSTOMER_NOT_FOUND'));
+      }
+
+      // Returnăm documentul actualizat
+      let updatedRow;
+      if (!isNaN(numericId)) {
+        updatedRow = get('SELECT * FROM customers WHERE id = ? AND tenantId = ?', [numericId, tenantId]);
+      } else {
+        updatedRow = get('SELECT * FROM customers WHERE CAST(id AS TEXT) = ? AND tenantId = ?', [String(id), tenantId]);
+      }
+      return resolve(_stripPassword(_sqlRowToDoc(updatedRow)));
+    } catch (sqlErr) {
+      return reject(new AppError(
+        'Eroare la actualizarea profilului clientului (SQL): ' + sqlErr.message,
+        500,
+        'DB_UPDATE_ERROR'
+      ));
+    }
   });
 }
 
@@ -946,7 +974,7 @@ function updateCustomerProfile(id, updateData, tenantId) {
  * @param {string} id - ID-ul clientului
  * @param {string} currentPassword - Parola curentă (pentru verificare)
  * @param {string} newPassword - Noua parolă
- * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Object>} Clientul actualizat (fără password hash)
  * @throws {AppError} Dacă validarea eșuează
  */
@@ -972,19 +1000,20 @@ function updateCustomerPassword(id, currentPassword, newPassword, tenantId) {
       ));
     }
 
-    const customersDb = getCustomersDb(tenantId);
-    customersDb.findOne({ _id: id, tenantId, type: DOC_TYPE }, (findErr, customer) => {
-      if (findErr) {
-        return reject(new AppError(
-          `Eroare la căutarea clientului: ${findErr.message}`,
-          500,
-          'DB_QUERY_ERROR'
-        ));
+    try {
+      const numericId = parseInt(id, 10);
+      let customerRow;
+      if (!isNaN(numericId)) {
+        customerRow = get('SELECT * FROM customers WHERE id = ? AND tenantId = ?', [numericId, tenantId]);
+      } else {
+        customerRow = get('SELECT * FROM customers WHERE CAST(id AS TEXT) = ? AND tenantId = ?', [String(id), tenantId]);
       }
 
-      if (!customer) {
+      if (!customerRow) {
         return reject(new AppError('Clientul nu a fost găsit.', 404, 'CUSTOMER_NOT_FOUND'));
       }
+
+      const customer = _sqlRowToDoc(customerRow);
 
       // Verificare parolă curentă
       bcrypt.compare(currentPassword, customer.password, (compareErr, isMatch) => {
@@ -1002,36 +1031,48 @@ function updateCustomerPassword(id, currentPassword, newPassword, tenantId) {
             return reject(new AppError('Eroare internă la hash-uirea parolei.', 500, 'HASH_ERROR'));
           }
 
-          customersDb.update(
-            { _id: id, type: DOC_TYPE },
-            {
-              $set: {
-                password: hashedPassword,
-                updatedAt: new Date().toISOString(),
-              },
-            },
-            { returnUpdatedDocs: true },
-            (updateErr, numUpdated, updatedCustomer) => {
-              if (updateErr) {
-                return reject(new AppError(
-                  `Eroare la actualizarea parolei: ${updateErr.message}`,
-                  500,
-                  'DB_UPDATE_ERROR'
-                ));
-              }
-
-              if (numUpdated === 0) {
-                return reject(new AppError('Clientul nu a fost găsit.', 404, 'CUSTOMER_NOT_FOUND'));
-              }
-
-              const safeCustomer = { ...updatedCustomer };
-              delete safeCustomer.password;
-              resolve(safeCustomer);
+          try {
+            const now = new Date().toISOString();
+            let result;
+            if (!isNaN(numericId)) {
+              result = run(
+                'UPDATE customers SET password = ?, updatedAt = ? WHERE id = ? AND tenantId = ?',
+                [hashedPassword, now, numericId, tenantId]
+              );
+            } else {
+              result = run(
+                'UPDATE customers SET password = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
+                [hashedPassword, now, String(id), tenantId]
+              );
             }
-          );
+
+            if (result.changes === 0) {
+              return reject(new AppError('Clientul nu a fost găsit.', 404, 'CUSTOMER_NOT_FOUND'));
+            }
+
+            let updatedRow;
+            if (!isNaN(numericId)) {
+              updatedRow = get('SELECT * FROM customers WHERE id = ? AND tenantId = ?', [numericId, tenantId]);
+            } else {
+              updatedRow = get('SELECT * FROM customers WHERE CAST(id AS TEXT) = ? AND tenantId = ?', [String(id), tenantId]);
+            }
+            return resolve(_stripPassword(_sqlRowToDoc(updatedRow)));
+          } catch (sqlErr) {
+            return reject(new AppError(
+              'Eroare la actualizarea parolei (SQL): ' + sqlErr.message,
+              500,
+              'DB_UPDATE_ERROR'
+            ));
+          }
         });
       });
-    });
+    } catch (sqlErr) {
+      return reject(new AppError(
+        'Eroare la căutarea clientului (SQL): ' + sqlErr.message,
+        500,
+        'DB_QUERY_ERROR'
+      ));
+    }
   });
 }
 
@@ -1039,7 +1080,7 @@ function updateCustomerPassword(id, currentPassword, newPassword, tenantId) {
  * Resetează parola unui client (fără verificare parolă curentă – folosit de admin).
  * @param {string} id - ID-ul clientului
  * @param {string} newPassword - Noua parolă
- * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Object>} Clientul actualizat (fără password hash)
  * @throws {AppError} Dacă validarea eșuează
  */
@@ -1066,34 +1107,40 @@ function resetCustomerPassword(id, newPassword, tenantId) {
         return reject(new AppError('Eroare internă la hash-uirea parolei.', 500, 'HASH_ERROR'));
       }
 
-      const customersDb = getCustomersDb(tenantId);
-      customersDb.update(
-        { _id: id, tenantId, type: DOC_TYPE },
-        {
-          $set: {
-            password: hashedPassword,
-            updatedAt: new Date().toISOString(),
-          },
-        },
-        { returnUpdatedDocs: true },
-        (updateErr, numUpdated, updatedCustomer) => {
-          if (updateErr) {
-            return reject(new AppError(
-              `Eroare la resetarea parolei: ${updateErr.message}`,
-              500,
-              'DB_UPDATE_ERROR'
-            ));
-          }
-
-          if (numUpdated === 0) {
-            return reject(new AppError('Clientul nu a fost găsit.', 404, 'CUSTOMER_NOT_FOUND'));
-          }
-
-          const safeCustomer = { ...updatedCustomer };
-          delete safeCustomer.password;
-          resolve(safeCustomer);
+      try {
+        const numericId = parseInt(id, 10);
+        const now = new Date().toISOString();
+        let result;
+        if (!isNaN(numericId)) {
+          result = run(
+            'UPDATE customers SET password = ?, updatedAt = ? WHERE id = ? AND tenantId = ?',
+            [hashedPassword, now, numericId, tenantId]
+          );
+        } else {
+          result = run(
+            'UPDATE customers SET password = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
+            [hashedPassword, now, String(id), tenantId]
+          );
         }
-      );
+
+        if (result.changes === 0) {
+          return reject(new AppError('Clientul nu a fost găsit.', 404, 'CUSTOMER_NOT_FOUND'));
+        }
+
+        let updatedRow;
+        if (!isNaN(numericId)) {
+          updatedRow = get('SELECT * FROM customers WHERE id = ? AND tenantId = ?', [numericId, tenantId]);
+        } else {
+          updatedRow = get('SELECT * FROM customers WHERE CAST(id AS TEXT) = ? AND tenantId = ?', [String(id), tenantId]);
+        }
+        return resolve(_stripPassword(_sqlRowToDoc(updatedRow)));
+      } catch (sqlErr) {
+        return reject(new AppError(
+          'Eroare la resetarea parolei (SQL): ' + sqlErr.message,
+          500,
+          'DB_UPDATE_ERROR'
+        ));
+      }
     });
   });
 }
@@ -1102,7 +1149,7 @@ function resetCustomerPassword(id, newPassword, tenantId) {
  * Actualizează statusul unui client (activ/inactiv/suspendat/șters).
  * @param {string} id - ID-ul clientului
  * @param {string} newStatus - Noul status
- * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Object>} Clientul actualizat (fără password hash)
  * @throws {AppError} Dacă validarea eșuează
  */
@@ -1124,43 +1171,47 @@ function updateCustomerStatus(id, newStatus, tenantId) {
       ));
     }
 
-    const customersDb = getCustomersDb(tenantId);
-    const now = new Date().toISOString();
-
-    customersDb.update(
-      { _id: id, tenantId, type: DOC_TYPE },
-      {
-        $set: {
-          status: newStatus,
-          updatedAt: now,
-        },
-      },
-      { returnUpdatedDocs: true },
-      (updateErr, numUpdated, updatedCustomer) => {
-        if (updateErr) {
-          return reject(new AppError(
-            `Eroare la actualizarea statusului clientului: ${updateErr.message}`,
-            500,
-            'DB_UPDATE_ERROR'
-          ));
-        }
-
-        if (numUpdated === 0) {
-          return reject(new AppError('Clientul nu a fost găsit.', 404, 'CUSTOMER_NOT_FOUND'));
-        }
-
-        const safeCustomer = { ...updatedCustomer };
-        delete safeCustomer.password;
-        resolve(safeCustomer);
+    try {
+      const numericId = parseInt(id, 10);
+      const now = new Date().toISOString();
+      let result;
+      if (!isNaN(numericId)) {
+        result = run(
+          'UPDATE customers SET status = ?, updatedAt = ? WHERE id = ? AND tenantId = ?',
+          [newStatus, now, numericId, tenantId]
+        );
+      } else {
+        result = run(
+          'UPDATE customers SET status = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
+          [newStatus, now, String(id), tenantId]
+        );
       }
-    );
+
+      if (result.changes === 0) {
+        return reject(new AppError('Clientul nu a fost găsit.', 404, 'CUSTOMER_NOT_FOUND'));
+      }
+
+      let updatedRow;
+      if (!isNaN(numericId)) {
+        updatedRow = get('SELECT * FROM customers WHERE id = ? AND tenantId = ?', [numericId, tenantId]);
+      } else {
+        updatedRow = get('SELECT * FROM customers WHERE CAST(id AS TEXT) = ? AND tenantId = ?', [String(id), tenantId]);
+      }
+      return resolve(_stripPassword(_sqlRowToDoc(updatedRow)));
+    } catch (sqlErr) {
+      return reject(new AppError(
+        'Eroare la actualizarea statusului clientului (SQL): ' + sqlErr.message,
+        500,
+        'DB_UPDATE_ERROR'
+      ));
+    }
   });
 }
 
 /**
  * Șterge logic un client (soft-delete: setează status = 'deleted').
  * @param {string} id - ID-ul clientului
- * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Object>} Clientul marcat ca șters (fără password hash)
  * @throws {AppError} Dacă validarea eșuează
  */
@@ -1171,7 +1222,7 @@ function softDeleteCustomer(id, tenantId) {
 /**
  * Șterge definitiv un client din baza de date.
  * @param {string} id - ID-ul clientului
- * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<boolean>} `true` dacă ștergerea a avut loc
  * @throws {AppError} Dacă validarea eșuează
  */
@@ -1185,33 +1236,36 @@ function hardDeleteCustomer(id, tenantId) {
       return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
     }
 
-    const customersDb = getCustomersDb(tenantId);
-    customersDb.remove({ _id: id, tenantId, type: DOC_TYPE }, {}, (err, numRemoved) => {
-      if (err) {
-        return reject(new AppError(
-          `Eroare la ștergerea clientului: ${err.message}`,
-          500,
-          'DB_DELETE_ERROR'
-        ));
+    try {
+      const numericId = parseInt(id, 10);
+      let result;
+      if (!isNaN(numericId)) {
+        result = run('DELETE FROM customers WHERE id = ? AND tenantId = ?', [numericId, tenantId]);
+      } else {
+        result = run('DELETE FROM customers WHERE CAST(id AS TEXT) = ? AND tenantId = ?', [String(id), tenantId]);
       }
 
-      if (numRemoved === 0) {
+      if (result.changes === 0) {
         return reject(new AppError('Clientul nu a fost găsit.', 404, 'CUSTOMER_NOT_FOUND'));
       }
 
-      // Curățare cache local după ștergere
-      invalidateCustomerDbCache(tenantId);
-      resolve(true);
-    });
+      return resolve(true);
+    } catch (sqlErr) {
+      return reject(new AppError(
+        'Eroare la ștergerea clientului (SQL): ' + sqlErr.message,
+        500,
+        'DB_DELETE_ERROR'
+      ));
+    }
   });
 }
 
 // ---------------------------------------------------------------------------
-// Utilitare cross-tenant (folosesc config/db.js pentru referințe globale)
+// Utilitare cross-tenant / relaționale
 // ---------------------------------------------------------------------------
 
 /**
- * Verifică dacă un tenant există în colecția globală `tenants`.
+ * Verifică dacă un tenant există în tabela `tenants`.
  * @param {string} tenantId - ID-ul tenant-ului (slug)
  * @returns {Promise<boolean>}
  */
@@ -1220,23 +1274,24 @@ function tenantExists(tenantId) {
     if (!tenantId) {
       return resolve(false);
     }
-    tenants.findOne({ slug: tenantId }, (err, doc) => {
-      if (err) {
-        return reject(new AppError(
-          `Eroare la verificarea tenant-ului: ${err.message}`,
-          500,
-          'DB_QUERY_ERROR'
-        ));
-      }
-      resolve(!!doc);
-    });
+
+    try {
+      const row = get('SELECT 1 FROM tenants WHERE slug = ?', [tenantId]);
+      return resolve(!!row);
+    } catch (sqlErr) {
+      return reject(new AppError(
+        'Eroare la verificarea tenant-ului (SQL): ' + sqlErr.message,
+        500,
+        'DB_QUERY_ERROR'
+      ));
+    }
   });
 }
 
 /**
  * Obține clienții asociați unui restaurant (util pentru notificări, statistici).
  * @param {string} restaurantId - ID-ul restaurantului
- * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Array>} Lista de clienți (fără password hash)
  */
 function findCustomersByRestaurant(restaurantId, tenantId) {
@@ -1249,33 +1304,27 @@ function findCustomersByRestaurant(restaurantId, tenantId) {
       return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
     }
 
-    const customersDb = getCustomersDb(tenantId);
-    customersDb.find({ tenantId, type: DOC_TYPE, restaurantId })
-      .sort({ nume: 1 })
-      .exec((err, customerList) => {
-        if (err) {
-          return reject(new AppError(
-            `Eroare la căutarea clienților după restaurant: ${err.message}`,
-            500,
-            'DB_QUERY_ERROR'
-          ));
-        }
-
-        const safeCustomers = (customerList || []).map((c) => {
-          const safe = { ...c };
-          delete safe.password;
-          return safe;
-        });
-
-        resolve(safeCustomers);
-      });
+    try {
+      const rows = all(
+        'SELECT * FROM customers WHERE tenantId = ? AND restaurantId = ? ORDER BY nume ASC',
+        [tenantId, restaurantId]
+      );
+      const safeCustomers = rows.map((r) => _stripPassword(_sqlRowToDoc(r)));
+      return resolve(safeCustomers);
+    } catch (sqlErr) {
+      return reject(new AppError(
+        'Eroare la căutarea clienților după restaurant (SQL): ' + sqlErr.message,
+        500,
+        'DB_QUERY_ERROR'
+      ));
+    }
   });
 }
 
 /**
  * Obține clienții asociați unui hotel (util pentru notificări, statistici).
  * @param {string} hotelId - ID-ul hotelului
- * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Array>} Lista de clienți (fără password hash)
  */
 function findCustomersByHotel(hotelId, tenantId) {
@@ -1288,26 +1337,20 @@ function findCustomersByHotel(hotelId, tenantId) {
       return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
     }
 
-    const customersDb = getCustomersDb(tenantId);
-    customersDb.find({ tenantId, type: DOC_TYPE, hotelId })
-      .sort({ nume: 1 })
-      .exec((err, customerList) => {
-        if (err) {
-          return reject(new AppError(
-            `Eroare la căutarea clienților după hotel: ${err.message}`,
-            500,
-            'DB_QUERY_ERROR'
-          ));
-        }
-
-        const safeCustomers = (customerList || []).map((c) => {
-          const safe = { ...c };
-          delete safe.password;
-          return safe;
-        });
-
-        resolve(safeCustomers);
-      });
+    try {
+      const rows = all(
+        'SELECT * FROM customers WHERE tenantId = ? AND hotelId = ? ORDER BY nume ASC',
+        [tenantId, hotelId]
+      );
+      const safeCustomers = rows.map((r) => _stripPassword(_sqlRowToDoc(r)));
+      return resolve(safeCustomers);
+    } catch (sqlErr) {
+      return reject(new AppError(
+        'Eroare la căutarea clienților după hotel (SQL): ' + sqlErr.message,
+        500,
+        'DB_QUERY_ERROR'
+      ));
+    }
   });
 }
 
@@ -1318,11 +1361,6 @@ function findCustomersByHotel(hotelId, tenantId) {
 module.exports = {
   // Constante
   VALID_CUSTOMER_STATUSES,
-  DOC_TYPE,
-
-  // Conexiune / cache
-  getCustomersDb,
-  invalidateCustomerDbCache,
 
   // CRUD
   createCustomer,
@@ -1359,4 +1397,9 @@ module.exports = {
   isValidPhone,
   isValidCustomerStatus,
   isValidPositiveNumber,
+
+  // Expunere pentru testare și debugging
+  _isSqlAvailable,
+  _sqlRowToDoc,
+  _stripPassword,
 };

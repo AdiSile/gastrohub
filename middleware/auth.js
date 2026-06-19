@@ -54,27 +54,14 @@ const DEFAULT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
  * Caută un utilizator în baza de date după ID-ul extras din token.
  * Întoarce o promisiune pentru a putea fi folosit cu async/await.
  *
- * Folosește userModel.findUserById pentru compatibilitate duală SQLite + NeDB.
- * Dacă userModel nu este încă disponibil (ex: în teste), fallback la NeDB direct.
+ * Backend: exclusiv SQLite (prin userModel.findUserById).
  *
  * @param {string} id - ID-ul utilizatorului
  * @returns {Promise<Object|null>}
  */
 function findUserById(id) {
-  // Preferăm userModel.findUserById (dual SQLite + NeDB)
-  try {
-    const { findUserById: modelFindUserById } = require('../models/userModel');
-    return modelFindUserById(id);
-  } catch (_e) {
-    // Fallback: NeDB direct
-    const { users } = require('../config/db');
-    return new Promise((resolve, reject) => {
-      users.findOne({ _id: id }, (err, doc) => {
-        if (err) return reject(err);
-        resolve(doc || null);
-      });
-    });
-  }
+  const { findUserById: modelFindUserById } = require('../models/userModel');
+  return modelFindUserById(id);
 }
 
 // ---------------------------------------------------------------------------
