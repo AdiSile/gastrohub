@@ -5,9 +5,13 @@
 // Definirea structurii, validărilor și operațiilor CRUD pentru configurarea
 // unui restaurant (nume, adresă, nr. mese, tenant asociat).
 // Câmpuri suportate: name, address, tableCount, tenantId, phone, email, status
+//
+// Compatibilitate duală: SQLite (prin getDb()) cu fallback la NeDB.
 // ---------------------------------------------------------------------------
 
-const { restaurants } = require('../config/db');
+const fs = require('fs');
+const path = require('path');
+const { restaurants, getDb, run, get, all } = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
 
 // ---------------------------------------------------------------------------
@@ -15,6 +19,106 @@ const { AppError } = require('../middleware/errorHandler');
 // ---------------------------------------------------------------------------
 
 const VALID_STATUSES = ['active', 'inactive', 'closed'];
+
+// ---------------------------------------------------------------------------
+// Marcaj pentru migrarea tabelei restaurants în SQLite (executată o singură
+// dată, la primul apel către orice funcție SQL)
+// ---------------------------------------------------------------------------
+
+let _sqlMigrated = false;
+
+/**
+ * Asigură că tabela `restaurants` din SQLite există și are schema corectă.
+ * Se execută o singură dată, idempotent.
+ */
+function _ensureSqlSchema() {
+  if (_sqlMigrated) return;
+  try {
+    const db = getDb();
+
+    // Verifică dacă tabela restaurants există
+    const tableInfo = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='restaurants'");
+    const tableExists = tableInfo.length > 0 && tableInfo[0].values.length > 0;
+
+    if (!tableExists) {
+      db.run(`
+        CREATE TABLE restaurants (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          name        TEXT    NOT NULL,
+          address     TEXT    NOT NULL,
+          tableCount  INTEGER DEFAULT 0,
+          tenantId    TEXT    NOT NULL,
+          phone       TEXT    DEFAULT '',
+          email       TEXT    DEFAULT '',
+          status      TEXT    DEFAULT 'active',
+          createdAt   TEXT    DEFAULT (datetime('now')),
+          updatedAt   TEXT    DEFAULT (datetime('now'))
+        );
+      `);
+
+      // Index pentru căutarea rapidă după tenantId
+      db.run('CREATE INDEX IF NOT EXISTS idx_restaurants_tenantId ON restaurants(tenantId);');
+      // Index pentru căutarea după status
+      db.run('CREATE INDEX IF NOT EXISTS idx_restaurants_status ON restaurants(status);');
+      // Index compus tenantId + status
+      db.run('CREATE INDEX IF NOT EXISTS idx_restaurants_tenantId_status ON restaurants(tenantId, status);');
+
+      // Persistă modificarea de schemă pe disc
+      const data = db.export();
+      const dataDir = path.resolve(process.env.DB_PATH || './data');
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      const dbPath = path.join(dataDir, 'gastrohub.db');
+      const buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+      fs.writeFileSync(dbPath, buffer);
+    }
+
+    _sqlMigrated = true;
+  } catch (_e) {
+    // SQLite nu este disponibil – ignorăm; vom folosi NeDB
+    _sqlMigrated = true;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Detecție backend SQLite
+// ---------------------------------------------------------------------------
+
+/**
+ * Returnează `true` dacă SQLite este disponibil și inițializat.
+ * @returns {boolean}
+ */
+function _isSqlAvailable() {
+  try {
+    getDb();
+    _ensureSqlSchema();
+    return true;
+  } catch (_e) {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers de conversie rând SQL → document compatibil NeDB
+// ---------------------------------------------------------------------------
+
+/**
+ * Convertește un rând SQL (id INTEGER) într-un obiect compatibil cu NeDB
+ * (cu _id string).
+ * @param {Object} row
+ * @returns {Object}
+ */
+function _sqlRowToDoc(row) {
+  if (!row) return row;
+  const doc = {};
+  const keys = Object.keys(row);
+  for (let i = 0; i < keys.length; i++) {
+    doc[keys[i]] = row[keys[i]];
+  }
+  doc._id = String(row.id);
+  return doc;
+}
 
 // ---------------------------------------------------------------------------
 // Funcții de validare
@@ -61,7 +165,7 @@ function isValidEmail(email) {
 }
 
 // ---------------------------------------------------------------------------
-// Operații CRUD – Restaurante
+// Operații CRUD – Restaurante (SQLite primar + NeDB fallback)
 // ---------------------------------------------------------------------------
 
 /**
@@ -154,19 +258,49 @@ function createRestaurant(restaurantData) {
       ));
     }
 
-    // -----------------------------------------------------------------------
-    // Creare document restaurant
-    // -----------------------------------------------------------------------
+    const now = new Date().toISOString();
+    const finalName = name.trim();
+    const finalAddress = address.trim();
+    const finalPhone = phone || '';
+    const finalEmail = email ? email.toLowerCase().trim() : '';
+
+    // -------------------------------------------------------------------
+    // Încercare SQLite
+    // -------------------------------------------------------------------
+    if (_isSqlAvailable()) {
+      try {
+        const result = run(
+          `INSERT INTO restaurants (name, address, tableCount, tenantId, phone, email, status, createdAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [finalName, finalAddress, finalTableCount, tenantId, finalPhone, finalEmail, finalStatus, now, now]
+        );
+
+        const newId = result.lastInsertRowid;
+        const newRow = get('SELECT * FROM restaurants WHERE id = ?', [newId]);
+        const doc = _sqlRowToDoc(newRow);
+        return resolve(doc);
+      } catch (sqlErr) {
+        return reject(new AppError(
+          `Eroare la crearea restaurantului (SQL): ${sqlErr.message}`,
+          500,
+          'DB_INSERT_ERROR'
+        ));
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // Fallback NeDB
+    // -------------------------------------------------------------------
     const restaurantDoc = {
-      name: name.trim(),
-      address: address.trim(),
+      name: finalName,
+      address: finalAddress,
       tableCount: finalTableCount,
       tenantId: tenantId,
-      phone: phone || '',
-      email: email ? email.toLowerCase().trim() : '',
+      phone: finalPhone,
+      email: finalEmail,
       status: finalStatus,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
 
     restaurants.insert(restaurantDoc, (insertErr, newRestaurant) => {
@@ -185,7 +319,7 @@ function createRestaurant(restaurantData) {
 
 /**
  * Găsește un restaurant după ID-ul său.
- * @param {string} id - ID-ul NeDB
+ * @param {string} id - ID-ul (NeDB _id sau SQLite id convertit la string)
  * @returns {Promise<Object|null>} Documentul restaurantului sau null
  */
 function findRestaurantById(id) {
@@ -194,6 +328,27 @@ function findRestaurantById(id) {
       return reject(new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID'));
     }
 
+    // ---- SQLite ----
+    if (_isSqlAvailable()) {
+      try {
+        const numericId = parseInt(id, 10);
+        let row;
+        if (isNaN(numericId)) {
+          row = get('SELECT * FROM restaurants WHERE CAST(id AS TEXT) = ?', [String(id)]);
+        } else {
+          row = get('SELECT * FROM restaurants WHERE id = ?', [numericId]);
+        }
+        return resolve(row ? _sqlRowToDoc(row) : null);
+      } catch (sqlErr) {
+        return reject(new AppError(
+          `Eroare la căutarea restaurantului (SQL): ${sqlErr.message}`,
+          500,
+          'DB_QUERY_ERROR'
+        ));
+      }
+    }
+
+    // ---- NeDB ----
     restaurants.findOne({ _id: id }, (err, restaurant) => {
       if (err) {
         return reject(new AppError(
@@ -219,21 +374,61 @@ function findRestaurantsByTenant(tenantId, options = {}) {
       return reject(new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID'));
     }
 
+    // ---- SQLite ----
+    if (_isSqlAvailable()) {
+      try {
+        let sql = 'SELECT * FROM restaurants WHERE tenantId = ?';
+        const params = [tenantId];
+
+        // Sortare
+        if (options.sort && typeof options.sort === 'object') {
+          const sortKeys = Object.keys(options.sort);
+          if (sortKeys.length > 0) {
+            const sortClauses = sortKeys.map((k) => `${k} ${options.sort[k] === -1 ? 'DESC' : 'ASC'}`);
+            sql += ' ORDER BY ' + sortClauses.join(', ');
+          } else {
+            sql += ' ORDER BY name ASC';
+          }
+        } else {
+          sql += ' ORDER BY name ASC';
+        }
+
+        // Limit
+        if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
+          sql += ' LIMIT ?';
+          params.push(options.limit);
+        }
+
+        // Offset (skip)
+        if (options.skip && Number.isInteger(options.skip) && options.skip > 0) {
+          sql += ' OFFSET ?';
+          params.push(options.skip);
+        }
+
+        const rows = all(sql, params);
+        return resolve(rows.map((r) => _sqlRowToDoc(r)));
+      } catch (sqlErr) {
+        return reject(new AppError(
+          `Eroare la căutarea restaurantelor (SQL): ${sqlErr.message}`,
+          500,
+          'DB_QUERY_ERROR'
+        ));
+      }
+    }
+
+    // ---- NeDB ----
     let query = restaurants.find({ tenantId });
 
-    // Sortare
     if (options.sort) {
       query = query.sort(options.sort);
     } else {
       query = query.sort({ name: 1 });
     }
 
-    // Limit
     if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
       query = query.limit(options.limit);
     }
 
-    // Skip
     if (options.skip && Number.isInteger(options.skip) && options.skip > 0) {
       query = query.skip(options.skip);
     }
@@ -268,6 +463,31 @@ function findRestaurantsByStatus(status, tenantId) {
       ));
     }
 
+    // ---- SQLite ----
+    if (_isSqlAvailable()) {
+      try {
+        let sql;
+        const params = [status];
+
+        if (tenantId) {
+          sql = 'SELECT * FROM restaurants WHERE status = ? AND tenantId = ? ORDER BY name ASC';
+          params.push(tenantId);
+        } else {
+          sql = 'SELECT * FROM restaurants WHERE status = ? ORDER BY name ASC';
+        }
+
+        const rows = all(sql, params);
+        return resolve(rows.map((r) => _sqlRowToDoc(r)));
+      } catch (sqlErr) {
+        return reject(new AppError(
+          `Eroare la căutarea restaurantelor (SQL): ${sqlErr.message}`,
+          500,
+          'DB_QUERY_ERROR'
+        ));
+      }
+    }
+
+    // ---- NeDB ----
     const filter = { status };
 
     if (tenantId) {
@@ -313,6 +533,7 @@ function updateRestaurant(id, updateData) {
     // -----------------------------------------------------------------------
     const allowedFields = ['name', 'address', 'tableCount', 'phone', 'email', 'status'];
     const setFields = {};
+    const sqlUpdates = {};
     const errors = [];
 
     for (const [key, value] of Object.entries(updateData)) {
@@ -326,6 +547,7 @@ function updateRestaurant(id, updateData) {
             errors.push('Numele restaurantului trebuie să aibă între 1 și 100 de caractere.');
           } else {
             setFields.name = value.trim();
+            sqlUpdates.name = value.trim();
           }
           break;
 
@@ -334,6 +556,7 @@ function updateRestaurant(id, updateData) {
             errors.push('Adresa restaurantului trebuie să aibă între 5 și 500 de caractere.');
           } else {
             setFields.address = value.trim();
+            sqlUpdates.address = value.trim();
           }
           break;
 
@@ -342,6 +565,7 @@ function updateRestaurant(id, updateData) {
             errors.push('Numărul de mese trebuie să fie un număr întreg, mai mare sau egal cu 0.');
           } else {
             setFields.tableCount = value;
+            sqlUpdates.tableCount = value;
           }
           break;
 
@@ -350,6 +574,7 @@ function updateRestaurant(id, updateData) {
             errors.push('Numărul de telefon trebuie să fie un șir de caractere.');
           } else {
             setFields.phone = value || '';
+            sqlUpdates.phone = value || '';
           }
           break;
 
@@ -358,6 +583,7 @@ function updateRestaurant(id, updateData) {
             errors.push('Adresa de email a restaurantului este invalidă.');
           } else {
             setFields.email = value ? value.toLowerCase().trim() : '';
+            sqlUpdates.email = value ? value.toLowerCase().trim() : '';
           }
           break;
 
@@ -366,6 +592,7 @@ function updateRestaurant(id, updateData) {
             errors.push(`Statusul "${value}" nu este valid. Valorile permise: ${VALID_STATUSES.join(', ')}.`);
           } else {
             setFields.status = value;
+            sqlUpdates.status = value;
           }
           break;
 
@@ -385,10 +612,61 @@ function updateRestaurant(id, updateData) {
       ));
     }
 
-    // -----------------------------------------------------------------------
-    // Actualizare document
-    // -----------------------------------------------------------------------
-    setFields.updatedAt = new Date().toISOString();
+    // -------------------------------------------------------------------
+    // Actualizare – SQLite
+    // -------------------------------------------------------------------
+    const now = new Date().toISOString();
+
+    if (_isSqlAvailable()) {
+      try {
+        const numericId = parseInt(id, 10);
+
+        // Construim interogarea SQL dinamic
+        const setClauses = Object.keys(sqlUpdates).map((k) => `${k} = ?`);
+        setClauses.push('updatedAt = ?');
+        const allParams = Object.values(sqlUpdates);
+        allParams.push(now);
+
+        let result;
+        if (!isNaN(numericId)) {
+          allParams.push(numericId);
+          result = run(
+            `UPDATE restaurants SET ${setClauses.join(', ')} WHERE id = ?`,
+            allParams
+          );
+        } else {
+          allParams.push(String(id));
+          result = run(
+            `UPDATE restaurants SET ${setClauses.join(', ')} WHERE CAST(id AS TEXT) = ?`,
+            allParams
+          );
+        }
+
+        if (result.changes === 0) {
+          return reject(new AppError('Restaurantul nu a fost găsit.', 404, 'RESTAURANT_NOT_FOUND'));
+        }
+
+        // Returnăm documentul actualizat
+        let updatedRow;
+        if (!isNaN(numericId)) {
+          updatedRow = get('SELECT * FROM restaurants WHERE id = ?', [numericId]);
+        } else {
+          updatedRow = get('SELECT * FROM restaurants WHERE CAST(id AS TEXT) = ?', [String(id)]);
+        }
+        return resolve(_sqlRowToDoc(updatedRow));
+      } catch (sqlErr) {
+        return reject(new AppError(
+          `Eroare la actualizarea restaurantului (SQL): ${sqlErr.message}`,
+          500,
+          'DB_UPDATE_ERROR'
+        ));
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // Actualizare – NeDB
+    // -------------------------------------------------------------------
+    setFields.updatedAt = now;
 
     restaurants.update(
       { _id: id },
@@ -433,12 +711,52 @@ function updateTableCount(id, tableCount) {
       ));
     }
 
+    const now = new Date().toISOString();
+
+    // ---- SQLite ----
+    if (_isSqlAvailable()) {
+      try {
+        const numericId = parseInt(id, 10);
+        let result;
+        if (!isNaN(numericId)) {
+          result = run(
+            'UPDATE restaurants SET tableCount = ?, updatedAt = ? WHERE id = ?',
+            [tableCount, now, numericId]
+          );
+        } else {
+          result = run(
+            'UPDATE restaurants SET tableCount = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ?',
+            [tableCount, now, String(id)]
+          );
+        }
+
+        if (result.changes === 0) {
+          return reject(new AppError('Restaurantul nu a fost găsit.', 404, 'RESTAURANT_NOT_FOUND'));
+        }
+
+        let updatedRow;
+        if (!isNaN(numericId)) {
+          updatedRow = get('SELECT * FROM restaurants WHERE id = ?', [numericId]);
+        } else {
+          updatedRow = get('SELECT * FROM restaurants WHERE CAST(id AS TEXT) = ?', [String(id)]);
+        }
+        return resolve(_sqlRowToDoc(updatedRow));
+      } catch (sqlErr) {
+        return reject(new AppError(
+          `Eroare la actualizarea numărului de mese (SQL): ${sqlErr.message}`,
+          500,
+          'DB_UPDATE_ERROR'
+        ));
+      }
+    }
+
+    // ---- NeDB ----
     restaurants.update(
       { _id: id },
       {
         $set: {
           tableCount,
-          updatedAt: new Date().toISOString(),
+          updatedAt: now,
         },
       },
       { returnUpdatedDocs: true },
@@ -481,12 +799,52 @@ function updateRestaurantStatus(id, status) {
       ));
     }
 
+    const now = new Date().toISOString();
+
+    // ---- SQLite ----
+    if (_isSqlAvailable()) {
+      try {
+        const numericId = parseInt(id, 10);
+        let result;
+        if (!isNaN(numericId)) {
+          result = run(
+            'UPDATE restaurants SET status = ?, updatedAt = ? WHERE id = ?',
+            [status, now, numericId]
+          );
+        } else {
+          result = run(
+            'UPDATE restaurants SET status = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ?',
+            [status, now, String(id)]
+          );
+        }
+
+        if (result.changes === 0) {
+          return reject(new AppError('Restaurantul nu a fost găsit.', 404, 'RESTAURANT_NOT_FOUND'));
+        }
+
+        let updatedRow;
+        if (!isNaN(numericId)) {
+          updatedRow = get('SELECT * FROM restaurants WHERE id = ?', [numericId]);
+        } else {
+          updatedRow = get('SELECT * FROM restaurants WHERE CAST(id AS TEXT) = ?', [String(id)]);
+        }
+        return resolve(_sqlRowToDoc(updatedRow));
+      } catch (sqlErr) {
+        return reject(new AppError(
+          `Eroare la actualizarea statusului (SQL): ${sqlErr.message}`,
+          500,
+          'DB_UPDATE_ERROR'
+        ));
+      }
+    }
+
+    // ---- NeDB ----
     restaurants.update(
       { _id: id },
       {
         $set: {
           status,
-          updatedAt: new Date().toISOString(),
+          updatedAt: now,
         },
       },
       { returnUpdatedDocs: true },
@@ -520,6 +878,32 @@ function deleteRestaurant(id) {
       return reject(new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID'));
     }
 
+    // ---- SQLite ----
+    if (_isSqlAvailable()) {
+      try {
+        const numericId = parseInt(id, 10);
+        let result;
+        if (!isNaN(numericId)) {
+          result = run('DELETE FROM restaurants WHERE id = ?', [numericId]);
+        } else {
+          result = run('DELETE FROM restaurants WHERE CAST(id AS TEXT) = ?', [String(id)]);
+        }
+
+        if (result.changes === 0) {
+          return reject(new AppError('Restaurantul nu a fost găsit.', 404, 'RESTAURANT_NOT_FOUND'));
+        }
+
+        return resolve(true);
+      } catch (sqlErr) {
+        return reject(new AppError(
+          `Eroare la ștergerea restaurantului (SQL): ${sqlErr.message}`,
+          500,
+          'DB_DELETE_ERROR'
+        ));
+      }
+    }
+
+    // ---- NeDB ----
     restaurants.remove({ _id: id }, {}, (removeErr, numRemoved) => {
       if (removeErr) {
         return reject(new AppError(
@@ -549,6 +933,21 @@ function countRestaurantsByTenant(tenantId) {
       return resolve(0);
     }
 
+    // ---- SQLite ----
+    if (_isSqlAvailable()) {
+      try {
+        const row = get('SELECT COUNT(*) AS cnt FROM restaurants WHERE tenantId = ?', [tenantId]);
+        return resolve(row ? row.cnt : 0);
+      } catch (sqlErr) {
+        return reject(new AppError(
+          `Eroare la numărarea restaurantelor (SQL): ${sqlErr.message}`,
+          500,
+          'DB_COUNT_ERROR'
+        ));
+      }
+    }
+
+    // ---- NeDB ----
     restaurants.count({ tenantId }, (err, count) => {
       if (err) {
         return reject(new AppError(
@@ -578,6 +977,31 @@ function countRestaurantsByStatus(status, tenantId) {
       ));
     }
 
+    // ---- SQLite ----
+    if (_isSqlAvailable()) {
+      try {
+        let sql;
+        const params = [status];
+
+        if (tenantId) {
+          sql = 'SELECT COUNT(*) AS cnt FROM restaurants WHERE status = ? AND tenantId = ?';
+          params.push(tenantId);
+        } else {
+          sql = 'SELECT COUNT(*) AS cnt FROM restaurants WHERE status = ?';
+        }
+
+        const row = get(sql, params);
+        return resolve(row ? row.cnt : 0);
+      } catch (sqlErr) {
+        return reject(new AppError(
+          `Eroare la numărarea restaurantelor (SQL): ${sqlErr.message}`,
+          500,
+          'DB_COUNT_ERROR'
+        ));
+      }
+    }
+
+    // ---- NeDB ----
     const filter = { status };
 
     if (tenantId) {
@@ -613,8 +1037,34 @@ function searchRestaurantsByName(searchTerm, tenantId) {
       ));
     }
 
-    // NeDB suportă regex pentru căutare parțială
-    const regex = new RegExp(searchTerm.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    const escapedTerm = searchTerm.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // ---- SQLite ----
+    if (_isSqlAvailable()) {
+      try {
+        let sql;
+        const params = [`%${searchTerm.trim()}%`];
+
+        if (tenantId) {
+          sql = 'SELECT * FROM restaurants WHERE name LIKE ? AND tenantId = ? ORDER BY name ASC';
+          params.push(tenantId);
+        } else {
+          sql = 'SELECT * FROM restaurants WHERE name LIKE ? ORDER BY name ASC';
+        }
+
+        const rows = all(sql, params);
+        return resolve(rows.map((r) => _sqlRowToDoc(r)));
+      } catch (sqlErr) {
+        return reject(new AppError(
+          `Eroare la căutarea restaurantelor (SQL): ${sqlErr.message}`,
+          500,
+          'DB_QUERY_ERROR'
+        ));
+      }
+    }
+
+    // ---- NeDB ----
+    const regex = new RegExp(escapedTerm, 'i');
 
     const filter = { name: regex };
 
@@ -662,4 +1112,10 @@ module.exports = {
   countRestaurantsByTenant,
   countRestaurantsByStatus,
   searchRestaurantsByName,
+
+  // Expunere pentru testare și debugging
+  _isSqlAvailable,
+  _sqlRowToDoc,
+  _ensureSqlSchema,
+  _resetSqlMigrated: function () { _sqlMigrated = false; },
 };

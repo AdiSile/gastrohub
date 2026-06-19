@@ -8,75 +8,16 @@
 //          updatedAt, createdAt
 // ---------------------------------------------------------------------------
 
-const Datastore = require('nedb');
-const path = require('path');
-const fs = require('fs');
 const { AppError } = require('../middleware/errorHandler');
+const { inventoryItems } = require('../config/db');
 
 // ---------------------------------------------------------------------------
-// Configurare colecție separată pentru inventoryItems
+// Indexuri specifice modelului (cele generice sunt deja create în config/db.js)
 // ---------------------------------------------------------------------------
-
-/**
- * Determină calea absolută către directorul de date.
- * Citeşte variabila de mediu `DB_PATH` sau implicit `./data/`.
- */
-function resolveDataPath() {
-  const rel = process.env.DB_PATH || './data';
-  return path.resolve(rel);
-}
-
-/**
- * Asigură existenţa directorului de date (creare recursivă dacă nu există).
- */
-function ensureDataDir(dirPath) {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-}
-
-function isTestEnv() {
-  return process.env.NODE_ENV === 'test';
-}
-
-const dataDir = resolveDataPath();
-ensureDataDir(dataDir);
-
-/**
- * Colecţia de iteme de inventar.
- * Fişierul pe disc: <dataDir>/inventoryItems.db
- * În mediu de test se folosește baza în-memory.
- */
-const inventoryItems = new Datastore({
-  filename: isTestEnv() ? undefined : path.join(dataDir, 'inventoryItems.db'),
-  autoload: true,
-  timestampData: false,
-});
-
-// ---------------------------------------------------------------------------
-// Indexuri
-// ---------------------------------------------------------------------------
-
-/**
- * Index pentru căutarea rapidă a itemelor după tenantId.
- */
-inventoryItems.ensureIndex({ fieldName: 'tenantId' }, (err) => {
-  if (err) {
-    console.error('[inventoryItemModel] Eroare la crearea indexului pe tenantId:', err.message);
-  }
-});
-
-/**
- * Index pentru căutarea itemelor după categorie.
- */
-inventoryItems.ensureIndex({ fieldName: 'category' }, (err) => {
-  if (err) {
-    console.error('[inventoryItemModel] Eroare la crearea indexului pe category:', err.message);
-  }
-});
 
 /**
  * Index pentru căutarea itemelor după locationId.
+ * (nu este definit în config/db.js – specific acestui model)
  */
 inventoryItems.ensureIndex({ fieldName: 'locationId' }, (err) => {
   if (err) {
@@ -86,6 +27,7 @@ inventoryItems.ensureIndex({ fieldName: 'locationId' }, (err) => {
 
 /**
  * Index pentru căutarea itemelor după locationType.
+ * (nu este definit în config/db.js – specific acestui model)
  */
 inventoryItems.ensureIndex({ fieldName: 'locationType' }, (err) => {
   if (err) {
@@ -94,7 +36,8 @@ inventoryItems.ensureIndex({ fieldName: 'locationType' }, (err) => {
 });
 
 /**
- * Index compus pentru a preveni duplicatele de nume în același tenant și locație.
+ * Index pentru căutarea itemelor după nume.
+ * (nu este definit în config/db.js – specific acestui model)
  */
 inventoryItems.ensureIndex({ fieldName: 'name', unique: false }, (err) => {
   if (err) {
@@ -874,7 +817,7 @@ function getInventorySummary(tenantId) {
 // ---------------------------------------------------------------------------
 
 module.exports = {
-  // Instanța bazei de date (pentru acces direct în caz de nevoie)
+  // Instanța bazei de date (compatibilitate: re-export din config/db.js)
   inventoryItems,
 
   // Constante

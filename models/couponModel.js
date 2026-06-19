@@ -470,38 +470,36 @@ function validateCoupon(code, userId, options = {}) {
  * @returns {Promise<Object>} Cuponul actualizat
  * @throws {Error} Dacă cuponul nu poate fi folosit
  */
-function useCoupon(code, userId, orderDetails = {}) {
-  return new Promise((resolve, reject) => {
-    let coupon;
-    try {
-      coupon = validateCoupon(code, userId, { orderAmount: orderDetails.orderAmount });
-    } catch (err) {
-      return reject(err);
-    }
+async function useCoupon(code, userId, orderDetails = {}) {
+  let coupon;
+  try {
+    coupon = await validateCoupon(code, userId, { orderAmount: orderDetails.orderAmount });
+  } catch (err) {
+    throw err;
+  }
 
-    // Incrementare contor utilizări
-    coupon.currentUsageCount += 1;
+  // Incrementare contor utilizări
+  coupon.currentUsageCount += 1;
 
-    // Dacă s-a atins maxUsageCount, marcăm ca used
-    if (coupon.maxUsageCount > 0 && coupon.currentUsageCount >= coupon.maxUsageCount) {
-      coupon.status = 'used';
-      coupon.usedAt = new Date().toISOString();
-    }
+  // Dacă s-a atins maxUsageCount, marcăm ca used
+  if (coupon.maxUsageCount > 0 && coupon.currentUsageCount >= coupon.maxUsageCount) {
+    coupon.status = 'used';
+    coupon.usedAt = new Date().toISOString();
+  }
 
-    // Adăugăm comanda la istoric
-    if (orderDetails.orderId) {
-      coupon.usedOnOrders.push({
-        orderId: orderDetails.orderId,
-        usedAt: new Date().toISOString(),
-        orderAmount: orderDetails.orderAmount || null,
-      });
-    }
+  // Adăugăm comanda la istoric
+  if (orderDetails.orderId) {
+    coupon.usedOnOrders.push({
+      orderId: orderDetails.orderId,
+      usedAt: new Date().toISOString(),
+      orderAmount: orderDetails.orderAmount || null,
+    });
+  }
 
-    coupon.updatedAt = new Date().toISOString();
-    coupons.set(coupon.id, coupon);
+  coupon.updatedAt = new Date().toISOString();
+  coupons.set(coupon.id, coupon);
 
-    resolve({ ...coupon });
-  });
+  return { ...coupon };
 }
 
 /**
@@ -564,41 +562,39 @@ function cancelCoupon(code, userId, reason = '') {
  * @returns {Promise<Object>} Detalii discount
  * @throws {Error} Dacă validarea eșuează
  */
-function calculateDiscount(couponCode, orderAmount, userId) {
-  return new Promise((resolve, reject) => {
-    if (!isValidPositiveNumber(orderAmount)) {
-      return reject(new Error('Suma comenzii trebuie să fie un număr pozitiv.'));
+async function calculateDiscount(couponCode, orderAmount, userId) {
+  if (!isValidPositiveNumber(orderAmount)) {
+    throw new Error('Suma comenzii trebuie să fie un număr pozitiv.');
+  }
+
+  let coupon;
+  try {
+    coupon = await validateCoupon(couponCode, userId, { orderAmount });
+  } catch (err) {
+    throw err;
+  }
+
+  let discountAmount;
+  if (coupon.discountType === 'percent') {
+    discountAmount = (orderAmount * coupon.discountValue) / 100;
+  } else {
+    discountAmount = coupon.discountValue;
+    // Discountul fix nu poate depăși suma comenzii
+    if (discountAmount > orderAmount) {
+      discountAmount = orderAmount;
     }
+  }
 
-    let coupon;
-    try {
-      coupon = validateCoupon(couponCode, userId, { orderAmount });
-    } catch (err) {
-      return reject(err);
-    }
+  const finalAmount = orderAmount - discountAmount;
 
-    let discountAmount;
-    if (coupon.discountType === 'percent') {
-      discountAmount = (orderAmount * coupon.discountValue) / 100;
-    } else {
-      discountAmount = coupon.discountValue;
-      // Discountul fix nu poate depăși suma comenzii
-      if (discountAmount > orderAmount) {
-        discountAmount = orderAmount;
-      }
-    }
-
-    const finalAmount = orderAmount - discountAmount;
-
-    resolve({
-      originalAmount: orderAmount,
-      discountType: coupon.discountType,
-      discountValue: coupon.discountValue,
-      discountAmount: Math.round(discountAmount * 100) / 100,
-      finalAmount: Math.round(finalAmount * 100) / 100,
-      couponCode: coupon.code,
-    });
-  });
+  return {
+    originalAmount: orderAmount,
+    discountType: coupon.discountType,
+    discountValue: coupon.discountValue,
+    discountAmount: Math.round(discountAmount * 100) / 100,
+    finalAmount: Math.round(finalAmount * 100) / 100,
+    couponCode: coupon.code,
+  };
 }
 
 /**

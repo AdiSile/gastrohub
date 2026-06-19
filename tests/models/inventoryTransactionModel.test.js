@@ -788,6 +788,223 @@ describe('InventoryTransactionModel', () => {
   });
 
   // =========================================================================
+  // createInventoryTransaction – câmpuri noi (performedBy, previousQuantity, newQuantity)
+  // =========================================================================
+  describe('createInventoryTransaction – câmpuri noul API', () => {
+    it('să accepte performedBy în loc de userId', async () => {
+      const { userId, ...withoutUserId } = baseTransaction;
+      const trx = await transactionModel.createInventoryTransaction({
+        ...withoutUserId,
+        performedBy: userId1,
+      });
+      expect(trx.userId).to.equal(userId1);
+    });
+
+    it('să acorde prioritate lui performedBy față de userId', async () => {
+      const trx = await transactionModel.createInventoryTransaction({
+        ...baseTransaction,
+        userId: 'old-user',
+        performedBy: 'new-user',
+      });
+      expect(trx.userId).to.equal('new-user');
+    });
+
+    it('să stocheze previousQuantity când este furnizat', async () => {
+      const trx = await transactionModel.createInventoryTransaction({
+        ...baseTransaction,
+        previousQuantity: 30,
+      });
+      expect(trx.previousQuantity).to.equal(30);
+    });
+
+    it('să stocheze newQuantity când este furnizat', async () => {
+      const trx = await transactionModel.createInventoryTransaction({
+        ...baseTransaction,
+        newQuantity: 80,
+      });
+      expect(trx.newQuantity).to.equal(80);
+    });
+
+    it('să stocheze ambele previousQuantity și newQuantity împreună', async () => {
+      const trx = await transactionModel.createInventoryTransaction({
+        ...baseTransaction,
+        previousQuantity: 30,
+        newQuantity: 80,
+      });
+      expect(trx.previousQuantity).to.equal(30);
+      expect(trx.newQuantity).to.equal(80);
+    });
+
+    it('să NU adauge previousQuantity dacă este null/undefined', async () => {
+      const trx = await transactionModel.createInventoryTransaction({
+        ...baseTransaction,
+        previousQuantity: null,
+        newQuantity: undefined,
+      });
+      expect(trx).to.not.have.property('previousQuantity');
+      expect(trx).to.not.have.property('newQuantity');
+    });
+
+    it('să respingă dacă nici userId nici performedBy nu sunt furnizate', async () => {
+      const { userId, ...withoutUserId } = baseTransaction;
+      try {
+        await transactionModel.createInventoryTransaction(withoutUserId);
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.code).to.equal('INVALID_USER_ID');
+      }
+    });
+  });
+
+  // =========================================================================
   // deleteInventoryTransaction
   // =========================================================================
-  describe('
+  describe('deleteInventoryTransaction', () => {
+    it('să șteargă o tranzacție existentă', async () => {
+      const created = await transactionModel.createInventoryTransaction(baseTransaction);
+      const result = await transactionModel.deleteInventoryTransaction(created._id);
+      expect(result).to.be.true;
+
+      const found = await transactionModel.findInventoryTransactionById(created._id);
+      expect(found).to.be.null;
+    });
+
+    it('să arunce TRANSACTION_NOT_FOUND pentru ID inexistent', async () => {
+      try {
+        await transactionModel.deleteInventoryTransaction('nonexistent');
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.code).to.equal('TRANSACTION_NOT_FOUND');
+      }
+    });
+
+    it('să respingă ID gol', async () => {
+      try {
+        await transactionModel.deleteInventoryTransaction('');
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.code).to.equal('INVALID_TRANSACTION_ID');
+      }
+    });
+
+    it('să respingă ID null', async () => {
+      try {
+        await transactionModel.deleteInventoryTransaction(null);
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.code).to.equal('INVALID_TRANSACTION_ID');
+      }
+    });
+  });
+
+  // =========================================================================
+  // deleteTransactionsByItem
+  // =========================================================================
+  describe('deleteTransactionsByItem', () => {
+    beforeEach(async () => {
+      await seedTransactions([
+        { ...baseTransaction, itemId: itemIdA, quantity: 10 },
+        { ...baseTransaction, itemId: itemIdA, type: 'ieșire', quantity: 5 },
+        { ...baseTransaction, itemId: itemIdB, quantity: 20 },
+      ]);
+    });
+
+    it('să șteargă toate tranzacțiile pentru un item', async () => {
+      const numRemoved = await transactionModel.deleteTransactionsByItem(itemIdA);
+      expect(numRemoved).to.equal(2);
+
+      const remaining = await transactionModel.findTransactionsByItem(itemIdA);
+      expect(remaining).to.deep.equal([]);
+    });
+
+    it('să returneze 0 pentru item fără tranzacții', async () => {
+      const numRemoved = await transactionModel.deleteTransactionsByItem('inexistent');
+      expect(numRemoved).to.equal(0);
+    });
+
+    it('să nu șteargă tranzacțiile altor iteme', async () => {
+      await transactionModel.deleteTransactionsByItem(itemIdA);
+      const remaining = await transactionModel.findTransactionsByItem(itemIdB);
+      expect(remaining).to.have.lengthOf(1);
+    });
+
+    it('să respingă itemId gol', async () => {
+      try {
+        await transactionModel.deleteTransactionsByItem('');
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.code).to.equal('INVALID_ITEM_ID');
+      }
+    });
+  });
+
+  // =========================================================================
+  // getItemConsumption
+  // =========================================================================
+  describe('getItemConsumption', () => {
+    beforeEach(async () => {
+      await seedTransactions([
+        { ...baseTransaction, itemId: itemIdA, type: 'intrare', quantity: 100 },
+        { ...baseTransaction, itemId: itemIdA, type: 'ieșire', quantity: 30 },
+        { ...baseTransaction, itemId: itemIdA, type: 'ieșire', quantity: 20 },
+        { ...baseTransaction, itemId: itemIdA, type: 'pierdere', quantity: 5 },
+        { ...baseTransaction, itemId: itemIdB, type: 'intrare', quantity: 50 },
+      ]);
+    });
+
+    it('să calculeze consumul total (ieșiri + pierderi)', async () => {
+      const result = await transactionModel.getItemConsumption(itemIdA);
+      expect(result).to.exist;
+      expect(result.totalOut).to.equal(50);  // 30 + 20
+      expect(result.totalLoss).to.equal(5);
+      expect(result.netConsumption).to.equal(55); // 50 + 5
+    });
+
+    it('să returneze 0 pentru item fără consum', async () => {
+      await clearCollection();
+      await seedTransactions([
+        { ...baseTransaction, itemId: itemIdC, type: 'intrare', quantity: 100 },
+      ]);
+      const result = await transactionModel.getItemConsumption(itemIdC);
+      expect(result.totalOut).to.equal(0);
+      expect(result.totalLoss).to.equal(0);
+      expect(result.netConsumption).to.equal(0);
+    });
+
+    it('să filtreze după interval de date (startDate)', async () => {
+      const result = await transactionModel.getItemConsumption(itemIdA, {
+        startDate: new Date(Date.now() - 3600000).toISOString(),
+      });
+      expect(result.netConsumption).to.equal(55);
+    });
+
+    it('să filtreze după interval de date (endDate)', async () => {
+      const result = await transactionModel.getItemConsumption(itemIdA, {
+        endDate: new Date(Date.now() + 3600000).toISOString(),
+      });
+      expect(result.netConsumption).to.equal(55);
+    });
+
+    it('să returneze 0 pentru item fără tranzacții', async () => {
+      const result = await transactionModel.getItemConsumption('inexistent');
+      expect(result.totalOut).to.equal(0);
+      expect(result.totalLoss).to.equal(0);
+      expect(result.netConsumption).to.equal(0);
+    });
+
+    it('să respingă itemId gol', async () => {
+      try {
+        await transactionModel.getItemConsumption('');
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.code).to.equal('INVALID_ITEM_ID');
+      }
+    });
+  });
+});

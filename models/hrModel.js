@@ -2,116 +2,15 @@
 
 // ---------------------------------------------------------------------------
 // Model HR (Human Resources) – GastroHub
-// Model NeDB pentru pontaj angajați (check-in/out) și salarii brute.
+// Model pentru pontaj angajați (check-in/out) și salarii brute.
 // Câmpuri: employeeId, type (checkIn/checkOut), timestamp, locationId,
 //          locationType, note, userId, tenantId, salaryData, createdAt
+//
+// Compatibilitate: config/db.js (NeDB) – colecțiile attendance și salaries.
 // ---------------------------------------------------------------------------
 
-const Datastore = require('nedb');
-const path = require('path');
-const fs = require('fs');
 const { AppError } = require('../middleware/errorHandler');
-
-// ---------------------------------------------------------------------------
-// Configurare colecții separate pentru pontaj și salarii
-// ---------------------------------------------------------------------------
-
-/**
- * Determină calea absolută către directorul de date.
- * Citeşte variabila de mediu `DB_PATH` sau implicit `./data/`.
- */
-function resolveDataPath() {
-  const rel = process.env.DB_PATH || './data';
-  return path.resolve(rel);
-}
-
-/**
- * Asigură existenţa directorului de date (creare recursivă dacă nu există).
- */
-function ensureDataDir(dirPath) {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-}
-
-function isTestEnv() {
-  return process.env.NODE_ENV === 'test';
-}
-
-const dataDir = resolveDataPath();
-ensureDataDir(dataDir);
-
-/**
- * Colecţia de pontaje (attendance).
- * Fişierul pe disc: <dataDir>/attendance.db
- * În mediu de test se folosește baza în-memory.
- */
-const attendance = new Datastore({
-  filename: isTestEnv() ? undefined : path.join(dataDir, 'attendance.db'),
-  autoload: true,
-  timestampData: false,
-});
-
-/**
- * Colecţia de salarii brute (gross salary records).
- * Fişierul pe disc: <dataDir>/salaries.db
- * În mediu de test se folosește baza în-memory.
- */
-const salaries = new Datastore({
-  filename: isTestEnv() ? undefined : path.join(dataDir, 'salaries.db'),
-  autoload: true,
-  timestampData: false,
-});
-
-// ---------------------------------------------------------------------------
-// Indexuri – attendance
-// ---------------------------------------------------------------------------
-
-attendance.ensureIndex({ fieldName: 'employeeId' }, (err) => {
-  if (err) {
-    console.error('[hrModel] Eroare la crearea indexului pe employeeId (attendance):', err.message);
-  }
-});
-
-attendance.ensureIndex({ fieldName: 'tenantId' }, (err) => {
-  if (err) {
-    console.error('[hrModel] Eroare la crearea indexului pe tenantId (attendance):', err.message);
-  }
-});
-
-attendance.ensureIndex({ fieldName: 'type' }, (err) => {
-  if (err) {
-    console.error('[hrModel] Eroare la crearea indexului pe type (attendance):', err.message);
-  }
-});
-
-attendance.ensureIndex({ fieldName: 'timestamp' }, (err) => {
-  if (err) {
-    console.error('[hrModel] Eroare la crearea indexului pe timestamp (attendance):', err.message);
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Indexuri – salaries
-// ---------------------------------------------------------------------------
-
-salaries.ensureIndex({ fieldName: 'employeeId' }, (err) => {
-  if (err) {
-    console.error('[hrModel] Eroare la crearea indexului pe employeeId (salaries):', err.message);
-  }
-});
-
-salaries.ensureIndex({ fieldName: 'tenantId' }, (err) => {
-  if (err) {
-    console.error('[hrModel] Eroare la crearea indexului pe tenantId (salaries):', err.message);
-  }
-});
-
-salaries.ensureIndex({ fieldName: 'period' }, (err) => {
-  if (err) {
-    console.error('[hrModel] Eroare la crearea indexului pe period (salaries):', err.message);
-  }
-});
+const { attendance, salaries } = require('../config/db');
 
 // ---------------------------------------------------------------------------
 // Constante

@@ -7,6 +7,7 @@
 // ---------------------------------------------------------------------------
 
 const path = require('path');
+const fs = require('fs');
 const Datastore = require('nedb');
 const { tenants, dataDir } = require('./db');
 
@@ -44,7 +45,6 @@ function getTenantDb(tenantSlug, forceNew = false) {
 
   // NeDB creează directorul intermediar dacă nu există la autoload,
   // dar pentru siguranţă încercăm să existe mai întâi directorul tenant-ilor
-  const fs = require('fs');
   if (!fs.existsSync(tenantDir)) {
     fs.mkdirSync(tenantDir, { recursive: true });
   }

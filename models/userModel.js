@@ -4,10 +4,14 @@
 // Model User – GastroHub
 // Definirea structurii, validărilor și operațiilor comune pentru un utilizator.
 // Câmpuri suportate: email, password (hash), role, tenantId, restaurante asociate
+//
+// Compatibilitate duală: SQLite (prin getDb()) cu fallback la NeDB.
 // ---------------------------------------------------------------------------
 
 const bcrypt = require('bcryptjs');
-const { users } = require('../config/db');
+const fs = require('fs');
+const path = require('path');
+const { users, getDb, run, get, all } = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
 
 // ---------------------------------------------------------------------------
@@ -25,6 +29,112 @@ const VALID_ROLES = [
 ];
 
 // ---------------------------------------------------------------------------
+// Marcaj pentru migrarea coloanei restaurante în SQLite (executată o singură
+// dată, la primul apel către orice funcție SQL)
+// ---------------------------------------------------------------------------
+
+let _sqlMigrated = false;
+
+/**
+ * Asigură că tabela users din SQLite conține coloana `restaurante` (JSON TEXT).
+ * Se execută o singură dată, idempotent.
+ */
+function _ensureSqlSchema() {
+  if (_sqlMigrated) return;
+  try {
+    const db = getDb();
+    // Verifică dacă există coloana restaurante
+    const tableInfo = db.exec('PRAGMA table_info(users)');
+    if (tableInfo.length > 0) {
+      const columns = tableInfo[0].values.map(function (row) { return row[1]; });
+      if (columns.indexOf('restaurante') === -1) {
+        db.run("ALTER TABLE users ADD COLUMN restaurante TEXT DEFAULT '[]'");
+        // Persistă modificarea de schemă pe disc
+        const data = db.export();
+        const dataDir = path.resolve(process.env.DB_PATH || './data');
+        if (!fs.existsSync(dataDir)) {
+          fs.mkdirSync(dataDir, { recursive: true });
+        }
+        const dbPath = path.join(dataDir, 'gastrohub.db');
+        const buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+        fs.writeFileSync(dbPath, buffer);
+      }
+    }
+    _sqlMigrated = true;
+  } catch (_e) {
+    // SQLite nu este disponibil – ignorăm; vom folosi NeDB
+    _sqlMigrated = true;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Detecție backend SQLite
+// ---------------------------------------------------------------------------
+
+/**
+ * Returnează `true` dacă SQLite este disponibil și inițializat.
+ * @returns {boolean}
+ */
+function _isSqlAvailable() {
+  try {
+    getDb();
+    _ensureSqlSchema();
+    return true;
+  } catch (_e) {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers de conversie rând SQL → document compatibil NeDB
+// ---------------------------------------------------------------------------
+
+/**
+ * Convertește un rând SQL (id INTEGER) într-un obiect compatibil cu NeDB
+ * (cu _id string).
+ * @param {Object} row
+ * @returns {Object}
+ */
+function _sqlRowToDoc(row) {
+  if (!row) return row;
+  var doc = {};
+  var keys = Object.keys(row);
+  for (var i = 0; i < keys.length; i++) {
+    doc[keys[i]] = row[keys[i]];
+  }
+  doc._id = String(row.id);
+  // Parsează restaurante din JSON dacă există
+  if (typeof doc.restaurante === 'string') {
+    try {
+      doc.restaurante = JSON.parse(doc.restaurante);
+    } catch (_e) {
+      doc.restaurante = [];
+    }
+  }
+  if (!Array.isArray(doc.restaurante)) {
+    doc.restaurante = [];
+  }
+  return doc;
+}
+
+/**
+ * Elimină parola dintr-un document, returnând o copie sigură.
+ * @param {Object} doc
+ * @returns {Object}
+ */
+function _stripPassword(doc) {
+  if (!doc) return doc;
+  var safe = {};
+  var keys = Object.keys(doc);
+  for (var i = 0; i < keys.length; i++) {
+    if (keys[i] !== 'password') {
+      safe[keys[i]] = doc[keys[i]];
+    }
+  }
+  return safe;
+}
+
+// ---------------------------------------------------------------------------
 // Funcții de validare
 // ---------------------------------------------------------------------------
 
@@ -36,7 +146,7 @@ const VALID_ROLES = [
 function isValidEmail(email) {
   if (typeof email !== 'string') return false;
   // Regex simplu pentru validare email
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
 }
 
@@ -62,8 +172,10 @@ function isValidPassword(password) {
 }
 
 // ---------------------------------------------------------------------------
-// Operații pe utilizatori
+// Operații pe utilizatori – SQLite (primar) + NeDB (fallback)
 // ---------------------------------------------------------------------------
+
+// =========================== createUser ====================================
 
 /**
  * Creează un utilizator nou în baza de date.
@@ -79,7 +191,7 @@ function isValidPassword(password) {
  * @throws {AppError} Dacă validarea eșuează
  */
 function createUser(userData) {
-  return new Promise((resolve, reject) => {
+  return new Promise(function (resolve, reject) {
     // -----------------------------------------------------------------------
     // Validare câmpuri obligatorii
     // -----------------------------------------------------------------------
@@ -87,7 +199,11 @@ function createUser(userData) {
       return reject(new AppError('Datele utilizatorului sunt invalide.', 400, 'INVALID_USER_DATA'));
     }
 
-    const { email, password, role, tenantId, restaurante } = userData;
+    var email = userData.email;
+    var password = userData.password;
+    var role = userData.role;
+    var tenantId = userData.tenantId;
+    var restaurante = userData.restaurante;
 
     // Validare email
     if (!email || !isValidEmail(email)) {
@@ -104,36 +220,85 @@ function createUser(userData) {
     }
 
     // Validare rol
-    const finalRole = role || 'client';
+    var finalRole = role || 'client';
     if (!isValidRole(finalRole)) {
-      return reject(new AppError(`Rolul "${finalRole}" nu este valid.`, 400, 'INVALID_ROLE'));
+      return reject(new AppError('Rolul "' + finalRole + '" nu este valid.', 400, 'INVALID_ROLE'));
     }
 
     // Validare tenantId – poate fi null, string sau number
-    const finalTenantId = tenantId !== undefined ? tenantId : null;
+    var finalTenantId = tenantId !== undefined ? tenantId : null;
 
     // Validare restaurante – trebuie să fie array
-    const finalRestaurante = Array.isArray(restaurante) ? restaurante : [];
+    var finalRestaurante = Array.isArray(restaurante) ? restaurante : [];
 
     // -----------------------------------------------------------------------
-    // Creare document utilizator
+    // Hash parolă
     // -----------------------------------------------------------------------
-    bcrypt.hash(password, 10, (hashErr, hashedPassword) => {
+    bcrypt.hash(password, 10, function (hashErr, hashedPassword) {
       if (hashErr) {
         return reject(new AppError('Eroare internă la hash-uirea parolei.', 500, 'HASH_ERROR'));
       }
 
-      const userDoc = {
-        email: email.toLowerCase().trim(),
+      var now = new Date().toISOString();
+      var normalizedEmail = email.toLowerCase().trim();
+
+      // -------------------------------------------------------------------
+      // Încercare SQLite
+      // -------------------------------------------------------------------
+      if (_isSqlAvailable()) {
+        try {
+          // Verificare duplicat email
+          var existing = get('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+          if (existing) {
+            return reject(new AppError(
+              'Există deja un cont cu această adresă de email.',
+              409,
+              'DUPLICATE_EMAIL'
+            ));
+          }
+
+          var restauranteJson = JSON.stringify(finalRestaurante);
+          var result = run(
+            'INSERT INTO users (email, password, role, tenantId, restaurante, createdAt, updatedAt) ' +
+            'VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [normalizedEmail, hashedPassword, finalRole, finalTenantId, restauranteJson, now, now]
+          );
+
+          var newId = result.lastInsertRowid;
+          var newRow = get('SELECT * FROM users WHERE id = ?', [newId]);
+          var doc = _sqlRowToDoc(newRow);
+          return resolve(_stripPassword(doc));
+        } catch (sqlErr) {
+          // Duplicat email prins de constraint-ul UNIQUE
+          if (sqlErr.message && sqlErr.message.indexOf('UNIQUE') !== -1) {
+            return reject(new AppError(
+              'Există deja un cont cu această adresă de email.',
+              409,
+              'DUPLICATE_EMAIL'
+            ));
+          }
+          return reject(new AppError(
+            'Eroare la crearea utilizatorului (SQL): ' + sqlErr.message,
+            500,
+            'DB_INSERT_ERROR'
+          ));
+        }
+      }
+
+      // -------------------------------------------------------------------
+      // Fallback NeDB
+      // -------------------------------------------------------------------
+      var userDoc = {
+        email: normalizedEmail,
         password: hashedPassword,
         role: finalRole,
         tenantId: finalTenantId,
         restaurante: finalRestaurante,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: now,
+        updatedAt: now,
       };
 
-      users.insert(userDoc, (insertErr, newUser) => {
+      users.insert(userDoc, function (insertErr, newUser) {
         if (insertErr) {
           // Eroare de unicitate (email duplicat)
           if (insertErr.errorType === 'uniqueViolated') {
@@ -144,20 +309,27 @@ function createUser(userData) {
             ));
           }
           return reject(new AppError(
-            `Eroare la crearea utilizatorului: ${insertErr.message}`,
+            'Eroare la crearea utilizatorului: ' + insertErr.message,
             500,
             'DB_INSERT_ERROR'
           ));
         }
 
         // Returnăm utilizatorul fără parolă
-        const safeUser = { ...newUser };
-        delete safeUser.password;
+        var safeUser = {};
+        var keys = Object.keys(newUser);
+        for (var k = 0; k < keys.length; k++) {
+          if (keys[k] !== 'password') {
+            safeUser[keys[k]] = newUser[keys[k]];
+          }
+        }
         resolve(safeUser);
       });
     });
   });
 }
+
+// ========================= findUserByEmail ==================================
 
 /**
  * Găsește un utilizator după adresa de email.
@@ -165,15 +337,32 @@ function createUser(userData) {
  * @returns {Promise<Object|null>} Documentul utilizatorului (cu tot cu password hash) sau null
  */
 function findUserByEmail(email) {
-  return new Promise((resolve, reject) => {
+  return new Promise(function (resolve, reject) {
     if (!email || !isValidEmail(email)) {
       return reject(new AppError('Adresa de email este invalidă.', 400, 'INVALID_EMAIL'));
     }
 
-    users.findOne({ email: email.toLowerCase().trim() }, (err, user) => {
+    var normalizedEmail = email.toLowerCase().trim();
+
+    // ---- SQLite ----
+    if (_isSqlAvailable()) {
+      try {
+        var row = get('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
+        return resolve(row ? _sqlRowToDoc(row) : null);
+      } catch (sqlErr) {
+        return reject(new AppError(
+          'Eroare la căutarea utilizatorului (SQL): ' + sqlErr.message,
+          500,
+          'DB_QUERY_ERROR'
+        ));
+      }
+    }
+
+    // ---- NeDB ----
+    users.findOne({ email: normalizedEmail }, function (err, user) {
       if (err) {
         return reject(new AppError(
-          `Eroare la căutarea utilizatorului: ${err.message}`,
+          'Eroare la căutarea utilizatorului: ' + err.message,
           500,
           'DB_QUERY_ERROR'
         ));
@@ -183,21 +372,46 @@ function findUserByEmail(email) {
   });
 }
 
+// ========================== findUserById ====================================
+
 /**
  * Găsește un utilizator după ID-ul său.
- * @param {string} id - ID-ul NeDB
+ * @param {string} id - ID-ul (NeDB _id sau SQLite id convertit la string)
  * @returns {Promise<Object|null>} Documentul utilizatorului (cu tot cu password hash) sau null
  */
 function findUserById(id) {
-  return new Promise((resolve, reject) => {
+  return new Promise(function (resolve, reject) {
     if (!id) {
       return reject(new AppError('ID-ul utilizatorului este invalid.', 400, 'INVALID_USER_ID'));
     }
 
-    users.findOne({ _id: id }, (err, user) => {
+    // ---- SQLite ----
+    if (_isSqlAvailable()) {
+      try {
+        // În SQLite id-ul este INTEGER; încercăm conversia
+        var numericId = parseInt(id, 10);
+        var row;
+        if (isNaN(numericId)) {
+          // Dacă nu e numeric, căutăm ca string (compatibilitate)
+          row = get('SELECT * FROM users WHERE CAST(id AS TEXT) = ?', [String(id)]);
+        } else {
+          row = get('SELECT * FROM users WHERE id = ?', [numericId]);
+        }
+        return resolve(row ? _sqlRowToDoc(row) : null);
+      } catch (sqlErr) {
+        return reject(new AppError(
+          'Eroare la căutarea utilizatorului (SQL): ' + sqlErr.message,
+          500,
+          'DB_QUERY_ERROR'
+        ));
+      }
+    }
+
+    // ---- NeDB ----
+    users.findOne({ _id: id }, function (err, user) {
       if (err) {
         return reject(new AppError(
-          `Eroare la căutarea utilizatorului: ${err.message}`,
+          'Eroare la căutarea utilizatorului: ' + err.message,
           500,
           'DB_QUERY_ERROR'
         ));
@@ -206,6 +420,8 @@ function findUserById(id) {
     });
   });
 }
+
+// ======================= findUsersByTenant ==================================
 
 /**
  * Găsește toți utilizatorii dintr-un tenant.
@@ -213,31 +429,49 @@ function findUserById(id) {
  * @returns {Promise<Array>} Lista de utilizatori (fără password hash)
  */
 function findUsersByTenant(tenantId) {
-  return new Promise((resolve, reject) => {
+  return new Promise(function (resolve, reject) {
     if (!tenantId) {
       return reject(new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID'));
     }
 
-    users.find({ tenantId }, (err, userList) => {
+    // ---- SQLite ----
+    if (_isSqlAvailable()) {
+      try {
+        var rows = all('SELECT * FROM users WHERE tenantId = ?', [tenantId]);
+        var safeUsers = rows.map(function (r) {
+          return _stripPassword(_sqlRowToDoc(r));
+        });
+        return resolve(safeUsers);
+      } catch (sqlErr) {
+        return reject(new AppError(
+          'Eroare la căutarea utilizatorilor (SQL): ' + sqlErr.message,
+          500,
+          'DB_QUERY_ERROR'
+        ));
+      }
+    }
+
+    // ---- NeDB ----
+    users.find({ tenantId: tenantId }, function (err, userList) {
       if (err) {
         return reject(new AppError(
-          `Eroare la căutarea utilizatorilor: ${err.message}`,
+          'Eroare la căutarea utilizatorilor: ' + err.message,
           500,
           'DB_QUERY_ERROR'
         ));
       }
 
       // Eliminăm parolele din rezultate
-      const safeUsers = (userList || []).map((u) => {
-        const safe = { ...u };
-        delete safe.password;
-        return safe;
+      var safeUsers = (userList || []).map(function (u) {
+        return _stripPassword(u);
       });
 
       resolve(safeUsers);
     });
   });
 }
+
+// ======================== findUsersByRole ===================================
 
 /**
  * Găsește toți utilizatorii după un rol specific.
@@ -245,30 +479,48 @@ function findUsersByTenant(tenantId) {
  * @returns {Promise<Array>} Lista de utilizatori (fără password hash)
  */
 function findUsersByRole(role) {
-  return new Promise((resolve, reject) => {
+  return new Promise(function (resolve, reject) {
     if (!role || !isValidRole(role)) {
-      return reject(new AppError(`Rolul "${role}" nu este valid.`, 400, 'INVALID_ROLE'));
+      return reject(new AppError('Rolul "' + role + '" nu este valid.', 400, 'INVALID_ROLE'));
     }
 
-    users.find({ role }, (err, userList) => {
+    // ---- SQLite ----
+    if (_isSqlAvailable()) {
+      try {
+        var rows = all('SELECT * FROM users WHERE role = ?', [role]);
+        var safeUsers = rows.map(function (r) {
+          return _stripPassword(_sqlRowToDoc(r));
+        });
+        return resolve(safeUsers);
+      } catch (sqlErr) {
+        return reject(new AppError(
+          'Eroare la căutarea utilizatorilor (SQL): ' + sqlErr.message,
+          500,
+          'DB_QUERY_ERROR'
+        ));
+      }
+    }
+
+    // ---- NeDB ----
+    users.find({ role: role }, function (err, userList) {
       if (err) {
         return reject(new AppError(
-          `Eroare la căutarea utilizatorilor: ${err.message}`,
+          'Eroare la căutarea utilizatorilor: ' + err.message,
           500,
           'DB_QUERY_ERROR'
         ));
       }
 
-      const safeUsers = (userList || []).map((u) => {
-        const safe = { ...u };
-        delete safe.password;
-        return safe;
+      var safeUsers = (userList || []).map(function (u) {
+        return _stripPassword(u);
       });
 
       resolve(safeUsers);
     });
   });
 }
+
+// ======================== comparePassword ===================================
 
 /**
  * Verifică dacă o parolă corespunde hash-ului stocat.
@@ -277,12 +529,12 @@ function findUsersByRole(role) {
  * @returns {Promise<boolean>}
  */
 function comparePassword(plainPassword, hashedPassword) {
-  return new Promise((resolve, reject) => {
+  return new Promise(function (resolve, reject) {
     if (!plainPassword || !hashedPassword) {
       return resolve(false);
     }
 
-    bcrypt.compare(plainPassword, hashedPassword, (err, result) => {
+    bcrypt.compare(plainPassword, hashedPassword, function (err, result) {
       if (err) {
         return reject(new AppError('Eroare la verificarea parolei.', 500, 'BCRYPT_ERROR'));
       }
@@ -291,6 +543,8 @@ function comparePassword(plainPassword, hashedPassword) {
   });
 }
 
+// ======================== updatePassword ====================================
+
 /**
  * Actualizează parola unui utilizator.
  * @param {string} userId - ID-ul utilizatorului
@@ -298,7 +552,7 @@ function comparePassword(plainPassword, hashedPassword) {
  * @returns {Promise<Object>} Utilizatorul actualizat (fără password hash)
  */
 function updatePassword(userId, newPassword) {
-  return new Promise((resolve, reject) => {
+  return new Promise(function (resolve, reject) {
     if (!userId) {
       return reject(new AppError('ID-ul utilizatorului este invalid.', 400, 'INVALID_USER_ID'));
     }
@@ -311,19 +565,59 @@ function updatePassword(userId, newPassword) {
       ));
     }
 
-    bcrypt.hash(newPassword, 10, (hashErr, hashedPassword) => {
+    bcrypt.hash(newPassword, 10, function (hashErr, hashedPassword) {
       if (hashErr) {
         return reject(new AppError('Eroare internă la hash-uirea parolei.', 500, 'HASH_ERROR'));
       }
 
+      var now = new Date().toISOString();
+
+      // ---- SQLite ----
+      if (_isSqlAvailable()) {
+        try {
+          var numericId = parseInt(userId, 10);
+          var result;
+          if (!isNaN(numericId)) {
+            result = run(
+              'UPDATE users SET password = ?, updatedAt = ? WHERE id = ?',
+              [hashedPassword, now, numericId]
+            );
+          } else {
+            result = run(
+              'UPDATE users SET password = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ?',
+              [hashedPassword, now, String(userId)]
+            );
+          }
+
+          if (result.changes === 0) {
+            return reject(new AppError('Utilizatorul nu a fost găsit.', 404, 'USER_NOT_FOUND'));
+          }
+
+          var updatedRow;
+          if (!isNaN(numericId)) {
+            updatedRow = get('SELECT * FROM users WHERE id = ?', [numericId]);
+          } else {
+            updatedRow = get('SELECT * FROM users WHERE CAST(id AS TEXT) = ?', [String(userId)]);
+          }
+          return resolve(_stripPassword(_sqlRowToDoc(updatedRow)));
+        } catch (sqlErr) {
+          return reject(new AppError(
+            'Eroare la actualizarea parolei (SQL): ' + sqlErr.message,
+            500,
+            'DB_UPDATE_ERROR'
+          ));
+        }
+      }
+
+      // ---- NeDB ----
       users.update(
         { _id: userId },
-        { $set: { password: hashedPassword, updatedAt: new Date().toISOString() } },
+        { $set: { password: hashedPassword, updatedAt: now } },
         { returnUpdatedDocs: true },
-        (updateErr, numUpdated, updatedUser) => {
+        function (updateErr, numUpdated, updatedUser) {
           if (updateErr) {
             return reject(new AppError(
-              `Eroare la actualizarea parolei: ${updateErr.message}`,
+              'Eroare la actualizarea parolei: ' + updateErr.message,
               500,
               'DB_UPDATE_ERROR'
             ));
@@ -333,14 +627,14 @@ function updatePassword(userId, newPassword) {
             return reject(new AppError('Utilizatorul nu a fost găsit.', 404, 'USER_NOT_FOUND'));
           }
 
-          const safeUser = { ...updatedUser };
-          delete safeUser.password;
-          resolve(safeUser);
+          resolve(_stripPassword(updatedUser));
         }
       );
     });
   });
 }
+
+// =========================== updateRole =====================================
 
 /**
  * Actualizează rolul unui utilizator.
@@ -349,23 +643,63 @@ function updatePassword(userId, newPassword) {
  * @returns {Promise<Object>} Utilizatorul actualizat (fără password hash)
  */
 function updateRole(userId, newRole) {
-  return new Promise((resolve, reject) => {
+  return new Promise(function (resolve, reject) {
     if (!userId) {
       return reject(new AppError('ID-ul utilizatorului este invalid.', 400, 'INVALID_USER_ID'));
     }
 
     if (!newRole || !isValidRole(newRole)) {
-      return reject(new AppError(`Rolul "${newRole}" nu este valid.`, 400, 'INVALID_ROLE'));
+      return reject(new AppError('Rolul "' + newRole + '" nu este valid.', 400, 'INVALID_ROLE'));
     }
 
+    var now = new Date().toISOString();
+
+    // ---- SQLite ----
+    if (_isSqlAvailable()) {
+      try {
+        var numericId = parseInt(userId, 10);
+        var result;
+        if (!isNaN(numericId)) {
+          result = run(
+            'UPDATE users SET role = ?, updatedAt = ? WHERE id = ?',
+            [newRole, now, numericId]
+          );
+        } else {
+          result = run(
+            'UPDATE users SET role = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ?',
+            [newRole, now, String(userId)]
+          );
+        }
+
+        if (result.changes === 0) {
+          return reject(new AppError('Utilizatorul nu a fost găsit.', 404, 'USER_NOT_FOUND'));
+        }
+
+        var updatedRow;
+        if (!isNaN(numericId)) {
+          updatedRow = get('SELECT * FROM users WHERE id = ?', [numericId]);
+        } else {
+          updatedRow = get('SELECT * FROM users WHERE CAST(id AS TEXT) = ?', [String(userId)]);
+        }
+        return resolve(_stripPassword(_sqlRowToDoc(updatedRow)));
+      } catch (sqlErr) {
+        return reject(new AppError(
+          'Eroare la actualizarea rolului (SQL): ' + sqlErr.message,
+          500,
+          'DB_UPDATE_ERROR'
+        ));
+      }
+    }
+
+    // ---- NeDB ----
     users.update(
       { _id: userId },
-      { $set: { role: newRole, updatedAt: new Date().toISOString() } },
+      { $set: { role: newRole, updatedAt: now } },
       { returnUpdatedDocs: true },
-      (updateErr, numUpdated, updatedUser) => {
+      function (updateErr, numUpdated, updatedUser) {
         if (updateErr) {
           return reject(new AppError(
-            `Eroare la actualizarea rolului: ${updateErr.message}`,
+            'Eroare la actualizarea rolului: ' + updateErr.message,
             500,
             'DB_UPDATE_ERROR'
           ));
@@ -375,13 +709,13 @@ function updateRole(userId, newRole) {
           return reject(new AppError('Utilizatorul nu a fost găsit.', 404, 'USER_NOT_FOUND'));
         }
 
-        const safeUser = { ...updatedUser };
-        delete safeUser.password;
-        resolve(safeUser);
+        resolve(_stripPassword(updatedUser));
       }
     );
   });
 }
+
+// ======================== addRestaurante ====================================
 
 /**
  * Asociază restaurante la un utilizator.
@@ -390,7 +724,7 @@ function updateRole(userId, newRole) {
  * @returns {Promise<Object>} Utilizatorul actualizat (fără password hash)
  */
 function addRestaurante(userId, restaurantIds) {
-  return new Promise((resolve, reject) => {
+  return new Promise(function (resolve, reject) {
     if (!userId) {
       return reject(new AppError('ID-ul utilizatorului este invalid.', 400, 'INVALID_USER_ID'));
     }
@@ -403,14 +737,86 @@ function addRestaurante(userId, restaurantIds) {
       ));
     }
 
+    var now = new Date().toISOString();
+
+    // ---- SQLite ----
+    if (_isSqlAvailable()) {
+      try {
+        var numericId = parseInt(userId, 10);
+        // Obține lista curentă
+        var currentRow;
+        if (!isNaN(numericId)) {
+          currentRow = get('SELECT * FROM users WHERE id = ?', [numericId]);
+        } else {
+          currentRow = get('SELECT * FROM users WHERE CAST(id AS TEXT) = ?', [String(userId)]);
+        }
+
+        if (!currentRow) {
+          return reject(new AppError('Utilizatorul nu a fost găsit.', 404, 'USER_NOT_FOUND'));
+        }
+
+        // Parsează restaurantele curente
+        var currentRestaurante = [];
+        if (typeof currentRow.restaurante === 'string') {
+          try {
+            currentRestaurante = JSON.parse(currentRow.restaurante);
+          } catch (_e) {
+            currentRestaurante = [];
+          }
+        }
+        if (!Array.isArray(currentRestaurante)) currentRestaurante = [];
+
+        // Adaugă fără duplicate (union)
+        var updatedRestaurante = currentRestaurante.slice();
+        for (var i = 0; i < restaurantIds.length; i++) {
+          if (updatedRestaurante.indexOf(restaurantIds[i]) === -1) {
+            updatedRestaurante.push(restaurantIds[i]);
+          }
+        }
+
+        var restauranteJson = JSON.stringify(updatedRestaurante);
+        var result;
+        if (!isNaN(numericId)) {
+          result = run(
+            'UPDATE users SET restaurante = ?, updatedAt = ? WHERE id = ?',
+            [restauranteJson, now, numericId]
+          );
+        } else {
+          result = run(
+            'UPDATE users SET restaurante = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ?',
+            [restauranteJson, now, String(userId)]
+          );
+        }
+
+        if (result.changes === 0) {
+          return reject(new AppError('Utilizatorul nu a fost găsit.', 404, 'USER_NOT_FOUND'));
+        }
+
+        var updatedRow;
+        if (!isNaN(numericId)) {
+          updatedRow = get('SELECT * FROM users WHERE id = ?', [numericId]);
+        } else {
+          updatedRow = get('SELECT * FROM users WHERE CAST(id AS TEXT) = ?', [String(userId)]);
+        }
+        return resolve(_stripPassword(_sqlRowToDoc(updatedRow)));
+      } catch (sqlErr) {
+        return reject(new AppError(
+          'Eroare la asocierea restaurantelor (SQL): ' + sqlErr.message,
+          500,
+          'DB_UPDATE_ERROR'
+        ));
+      }
+    }
+
+    // ---- NeDB ----
     users.update(
       { _id: userId },
-      { $addToSet: { restaurante: { $each: restaurantIds } }, $set: { updatedAt: new Date().toISOString() } },
+      { $addToSet: { restaurante: { $each: restaurantIds } }, $set: { updatedAt: now } },
       { returnUpdatedDocs: true },
-      (updateErr, numUpdated, updatedUser) => {
+      function (updateErr, numUpdated, updatedUser) {
         if (updateErr) {
           return reject(new AppError(
-            `Eroare la asocierea restaurantelor: ${updateErr.message}`,
+            'Eroare la asocierea restaurantelor: ' + updateErr.message,
             500,
             'DB_UPDATE_ERROR'
           ));
@@ -420,13 +826,13 @@ function addRestaurante(userId, restaurantIds) {
           return reject(new AppError('Utilizatorul nu a fost găsit.', 404, 'USER_NOT_FOUND'));
         }
 
-        const safeUser = { ...updatedUser };
-        delete safeUser.password;
-        resolve(safeUser);
+        resolve(_stripPassword(updatedUser));
       }
     );
   });
 }
+
+// =========================== deleteUser =====================================
 
 /**
  * Șterge un utilizator după ID.
@@ -434,15 +840,41 @@ function addRestaurante(userId, restaurantIds) {
  * @returns {Promise<boolean>} true dacă a fost șters
  */
 function deleteUser(userId) {
-  return new Promise((resolve, reject) => {
+  return new Promise(function (resolve, reject) {
     if (!userId) {
       return reject(new AppError('ID-ul utilizatorului este invalid.', 400, 'INVALID_USER_ID'));
     }
 
-    users.remove({ _id: userId }, {}, (removeErr, numRemoved) => {
+    // ---- SQLite ----
+    if (_isSqlAvailable()) {
+      try {
+        var numericId = parseInt(userId, 10);
+        var result;
+        if (!isNaN(numericId)) {
+          result = run('DELETE FROM users WHERE id = ?', [numericId]);
+        } else {
+          result = run('DELETE FROM users WHERE CAST(id AS TEXT) = ?', [String(userId)]);
+        }
+
+        if (result.changes === 0) {
+          return reject(new AppError('Utilizatorul nu a fost găsit.', 404, 'USER_NOT_FOUND'));
+        }
+
+        return resolve(true);
+      } catch (sqlErr) {
+        return reject(new AppError(
+          'Eroare la ștergerea utilizatorului (SQL): ' + sqlErr.message,
+          500,
+          'DB_DELETE_ERROR'
+        ));
+      }
+    }
+
+    // ---- NeDB ----
+    users.remove({ _id: userId }, {}, function (removeErr, numRemoved) {
       if (removeErr) {
         return reject(new AppError(
-          `Eroare la ștergerea utilizatorului: ${removeErr.message}`,
+          'Eroare la ștergerea utilizatorului: ' + removeErr.message,
           500,
           'DB_DELETE_ERROR'
         ));
@@ -457,21 +889,38 @@ function deleteUser(userId) {
   });
 }
 
+// ======================= countUsersByTenant =================================
+
 /**
  * Obține numărul total de utilizatori dintr-un tenant.
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<number>}
  */
 function countUsersByTenant(tenantId) {
-  return new Promise((resolve, reject) => {
+  return new Promise(function (resolve, reject) {
     if (!tenantId) {
       return resolve(0);
     }
 
-    users.count({ tenantId }, (err, count) => {
+    // ---- SQLite ----
+    if (_isSqlAvailable()) {
+      try {
+        var row = get('SELECT COUNT(*) AS cnt FROM users WHERE tenantId = ?', [tenantId]);
+        return resolve(row ? row.cnt : 0);
+      } catch (sqlErr) {
+        return reject(new AppError(
+          'Eroare la numărarea utilizatorilor (SQL): ' + sqlErr.message,
+          500,
+          'DB_COUNT_ERROR'
+        ));
+      }
+    }
+
+    // ---- NeDB ----
+    users.count({ tenantId: tenantId }, function (err, count) {
       if (err) {
         return reject(new AppError(
-          `Eroare la numărarea utilizatorilor: ${err.message}`,
+          'Eroare la numărarea utilizatorilor: ' + err.message,
           500,
           'DB_COUNT_ERROR'
         ));
@@ -487,23 +936,30 @@ function countUsersByTenant(tenantId) {
 
 module.exports = {
   // Validare
-  isValidEmail,
-  isValidRole,
-  isValidPassword,
-  VALID_ROLES,
+  isValidEmail: isValidEmail,
+  isValidRole: isValidRole,
+  isValidPassword: isValidPassword,
+  VALID_ROLES: VALID_ROLES,
 
   // Operații CRUD
-  createUser,
-  findUserByEmail,
-  findUserById,
-  findUsersByTenant,
-  findUsersByRole,
-  deleteUser,
+  createUser: createUser,
+  findUserByEmail: findUserByEmail,
+  findUserById: findUserById,
+  findUsersByTenant: findUsersByTenant,
+  findUsersByRole: findUsersByRole,
+  deleteUser: deleteUser,
 
   // Operații specifice
-  comparePassword,
-  updatePassword,
-  updateRole,
-  addRestaurante,
-  countUsersByTenant,
+  comparePassword: comparePassword,
+  updatePassword: updatePassword,
+  updateRole: updateRole,
+  addRestaurante: addRestaurante,
+  countUsersByTenant: countUsersByTenant,
+
+  // Expunere pentru testare și debugging
+  _isSqlAvailable: _isSqlAvailable,
+  _sqlRowToDoc: _sqlRowToDoc,
+  _stripPassword: _stripPassword,
+  _ensureSqlSchema: _ensureSqlSchema,
+  _resetSqlMigrated: function () { _sqlMigrated = false; },
 };

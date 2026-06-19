@@ -30,7 +30,7 @@
  */
 
 const { AppError } = require('./errorHandler');
-const { getTenantConfig, getTenantDb } = require('../config/tenant');
+const { getTenantConfig, getTenantDb, DEFAULT_TENANT_CONFIG } = require('../config/tenant');
 const { tenants } = require('../config/db');
 
 // ---------------------------------------------------------------------------
@@ -261,10 +261,12 @@ async function resolveTenant(req, res, next) {
       req.tenantConfig = await getTenantConfig(slug);
     } catch (configErr) {
       // Dacă getTenantConfig eșuează, folosim config-ul din document
+      // îmbinat cu valorile implicite din config/tenant.js
       req.tenantConfig = {
+        ...DEFAULT_TENANT_CONFIG,
+        ...(tenantDoc.config || {}),
         slug: tenantDoc.slug,
         name: tenantDoc.name,
-        ...(tenantDoc.config || {}),
       };
     }
 
@@ -340,9 +342,10 @@ async function optionalTenant(req, res, next) {
       req.tenantConfig = await getTenantConfig(slug);
     } catch (configErr) {
       req.tenantConfig = {
+        ...DEFAULT_TENANT_CONFIG,
+        ...(tenantDoc.config || {}),
         slug: tenantDoc.slug,
         name: tenantDoc.name,
-        ...(tenantDoc.config || {}),
       };
     }
 

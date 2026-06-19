@@ -4,9 +4,27 @@
 // Model Loyalty – GastroHub
 // Gestionarea punctelor de loialitate și a cupoanelor de reduceri
 // Suportă: acumulare puncte, validare cupoane, expirare automată
+// Model în-memory (Map), fără dependențe externe directe.
 // ---------------------------------------------------------------------------
 
-const { v4: uuidv4 } = require('uuid');
+// ---------------------------------------------------------------------------
+// Generator intern de ID-uri unice (înlocuiește uuid)
+// ---------------------------------------------------------------------------
+
+/**
+ * Generează un ID unic fără dependențe externe.
+ * Bazat pe timestamp și entropie Math.random.
+ * @returns {string} ID unic
+ */
+function generateId() {
+  return (
+    Date.now().toString(36) +
+    '-' +
+    Math.random().toString(36).substring(2, 10) +
+    '-' +
+    Math.random().toString(36).substring(2, 6)
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Configurare
@@ -258,7 +276,7 @@ function calculateExpiryDate() {
  */
 function generateCouponCode() {
   const prefix = 'GH';
-  const unique = uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase();
+  const unique = generateId().replace(/-/g, '').substring(0, 8).toUpperCase();
   return `${prefix}-${unique}`;
 }
 
@@ -298,7 +316,7 @@ function createCoupon(userId, options = {}) {
 
     const couponCode = generateCouponCode();
     const coupon = {
-      id: uuidv4(),
+      id: generateId(),
       code: couponCode,
       userId,
       discountPercent,

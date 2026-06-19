@@ -6,7 +6,11 @@
 // Suportă: înregistrare clienți, autentificare portal, gestionare profil,
 // istoric comenzi/rezervări, adrese livrare, preferințe.
 // Câmpuri suportate: email, password (hash), nume, telefon, adrese,
-// preferințe, dataÎnregistrării, ultimaAutentificare, status, tenantId
+// preferințe, dataÎnregistrării, ultimaAutentificare, status, tenantId,
+// type (pentru diferențierea documentelor în DB-ul per-tenant).
+//
+// Compatibilitate: config/db.js (NeDB + SQLite) și config/tenant.js
+// (izolare multi-tenant cu DB per organizație).
 // ---------------------------------------------------------------------------
 
 const bcrypt = require('bcryptjs');
@@ -14,10 +18,38 @@ const { v4: uuidv4 } = require('uuid');
 const { AppError } = require('../middleware/errorHandler');
 
 // ---------------------------------------------------------------------------
-// Statusuri valide pentru un client
+// Configurări externe — compatibilitate cu config/db.js și config/tenant.js
 // ---------------------------------------------------------------------------
 
+const { getTenantDb, getTenantConfig, DEFAULT_TENANT_CONFIG } = require('../config/tenant');
+const {
+  users,
+  tenants,
+  restaurants,
+  hotels,
+  reservations,
+  inventoryItems,
+  inventoryTransactions,
+  suppliers,
+  deliveries,
+  dataDir,
+  run,
+  get,
+  all,
+} = require('../config/db');
+
+// ---------------------------------------------------------------------------
+// Constante
+// ---------------------------------------------------------------------------
+
+/** Tipul de document în colecția per-tenant (diferențiere multi-tip). */
+const DOC_TYPE = 'customer';
+
+/** Statusuri valide pentru un client */
 const VALID_CUSTOMER_STATUSES = ['active', 'inactive', 'suspended', 'deleted'];
+
+/** Cache intern pentru instanțele NeDB per-tenant (complementar celui din config/tenant.js). */
+const _customerDbCache = new Map();
 
 // ---------------------------------------------------------------------------
 // Funcții de validare
@@ -92,13 +124,60 @@ function isValidPositiveNumber(val) {
 
 /**
  * Obține colecția NeDB pentru clienții unui tenant.
- * Folosește baza de date per-tenant din config/tenant.js.
- * @param {string} tenantId
- * @returns {Datastore}
+ * Folosește baza de date per-tenant din config/tenant.js,
+ * adăugând un index pe `email` dacă acesta nu există deja.
+ *
+ * @param {string} tenantSlug - Identificatorul unic al tenant-ului (slug)
+ * @param {boolean} [forceNew=false] - Dacă `true`, ignoră cache-ul local
+ * @returns {Datastore} Instanța NeDB pentru acel tenant
  */
-function getCustomersDb(tenantId) {
-  const { getTenantDb } = require('../config/tenant');
-  return getTenantDb(tenantId);
+function getCustomersDb(tenantSlug, forceNew = false) {
+  // Validare parametru
+  if (!tenantSlug || typeof tenantSlug !== 'string') {
+    throw new Error('[customerModel] getCustomersDb: tenantSlug trebuie să fie un string nevid.');
+  }
+
+  // Cache local (complementar cache-ului din config/tenant.js)
+  const cacheKey = `customers:${tenantSlug}`;
+  if (!forceNew && _customerDbCache.has(cacheKey)) {
+    return _customerDbCache.get(cacheKey);
+  }
+
+  // Obține instanța per-tenant (delegare către config/tenant.js)
+  const db = getTenantDb(tenantSlug, forceNew);
+
+  // Asigură indexarea pe `email` (unicitate în cadrul tenant-ului + tip document)
+  db.ensureIndex({ fieldName: 'email', sparse: true }, (err) => {
+    if (err) {
+      console.error(`[customerModel] Eroare index email pentru ${tenantSlug}:`, err.message);
+    }
+  });
+
+  // Asigură indexarea pe `type` (diferențiere documente per-tip în DB-ul multi-colecție)
+  db.ensureIndex({ fieldName: 'type', sparse: true }, (err) => {
+    if (err) {
+      console.error(`[customerModel] Eroare index type pentru ${tenantSlug}:`, err.message);
+    }
+  });
+
+  // Asigură index compus pe tenantId + status pentru căutări rapide
+  db.ensureIndex({ fieldName: 'tenantId_status', fieldName: ['tenantId', 'status'] }, (err) => {
+    if (err) {
+      console.error(`[customerModel] Eroare index tenantId+status pentru ${tenantSlug}:`, err.message);
+    }
+  });
+
+  _customerDbCache.set(cacheKey, db);
+  return db;
+}
+
+/**
+ * Invalidare cache pentru un tenant (util la ștergerea tenant-ului sau reîncărcare).
+ * @param {string} tenantSlug - Identificatorul unic al tenant-ului
+ */
+function invalidateCustomerDbCache(tenantSlug) {
+  const cacheKey = `customers:${tenantSlug}`;
+  _customerDbCache.delete(cacheKey);
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +196,7 @@ function getCustomersDb(tenantId) {
  * @param {Array} [customerData.adrese=[]] - Lista de adrese
  * @param {Object} [customerData.preferinte={}] - Preferințe client
  * @param {string} [customerData.status='active'] - Statusul clientului
- * @param {string} customerData.tenantId - ID-ul tenant-ului (obligatoriu)
+ * @param {string} customerData.tenantId - ID-ul tenant-ului (obligatoriu) – compatibil și cu tenantSlug
  * @param {string} [customerData.restaurantId] - ID-ul restaurantului preferat
  * @param {string} [customerData.hotelId] - ID-ul hotelului preferat
  * @returns {Promise<Object>} Documentul clientului creat (fără password hash)
@@ -145,7 +224,7 @@ function createCustomer(customerData) {
       hotelId,
     } = customerData;
 
-    // Validare tenantId
+    // Validare tenantId (slug)
     if (!tenantId) {
       return reject(new AppError(
         'ID-ul tenant-ului este obligatoriu.',
@@ -256,7 +335,7 @@ function createCustomer(customerData) {
     // Verificare dacă email-ul există deja în acest tenant
     // -----------------------------------------------------------------------
     const customersDb = getCustomersDb(tenantId);
-    customersDb.findOne({ email: email.toLowerCase().trim(), tenantId }, (findErr, existingCustomer) => {
+    customersDb.findOne({ email: email.toLowerCase().trim(), tenantId, type: DOC_TYPE }, (findErr, existingCustomer) => {
       if (findErr) {
         return reject(new AppError(
           `Eroare la verificarea email-ului: ${findErr.message}`,
@@ -287,6 +366,7 @@ function createCustomer(customerData) {
         const now = new Date().toISOString();
 
         const customerDoc = {
+          type: DOC_TYPE,
           email: email.toLowerCase().trim(),
           password: hashedPassword,
           nume: nume.trim(),
@@ -325,7 +405,7 @@ function createCustomer(customerData) {
 /**
  * Găsește un client după ID.
  * @param {string} id - ID-ul NeDB
- * @param {string} tenantId - ID-ul tenant-ului
+ * @param {string} tenantId - ID-ul tenant-ului (slug)
  * @returns {Promise<Object|null>} Documentul clientului (cu tot cu password hash) sau null
  */
 function findCustomerById(id, tenantId) {
@@ -339,7 +419,7 @@ function findCustomerById(id, tenantId) {
     }
 
     const customersDb = getCustomersDb(tenantId);
-    customersDb.findOne({ _id: id, tenantId }, (err, customer) => {
+    customersDb.findOne({ _id: id, tenantId, type: DOC_TYPE }, (err, customer) => {
       if (err) {
         return reject(new AppError(
           `Eroare la căutarea clientului: ${err.message}`,
@@ -355,7 +435,7 @@ function findCustomerById(id, tenantId) {
 /**
  * Găsește un client după adresa de email (în cadrul unui tenant).
  * @param {string} email - Adresa de email
- * @param {string} tenantId - ID-ul tenant-ului
+ * @param {string} tenantId - ID-ul tenant-ului (slug)
  * @returns {Promise<Object|null>} Documentul clientului (cu tot cu password hash) sau null
  */
 function findCustomerByEmail(email, tenantId) {
@@ -369,7 +449,7 @@ function findCustomerByEmail(email, tenantId) {
     }
 
     const customersDb = getCustomersDb(tenantId);
-    customersDb.findOne({ email: email.toLowerCase().trim(), tenantId }, (err, customer) => {
+    customersDb.findOne({ email: email.toLowerCase().trim(), tenantId, type: DOC_TYPE }, (err, customer) => {
       if (err) {
         return reject(new AppError(
           `Eroare la căutarea clientului după email: ${err.message}`,
@@ -384,8 +464,8 @@ function findCustomerByEmail(email, tenantId) {
 
 /**
  * Găsește toți clienții dintr-un tenant.
- * @param {string} tenantId - ID-ul tenant-ului
- * @param {Object} [options={}] - Opțiuni de căutare (sort, limit, skip, status)
+ * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @param {Object} [options={}] - Opțiuni de căutare (sort, limit, skip, status, fields)
  * @returns {Promise<Array>} Lista de clienți (fără password hash)
  */
 function findCustomersByTenant(tenantId, options = {}) {
@@ -394,7 +474,7 @@ function findCustomersByTenant(tenantId, options = {}) {
       return reject(new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID'));
     }
 
-    const filter = { tenantId };
+    const filter = { tenantId, type: DOC_TYPE };
 
     // Filtrare opțională după status
     if (options.status) {
@@ -410,6 +490,11 @@ function findCustomersByTenant(tenantId, options = {}) {
 
     const customersDb = getCustomersDb(tenantId);
     let query = customersDb.find(filter);
+
+    // Proiecție câmpuri (dacă se specifică)
+    if (options.fields && typeof options.fields === 'object') {
+      query = query.projection(options.fields);
+    }
 
     // Sortare
     if (options.sort) {
@@ -452,7 +537,7 @@ function findCustomersByTenant(tenantId, options = {}) {
 /**
  * Caută clienți după nume (căutare parțială, case-insensitive).
  * @param {string} searchTerm - Termenul de căutare
- * @param {string} tenantId - ID-ul tenant-ului
+ * @param {string} tenantId - ID-ul tenant-ului (slug)
  * @returns {Promise<Array>} Lista de clienți găsiți (fără password hash)
  */
 function searchCustomersByName(searchTerm, tenantId) {
@@ -472,7 +557,7 @@ function searchCustomersByName(searchTerm, tenantId) {
     const regex = new RegExp(searchTerm.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 
     const customersDb = getCustomersDb(tenantId);
-    customersDb.find({ tenantId, nume: regex })
+    customersDb.find({ tenantId, type: DOC_TYPE, nume: regex })
       .sort({ nume: 1 })
       .exec((err, customerList) => {
         if (err) {
@@ -497,7 +582,7 @@ function searchCustomersByName(searchTerm, tenantId) {
 /**
  * Caută clienți după număr de telefon.
  * @param {string} telefon - Numărul de telefon căutat
- * @param {string} tenantId - ID-ul tenant-ului
+ * @param {string} tenantId - ID-ul tenant-ului (slug)
  * @returns {Promise<Array>} Lista de clienți găsiți (fără password hash)
  */
 function searchCustomersByPhone(telefon, tenantId) {
@@ -515,7 +600,7 @@ function searchCustomersByPhone(telefon, tenantId) {
     }
 
     const customersDb = getCustomersDb(tenantId);
-    customersDb.find({ tenantId, telefon })
+    customersDb.find({ tenantId, type: DOC_TYPE, telefon })
       .sort({ nume: 1 })
       .exec((err, customerList) => {
         if (err) {
@@ -534,6 +619,44 @@ function searchCustomersByPhone(telefon, tenantId) {
 
         resolve(safeCustomers);
       });
+  });
+}
+
+/**
+ * Numără clienții dintr-un tenant (opțional filtrat după status).
+ * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @param {string} [status] - Status opțional pentru filtrare
+ * @returns {Promise<number>} Numărul de clienți
+ */
+function countCustomers(tenantId, status) {
+  return new Promise((resolve, reject) => {
+    if (!tenantId) {
+      return reject(new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID'));
+    }
+
+    const filter = { tenantId, type: DOC_TYPE };
+    if (status) {
+      if (!isValidCustomerStatus(status)) {
+        return reject(new AppError(
+          `Statusul "${status}" nu este valid.`,
+          400,
+          'INVALID_CUSTOMER_STATUS'
+        ));
+      }
+      filter.status = status;
+    }
+
+    const customersDb = getCustomersDb(tenantId);
+    customersDb.count(filter, (err, count) => {
+      if (err) {
+        return reject(new AppError(
+          `Eroare la numărarea clienților: ${err.message}`,
+          500,
+          'DB_QUERY_ERROR'
+        ));
+      }
+      resolve(count);
+    });
   });
 }
 
@@ -566,7 +689,7 @@ function comparePassword(plainPassword, hashedPassword) {
  * Autentifică un client pe portal (verifică email + parolă).
  * @param {string} email - Adresa de email
  * @param {string} password - Parola în clar
- * @param {string} tenantId - ID-ul tenant-ului
+ * @param {string} tenantId - ID-ul tenant-ului (slug)
  * @returns {Promise<Object>} Clientul autentificat (fără password hash)
  * @throws {AppError} Dacă autentificarea eșuează
  */
@@ -589,7 +712,7 @@ function authenticateCustomer(email, password, tenantId) {
     }
 
     const customersDb = getCustomersDb(tenantId);
-    customersDb.findOne({ email: email.toLowerCase().trim(), tenantId }, (err, customer) => {
+    customersDb.findOne({ email: email.toLowerCase().trim(), tenantId, type: DOC_TYPE }, (err, customer) => {
       if (err) {
         return reject(new AppError(
           `Eroare la căutarea clientului: ${err.message}`,
@@ -640,7 +763,7 @@ function authenticateCustomer(email, password, tenantId) {
         // Actualizăm ultima autentificare
         const now = new Date().toISOString();
         customersDb.update(
-          { _id: customer._id },
+          { _id: customer._id, type: DOC_TYPE },
           { $set: { ultimaAutentificare: now, updatedAt: now } },
           {},
           (updateErr) => {
@@ -669,7 +792,7 @@ function authenticateCustomer(email, password, tenantId) {
  * Actualizează profilul unui client (câmpuri permise: nume, telefon, adrese, preferințe).
  * @param {string} id - ID-ul clientului
  * @param {Object} updateData - Câmpurile de actualizat
- * @param {string} tenantId - ID-ul tenant-ului
+ * @param {string} tenantId - ID-ul tenant-ului (slug)
  * @returns {Promise<Object>} Clientul actualizat (fără password hash)
  * @throws {AppError} Dacă validarea eșuează
  */
@@ -794,7 +917,7 @@ function updateCustomerProfile(id, updateData, tenantId) {
 
     const customersDb = getCustomersDb(tenantId);
     customersDb.update(
-      { _id: id, tenantId },
+      { _id: id, tenantId, type: DOC_TYPE },
       { $set: setFields },
       { returnUpdatedDocs: true },
       (updateErr, numUpdated, updatedCustomer) => {
@@ -823,7 +946,7 @@ function updateCustomerProfile(id, updateData, tenantId) {
  * @param {string} id - ID-ul clientului
  * @param {string} currentPassword - Parola curentă (pentru verificare)
  * @param {string} newPassword - Noua parolă
- * @param {string} tenantId - ID-ul tenant-ului
+ * @param {string} tenantId - ID-ul tenant-ului (slug)
  * @returns {Promise<Object>} Clientul actualizat (fără password hash)
  * @throws {AppError} Dacă validarea eșuează
  */
@@ -850,7 +973,7 @@ function updateCustomerPassword(id, currentPassword, newPassword, tenantId) {
     }
 
     const customersDb = getCustomersDb(tenantId);
-    customersDb.findOne({ _id: id, tenantId }, (findErr, customer) => {
+    customersDb.findOne({ _id: id, tenantId, type: DOC_TYPE }, (findErr, customer) => {
       if (findErr) {
         return reject(new AppError(
           `Eroare la căutarea clientului: ${findErr.message}`,
@@ -880,7 +1003,7 @@ function updateCustomerPassword(id, currentPassword, newPassword, tenantId) {
           }
 
           customersDb.update(
-            { _id: id },
+            { _id: id, type: DOC_TYPE },
             {
               $set: {
                 password: hashedPassword,
@@ -916,7 +1039,7 @@ function updateCustomerPassword(id, currentPassword, newPassword, tenantId) {
  * Resetează parola unui client (fără verificare parolă curentă – folosit de admin).
  * @param {string} id - ID-ul clientului
  * @param {string} newPassword - Noua parolă
- * @param {string} tenantId - ID-ul tenant-ului
+ * @param {string} tenantId - ID-ul tenant-ului (slug)
  * @returns {Promise<Object>} Clientul actualizat (fără password hash)
  * @throws {AppError} Dacă validarea eșuează
  */
@@ -945,7 +1068,7 @@ function resetCustomerPassword(id, newPassword, tenantId) {
 
       const customersDb = getCustomersDb(tenantId);
       customersDb.update(
-        { _id: id, tenantId },
+        { _id: id, tenantId, type: DOC_TYPE },
         {
           $set: {
             password: hashedPassword,
@@ -978,4 +1101,262 @@ function resetCustomerPassword(id, newPassword, tenantId) {
 /**
  * Actualizează statusul unui client (activ/inactiv/suspendat/șters).
  * @param {string} id - ID-ul clientului
- *
+ * @param {string} newStatus - Noul status
+ * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @returns {Promise<Object>} Clientul actualizat (fără password hash)
+ * @throws {AppError} Dacă validarea eșuează
+ */
+function updateCustomerStatus(id, newStatus, tenantId) {
+  return new Promise((resolve, reject) => {
+    if (!id) {
+      return reject(new AppError('ID-ul clientului este invalid.', 400, 'INVALID_CUSTOMER_ID'));
+    }
+
+    if (!tenantId) {
+      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
+    }
+
+    if (!newStatus || !isValidCustomerStatus(newStatus)) {
+      return reject(new AppError(
+        `Statusul "${newStatus}" nu este valid. Statusuri permise: ${VALID_CUSTOMER_STATUSES.join(', ')}.`,
+        400,
+        'INVALID_CUSTOMER_STATUS'
+      ));
+    }
+
+    const customersDb = getCustomersDb(tenantId);
+    const now = new Date().toISOString();
+
+    customersDb.update(
+      { _id: id, tenantId, type: DOC_TYPE },
+      {
+        $set: {
+          status: newStatus,
+          updatedAt: now,
+        },
+      },
+      { returnUpdatedDocs: true },
+      (updateErr, numUpdated, updatedCustomer) => {
+        if (updateErr) {
+          return reject(new AppError(
+            `Eroare la actualizarea statusului clientului: ${updateErr.message}`,
+            500,
+            'DB_UPDATE_ERROR'
+          ));
+        }
+
+        if (numUpdated === 0) {
+          return reject(new AppError('Clientul nu a fost găsit.', 404, 'CUSTOMER_NOT_FOUND'));
+        }
+
+        const safeCustomer = { ...updatedCustomer };
+        delete safeCustomer.password;
+        resolve(safeCustomer);
+      }
+    );
+  });
+}
+
+/**
+ * Șterge logic un client (soft-delete: setează status = 'deleted').
+ * @param {string} id - ID-ul clientului
+ * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @returns {Promise<Object>} Clientul marcat ca șters (fără password hash)
+ * @throws {AppError} Dacă validarea eșuează
+ */
+function softDeleteCustomer(id, tenantId) {
+  return updateCustomerStatus(id, 'deleted', tenantId);
+}
+
+/**
+ * Șterge definitiv un client din baza de date.
+ * @param {string} id - ID-ul clientului
+ * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @returns {Promise<boolean>} `true` dacă ștergerea a avut loc
+ * @throws {AppError} Dacă validarea eșuează
+ */
+function hardDeleteCustomer(id, tenantId) {
+  return new Promise((resolve, reject) => {
+    if (!id) {
+      return reject(new AppError('ID-ul clientului este invalid.', 400, 'INVALID_CUSTOMER_ID'));
+    }
+
+    if (!tenantId) {
+      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
+    }
+
+    const customersDb = getCustomersDb(tenantId);
+    customersDb.remove({ _id: id, tenantId, type: DOC_TYPE }, {}, (err, numRemoved) => {
+      if (err) {
+        return reject(new AppError(
+          `Eroare la ștergerea clientului: ${err.message}`,
+          500,
+          'DB_DELETE_ERROR'
+        ));
+      }
+
+      if (numRemoved === 0) {
+        return reject(new AppError('Clientul nu a fost găsit.', 404, 'CUSTOMER_NOT_FOUND'));
+      }
+
+      // Curățare cache local după ștergere
+      invalidateCustomerDbCache(tenantId);
+      resolve(true);
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Utilitare cross-tenant (folosesc config/db.js pentru referințe globale)
+// ---------------------------------------------------------------------------
+
+/**
+ * Verifică dacă un tenant există în colecția globală `tenants`.
+ * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @returns {Promise<boolean>}
+ */
+function tenantExists(tenantId) {
+  return new Promise((resolve, reject) => {
+    if (!tenantId) {
+      return resolve(false);
+    }
+    tenants.findOne({ slug: tenantId }, (err, doc) => {
+      if (err) {
+        return reject(new AppError(
+          `Eroare la verificarea tenant-ului: ${err.message}`,
+          500,
+          'DB_QUERY_ERROR'
+        ));
+      }
+      resolve(!!doc);
+    });
+  });
+}
+
+/**
+ * Obține clienții asociați unui restaurant (util pentru notificări, statistici).
+ * @param {string} restaurantId - ID-ul restaurantului
+ * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @returns {Promise<Array>} Lista de clienți (fără password hash)
+ */
+function findCustomersByRestaurant(restaurantId, tenantId) {
+  return new Promise((resolve, reject) => {
+    if (!restaurantId) {
+      return reject(new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID'));
+    }
+
+    if (!tenantId) {
+      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
+    }
+
+    const customersDb = getCustomersDb(tenantId);
+    customersDb.find({ tenantId, type: DOC_TYPE, restaurantId })
+      .sort({ nume: 1 })
+      .exec((err, customerList) => {
+        if (err) {
+          return reject(new AppError(
+            `Eroare la căutarea clienților după restaurant: ${err.message}`,
+            500,
+            'DB_QUERY_ERROR'
+          ));
+        }
+
+        const safeCustomers = (customerList || []).map((c) => {
+          const safe = { ...c };
+          delete safe.password;
+          return safe;
+        });
+
+        resolve(safeCustomers);
+      });
+  });
+}
+
+/**
+ * Obține clienții asociați unui hotel (util pentru notificări, statistici).
+ * @param {string} hotelId - ID-ul hotelului
+ * @param {string} tenantId - ID-ul tenant-ului (slug)
+ * @returns {Promise<Array>} Lista de clienți (fără password hash)
+ */
+function findCustomersByHotel(hotelId, tenantId) {
+  return new Promise((resolve, reject) => {
+    if (!hotelId) {
+      return reject(new AppError('ID-ul hotelului este invalid.', 400, 'INVALID_HOTEL_ID'));
+    }
+
+    if (!tenantId) {
+      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
+    }
+
+    const customersDb = getCustomersDb(tenantId);
+    customersDb.find({ tenantId, type: DOC_TYPE, hotelId })
+      .sort({ nume: 1 })
+      .exec((err, customerList) => {
+        if (err) {
+          return reject(new AppError(
+            `Eroare la căutarea clienților după hotel: ${err.message}`,
+            500,
+            'DB_QUERY_ERROR'
+          ));
+        }
+
+        const safeCustomers = (customerList || []).map((c) => {
+          const safe = { ...c };
+          delete safe.password;
+          return safe;
+        });
+
+        resolve(safeCustomers);
+      });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Exporturi
+// ---------------------------------------------------------------------------
+
+module.exports = {
+  // Constante
+  VALID_CUSTOMER_STATUSES,
+  DOC_TYPE,
+
+  // Conexiune / cache
+  getCustomersDb,
+  invalidateCustomerDbCache,
+
+  // CRUD
+  createCustomer,
+  findCustomerById,
+  findCustomerByEmail,
+  findCustomersByTenant,
+  searchCustomersByName,
+  searchCustomersByPhone,
+  countCustomers,
+
+  // Autentificare
+  comparePassword,
+  authenticateCustomer,
+
+  // Actualizări
+  updateCustomerProfile,
+  updateCustomerPassword,
+  resetCustomerPassword,
+  updateCustomerStatus,
+
+  // Ștergere
+  softDeleteCustomer,
+  hardDeleteCustomer,
+
+  // Cross-tenant / relațional
+  tenantExists,
+  findCustomersByRestaurant,
+  findCustomersByHotel,
+
+  // Validatori (expuși pentru teste și reutilizare)
+  isValidString,
+  isValidEmail,
+  isValidPassword,
+  isValidPhone,
+  isValidCustomerStatus,
+  isValidPositiveNumber,
+};

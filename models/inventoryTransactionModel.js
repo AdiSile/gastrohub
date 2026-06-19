@@ -7,108 +7,8 @@
 //          reference, userId, locationId, locationType, tenantId, createdAt
 // ---------------------------------------------------------------------------
 
-const Datastore = require('nedb');
-const path = require('path');
-const fs = require('fs');
+const { inventoryTransactions } = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
-
-// ---------------------------------------------------------------------------
-// Configurare colecție separată pentru inventoryTransactions
-// ---------------------------------------------------------------------------
-
-/**
- * Determină calea absolută către directorul de date.
- * Citeşte variabila de mediu `DB_PATH` sau implicit `./data/`.
- */
-function resolveDataPath() {
-  const rel = process.env.DB_PATH || './data';
-  return path.resolve(rel);
-}
-
-/**
- * Asigură existenţa directorului de date (creare recursivă dacă nu există).
- */
-function ensureDataDir(dirPath) {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-}
-
-function isTestEnv() {
-  return process.env.NODE_ENV === 'test';
-}
-
-const dataDir = resolveDataPath();
-ensureDataDir(dataDir);
-
-/**
- * Colecţia de tranzacții de inventar.
- * Fişierul pe disc: <dataDir>/inventoryTransactions.db
- * În mediu de test se folosește baza în-memory.
- */
-const inventoryTransactions = new Datastore({
-  filename: isTestEnv() ? undefined : path.join(dataDir, 'inventoryTransactions.db'),
-  autoload: true,
-  timestampData: false,
-});
-
-// ---------------------------------------------------------------------------
-// Indexuri
-// ---------------------------------------------------------------------------
-
-/**
- * Index pentru căutarea rapidă a tranzacțiilor după itemId.
- */
-inventoryTransactions.ensureIndex({ fieldName: 'itemId' }, (err) => {
-  if (err) {
-    console.error('[inventoryTransactionModel] Eroare la crearea indexului pe itemId:', err.message);
-  }
-});
-
-/**
- * Index pentru căutarea tranzacțiilor după type.
- */
-inventoryTransactions.ensureIndex({ fieldName: 'type' }, (err) => {
-  if (err) {
-    console.error('[inventoryTransactionModel] Eroare la crearea indexului pe type:', err.message);
-  }
-});
-
-/**
- * Index pentru căutarea tranzacțiilor după tenantId.
- */
-inventoryTransactions.ensureIndex({ fieldName: 'tenantId' }, (err) => {
-  if (err) {
-    console.error('[inventoryTransactionModel] Eroare la crearea indexului pe tenantId:', err.message);
-  }
-});
-
-/**
- * Index pentru căutarea tranzacțiilor după userId.
- */
-inventoryTransactions.ensureIndex({ fieldName: 'userId' }, (err) => {
-  if (err) {
-    console.error('[inventoryTransactionModel] Eroare la crearea indexului pe userId:', err.message);
-  }
-});
-
-/**
- * Index pentru căutarea tranzacțiilor după locationId.
- */
-inventoryTransactions.ensureIndex({ fieldName: 'locationId' }, (err) => {
-  if (err) {
-    console.error('[inventoryTransactionModel] Eroare la crearea indexului pe locationId:', err.message);
-  }
-});
-
-/**
- * Index pentru căutarea tranzacțiilor după createdAt (pentru rapoarte cronologice).
- */
-inventoryTransactions.ensureIndex({ fieldName: 'createdAt' }, (err) => {
-  if (err) {
-    console.error('[inventoryTransactionModel] Eroare la crearea indexului pe createdAt:', err.message);
-  }
-});
 
 // ---------------------------------------------------------------------------
 // Tipuri de tranzacții valide
@@ -202,7 +102,10 @@ function isValidQuantity(quantity) {
  * @param {string} transactionData.unit - Unitatea de măsură
  * @param {string} [transactionData.note] - Notă opțională
  * @param {string} [transactionData.reference] - Referință opțională (ex. număr factură, comandă)
- * @param {string} transactionData.userId - ID-ul utilizatorului care a efectuat tranzacția
+ * @param {string} [transactionData.userId] - ID-ul utilizatorului (vechiul API)
+ * @param {string} [transactionData.performedBy] - ID-ul utilizatorului (noul API, prioritar)
+ * @param {number} [transactionData.previousQuantity] - Cantitatea anterioară (opțional, context tranzacție)
+ * @param {number} [transactionData.newQuantity] - Cantitatea nouă (opțional, context tranzacție)
  * @param {string} transactionData.locationId - ID-ul locației
  * @param {string} transactionData.locationType - Tipul locației ('restaurant' sau 'hotel')
  * @param {string} transactionData.tenantId - ID-ul tenant-ului
@@ -226,10 +129,16 @@ function createInventoryTransaction(transactionData) {
       note,
       reference,
       userId,
+      performedBy,
+      previousQuantity,
+      newQuantity,
       locationId,
       locationType,
       tenantId,
     } = transactionData;
+
+    // Rezolvăm userId: poate veni ca performedBy (noul API) sau userId (vechiul API)
+    const resolvedUserId = performedBy || userId;
 
     // Validare itemId
     if (!itemId || !isValidId(itemId)) {
@@ -267,10 +176,10 @@ function createInventoryTransaction(transactionData) {
       ));
     }
 
-    // Validare userId
-    if (!userId || !isValidId(userId)) {
+    // Validare userId / performedBy
+    if (!resolvedUserId || !isValidId(resolvedUserId)) {
       return reject(new AppError(
-        'ID-ul utilizatorului este obligatoriu și trebuie să fie un șir nevid.',
+        'ID-ul utilizatorului (userId sau performedBy) este obligatoriu și trebuie să fie un șir nevid.',
         400,
         'INVALID_USER_ID'
       ));
@@ -315,12 +224,20 @@ function createInventoryTransaction(transactionData) {
       unit,
       note: note !== undefined ? String(note).trim() : '',
       reference: reference !== undefined ? String(reference).trim() : '',
-      userId: userId.trim(),
+      userId: resolvedUserId.trim(),
       locationId: locationId.trim(),
       locationType,
       tenantId: tenantId.trim(),
       createdAt: now,
     };
+
+    // Câmpuri opționale specifice noului API (contextul tranzacției)
+    if (previousQuantity !== undefined && previousQuantity !== null) {
+      transactionDoc.previousQuantity = previousQuantity;
+    }
+    if (newQuantity !== undefined && newQuantity !== null) {
+      transactionDoc.newQuantity = newQuantity;
+    }
 
     inventoryTransactions.insert(transactionDoc, (insertErr, newTransaction) => {
       if (insertErr) {

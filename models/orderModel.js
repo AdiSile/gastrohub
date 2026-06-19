@@ -8,6 +8,7 @@
 // ---------------------------------------------------------------------------
 
 const { restaurants } = require('../config/db');
+const { getTenantDb } = require('../config/tenant');
 const { AppError } = require('../middleware/errorHandler');
 
 // ---------------------------------------------------------------------------
@@ -188,7 +189,6 @@ function calculateOrderTotal(items, taxaServiciu = 0, discount = 0) {
  * @returns {Datastore}
  */
 function getOrdersDb(tenantId) {
-  const { getTenantDb } = require('../config/tenant');
   return getTenantDb(tenantId);
 }
 

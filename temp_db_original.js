@@ -1,29 +1,26 @@
-/**
+﻿/**
  * ============================================================
- * config/db.js - Inițializare NeDB (embedded document database)
+ * config/db.js - Ini╚Ťializare NeDB (embedded document database)
  * ============================================================
  *
- * Responsabilități:
- *  - Configurarea și expunerea conexiunilor NeDB pentru:
- *      1. users.db   – colecția globală de utilizatori
- *      2. tenants.db – colecția globală de tenant-i (organizații)
- *      3. restaurants.db – colecția de restaurante
- *      4. hotels.db      – colecția de hoteluri
- *      5. reservations.db – colecția de rezervări
- *      6. inventoryItems.db      – colecția de articole din inventar
- *      7. inventoryTransactions.db – colecția de tranzacții de inventar
- *      8. suppliers.db           – colecția de furnizori
- *      9. deliveries.db          – colecția de livrări
- *     10. attendance.db          – colecția de pontaje (check-in/out)
- *     11. salaries.db            – colecția de salarii brute
- *  - Crearea automată a directorului de date (implicit ./data/)
- *  - Încărcare la primul `require` – singleton pattern
+ * Responsabilit─â╚Ťi:
+ *  - Configurarea ╚Öi expunerea conexiunilor NeDB pentru:
+ *      1. users.db   ÔÇô colec╚Ťia global─â de utilizatori
+ *      2. tenants.db ÔÇô colec╚Ťia global─â de tenant-i (organiza╚Ťii)
+ *      3. restaurants.db ÔÇô colec╚Ťia de restaurante
+ *      4. hotels.db      ÔÇô colec╚Ťia de hoteluri
+ *      5. reservations.db ÔÇô colec╚Ťia de rezerv─âri
+ *      6. inventoryItems.db      ÔÇô colec╚Ťia de articole din inventar
+ *      7. inventoryTransactions.db ÔÇô colec╚Ťia de tranzac╚Ťii de inventar
+ *      8. suppliers.db           ÔÇô colec╚Ťia de furnizori
+ *      9. deliveries.db          ÔÇô colec╚Ťia de livr─âri
+ *  - Crearea automat─â a directorului de date (implicit ./data/)
+ *  - ├Änc─ârcare la primul `require` ÔÇô singleton pattern
  *
  * Folosire:
  *    const {
  *      users, tenants, restaurants, hotels, reservations,
- *      inventoryItems, inventoryTransactions, suppliers, deliveries,
- *      attendance, salaries
+ *      inventoryItems, inventoryTransactions, suppliers, deliveries
  *    } = require('../config/db');
  *    inventoryItems.find({ ... }, (err, docs) => { ... });
  *
@@ -40,8 +37,8 @@ const Database = require('better-sqlite3');
 // ---------------------------------------------------------------------------
 
 /**
- * Determină calea absolută către directorul de date.
- * Citeşte variabila de mediu `DB_PATH` sau implicit `./data/`.
+ * Determin─â calea absolut─â c─âtre directorul de date.
+ * Cite┼čte variabila de mediu `DB_PATH` sau implicit `./data/`.
  */
 function resolveDataPath() {
   const rel = process.env.DB_PATH || './data';
@@ -49,7 +46,7 @@ function resolveDataPath() {
 }
 
 /**
- * Asigură existenţa directorului de date (creare recursivă dacă nu există).
+ * Asigur─â existen┼úa directorului de date (creare recursiv─â dac─â nu exist─â).
  */
 function ensureDataDir(dirPath) {
   if (!fs.existsSync(dirPath)) {
@@ -62,8 +59,8 @@ function ensureDataDir(dirPath) {
 // ---------------------------------------------------------------------------
 
 /**
- * În teste sau când `NODE_ENV === 'test'` se preferă baza în-memory
- * pentru performanţă şi izolare între rulări.
+ * ├Än teste sau c├ónd `NODE_ENV === 'test'` se prefer─â baza ├«n-memory
+ * pentru performan┼ú─â ┼či izolare ├«ntre rul─âri.
  */
 function isTestEnv() {
   return process.env.NODE_ENV === 'test';
@@ -77,8 +74,8 @@ const dataDir = resolveDataPath();
 ensureDataDir(dataDir);
 
 /**
- * Colecţia de utilizatori (globală – toţi tenant-ii).
- * Fişierul pe disc: <dataDir>/users.db
+ * Colec┼úia de utilizatori (global─â ÔÇô to┼úi tenant-ii).
+ * Fi┼čierul pe disc: <dataDir>/users.db
  */
 const users = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'users.db'),
@@ -87,8 +84,8 @@ const users = new Datastore({
 });
 
 /**
- * Colecţia de tenant-i (organizaţii).
- * Fişierul pe disc: <dataDir>/tenants.db
+ * Colec┼úia de tenant-i (organiza┼úii).
+ * Fi┼čierul pe disc: <dataDir>/tenants.db
  */
 const tenants = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'tenants.db'),
@@ -97,8 +94,8 @@ const tenants = new Datastore({
 });
 
 /**
- * Colecţia de restaurante.
- * Fişierul pe disc: <dataDir>/restaurants.db
+ * Colec┼úia de restaurante.
+ * Fi┼čierul pe disc: <dataDir>/restaurants.db
  */
 const restaurants = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'restaurants.db'),
@@ -107,8 +104,8 @@ const restaurants = new Datastore({
 });
 
 /**
- * Colecţia de hoteluri.
- * Fişierul pe disc: <dataDir>/hotels.db
+ * Colec┼úia de hoteluri.
+ * Fi┼čierul pe disc: <dataDir>/hotels.db
  */
 const hotels = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'hotels.db'),
@@ -117,8 +114,8 @@ const hotels = new Datastore({
 });
 
 /**
- * Colecţia de rezervări.
- * Fişierul pe disc: <dataDir>/reservations.db
+ * Colec┼úia de rezerv─âri.
+ * Fi┼čierul pe disc: <dataDir>/reservations.db
  */
 const reservations = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'reservations.db'),
@@ -127,8 +124,8 @@ const reservations = new Datastore({
 });
 
 /**
- * Colecţia de articole din inventar.
- * Fişierul pe disc: <dataDir>/inventoryItems.db
+ * Colec┼úia de articole din inventar.
+ * Fi┼čierul pe disc: <dataDir>/inventoryItems.db
  */
 const inventoryItems = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'inventoryItems.db'),
@@ -137,8 +134,8 @@ const inventoryItems = new Datastore({
 });
 
 /**
- * Colecţia de tranzacţii de inventar (intrări/ieşiri, ajustări, transferuri).
- * Fişierul pe disc: <dataDir>/inventoryTransactions.db
+ * Colec┼úia de tranzac┼úii de inventar (intr─âri/ie┼čiri, ajust─âri, transferuri).
+ * Fi┼čierul pe disc: <dataDir>/inventoryTransactions.db
  */
 const inventoryTransactions = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'inventoryTransactions.db'),
@@ -147,8 +144,8 @@ const inventoryTransactions = new Datastore({
 });
 
 /**
- * Colecţia de furnizori.
- * Fişierul pe disc: <dataDir>/suppliers.db
+ * Colec┼úia de furnizori.
+ * Fi┼čierul pe disc: <dataDir>/suppliers.db
  */
 const suppliers = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'suppliers.db'),
@@ -157,8 +154,8 @@ const suppliers = new Datastore({
 });
 
 /**
- * Colecţia de livrări.
- * Fişierul pe disc: <dataDir>/deliveries.db
+ * Colec┼úia de livr─âri.
+ * Fi┼čierul pe disc: <dataDir>/deliveries.db
  */
 const deliveries = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'deliveries.db'),
@@ -166,41 +163,21 @@ const deliveries = new Datastore({
   timestampData: false,
 });
 
-/**
- * Colecţia de pontaje (attendance / check-in / check-out).
- * Fişierul pe disc: <dataDir>/attendance.db
- */
-const attendance = new Datastore({
-  filename: isTestEnv() ? undefined : path.join(dataDir, 'attendance.db'),
-  autoload: true,
-  timestampData: false,
-});
-
-/**
- * Colecţia de salarii brute (gross salary records).
- * Fişierul pe disc: <dataDir>/salaries.db
- */
-const salaries = new Datastore({
-  filename: isTestEnv() ? undefined : path.join(dataDir, 'salaries.db'),
-  autoload: true,
-  timestampData: false,
-});
-
 // ---------------------------------------------------------------------------
-// SQLite database (better-sqlite3) – pentru modele noi (ex: reservationModel)
+// SQLite database (better-sqlite3) ÔÇô pentru modele noi (ex: reservationModel)
 // ---------------------------------------------------------------------------
 
 /**
- * Conexiune SQLite partajată. Fișierul: <dataDir>/gastrohub.db
+ * Conexiune SQLite partajat─â. Fi╚Öierul: <dataDir>/gastrohub.db
  */
 const sqliteDb = new Database(path.join(dataDir, 'gastrohub.db'));
 
-// Pragmatic: activăm WAL pentru performanță concurentă mai bună
+// Pragmatic: activ─âm WAL pentru performan╚Ť─â concurent─â mai bun─â
 sqliteDb.pragma('journal_mode = WAL');
 sqliteDb.pragma('foreign_keys = ON');
 
 /**
- * Asigură existența tabelei de rezervări (SQLite).
+ * Asigur─â existen╚Ťa tabelei de rezerv─âri (SQLite).
  */
 sqliteDb.exec(`
   CREATE TABLE IF NOT EXISTS reservations (
@@ -214,7 +191,7 @@ sqliteDb.exec(`
     checkOut    TEXT    NOT NULL,
     roomId      TEXT,
     numGuests   INTEGER DEFAULT 1,
-    status      TEXT    DEFAULT 'confirmată',
+    status      TEXT    DEFAULT 'confirmat─â',
     notes       TEXT    DEFAULT '',
     createdAt   TEXT    DEFAULT (datetime('now')),
     updatedAt   TEXT    DEFAULT (datetime('now'))
@@ -222,45 +199,10 @@ sqliteDb.exec(`
 `);
 
 /**
- * Asigură existența tabelei de utilizatori (SQLite).
- * Coloane: id, email (UNIQUE), password, role, tenantId, restaurante, createdAt, updatedAt
- */
-sqliteDb.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    email         TEXT    NOT NULL UNIQUE,
-    password      TEXT    NOT NULL,
-    role          TEXT    NOT NULL DEFAULT 'client',
-    tenantId      TEXT,
-    restaurante   TEXT    DEFAULT '[]',
-    createdAt     TEXT    DEFAULT (datetime('now')),
-    updatedAt     TEXT    DEFAULT (datetime('now'))
-  );
-`);
-
-/**
- * Asigură existența coloanei `restaurante` în tabela users (migrare).
- * Verifică schema existentă și adaugă coloana dacă lipsește.
- */
-(function _migrateUsersSchema() {
-  try {
-    const tableInfo = sqliteDb.exec('PRAGMA table_info(users)');
-    if (tableInfo.length > 0) {
-      const columns = tableInfo[0].values.map(function (row) { return row[1]; });
-      if (columns.indexOf('restaurante') === -1) {
-        sqliteDb.exec("ALTER TABLE users ADD COLUMN restaurante TEXT DEFAULT '[]'");
-      }
-    }
-  } catch (_e) {
-    // Ignorăm erorile de migrare – probabil tabela nu există încă
-  }
-})();
-
-/**
  * Metode expuse pentru compatibilitate cu modelele SQLite:
- *  - db.run(sql, params)   => returnează { changes, lastInsertRowid }
- *  - db.get(sql, params)   => returnează primul rând sau undefined
- *  - db.all(sql, params)   => returnează toate rândurile (Array)
+ *  - db.run(sql, params)   => returneaz─â { changes, lastInsertRowid }
+ *  - db.get(sql, params)   => returneaz─â primul r├ónd sau undefined
+ *  - db.all(sql, params)   => returneaz─â toate r├óndurile (Array)
  */
 
 const run = (sql, params = []) => {
@@ -279,40 +221,12 @@ const all = (sql, params = []) => {
 };
 
 // ---------------------------------------------------------------------------
-// Funcție de inițializare asincronă a bazei de date
+// Indexuri ÔÇô colec┼úii existente
 // ---------------------------------------------------------------------------
 
 /**
- * Inițializează baza de date și returnează o Promisiune.
- * Asigură că toate tabelele și indexurile sunt gata înainte ca serverul
- * să înceapă să accepte cereri.
- *
- * @returns {Promise<void>}
- */
-function initDb() {
-  return new Promise(function (resolve, reject) {
-    try {
-      // Verifică rapid că SQLite răspunde
-      get('SELECT 1 AS ok');
-      resolve();
-    } catch (err) {
-      // Dacă SQLite nu e disponibil, NeDB e fallback-ul și e deja inițializat
-      // Verificăm că măcar NeDB răspunde
-      users.findOne({ _id: '__init_check__' }, function () {
-        // Ignorăm rezultatul; dacă nu crapă, NeDB e funcțional
-        resolve();
-      });
-    }
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Indexuri – colecţii existente
-// ---------------------------------------------------------------------------
-
-/**
- * Asigură unicitatea email-urilor la nivel global.
- * Indexare implicită pe câmpul `email` – previne duplicarea utilizatorilor.
+ * Asigur─â unicitatea email-urilor la nivel global.
+ * Indexare implicit─â pe c├ómpul `email` ÔÇô previne duplicarea utilizatorilor.
  */
 users.ensureIndex({ fieldName: 'email', unique: true, sparse: true }, (err) => {
   if (err) {
@@ -321,8 +235,8 @@ users.ensureIndex({ fieldName: 'email', unique: true, sparse: true }, (err) => {
 });
 
 /**
- * Asigură unicitatea numelor de tenant (slug).
- * `sparse: true` permite documentelor fără câmpul `slug` să nu fie indexate.
+ * Asigur─â unicitatea numelor de tenant (slug).
+ * `sparse: true` permite documentelor f─âr─â c├ómpul `slug` s─â nu fie indexate.
  */
 tenants.ensureIndex({ fieldName: 'slug', unique: true, sparse: true }, (err) => {
   if (err) {
@@ -331,7 +245,7 @@ tenants.ensureIndex({ fieldName: 'slug', unique: true, sparse: true }, (err) => 
 });
 
 /**
- * Index pentru căutarea rapidă a restaurantelor după tenantId.
+ * Index pentru c─âutarea rapid─â a restaurantelor dup─â tenantId.
  */
 restaurants.ensureIndex({ fieldName: 'tenantId' }, (err) => {
   if (err) {
@@ -340,7 +254,7 @@ restaurants.ensureIndex({ fieldName: 'tenantId' }, (err) => {
 });
 
 /**
- * Index pentru căutarea restaurantelor după status.
+ * Index pentru c─âutarea restaurantelor dup─â status.
  */
 restaurants.ensureIndex({ fieldName: 'status' }, (err) => {
   if (err) {
@@ -358,11 +272,11 @@ restaurants.ensureIndex({ fieldName: 'tenantId_status', fieldName: ['tenantId', 
 });
 
 // ---------------------------------------------------------------------------
-// Indexuri – hotels
+// Indexuri ÔÇô hotels
 // ---------------------------------------------------------------------------
 
 /**
- * Index pentru căutarea hotelurilor după tenantId.
+ * Index pentru c─âutarea hotelurilor dup─â tenantId.
  */
 hotels.ensureIndex({ fieldName: 'tenantId' }, (err) => {
   if (err) {
@@ -371,7 +285,7 @@ hotels.ensureIndex({ fieldName: 'tenantId' }, (err) => {
 });
 
 /**
- * Index pentru căutarea hotelurilor după status.
+ * Index pentru c─âutarea hotelurilor dup─â status.
  */
 hotels.ensureIndex({ fieldName: 'status' }, (err) => {
   if (err) {
@@ -380,11 +294,11 @@ hotels.ensureIndex({ fieldName: 'status' }, (err) => {
 });
 
 // ---------------------------------------------------------------------------
-// Indexuri – reservations
+// Indexuri ÔÇô reservations
 // ---------------------------------------------------------------------------
 
 /**
- * Index pentru căutarea rezervărilor după tenantId.
+ * Index pentru c─âutarea rezerv─ârilor dup─â tenantId.
  */
 reservations.ensureIndex({ fieldName: 'tenantId' }, (err) => {
   if (err) {
@@ -393,7 +307,7 @@ reservations.ensureIndex({ fieldName: 'tenantId' }, (err) => {
 });
 
 /**
- * Index pentru căutarea rezervărilor după hotelId / restaurantId (resursa).
+ * Index pentru c─âutarea rezerv─ârilor dup─â hotelId / restaurantId (resursa).
  */
 reservations.ensureIndex({ fieldName: 'resourceId' }, (err) => {
   if (err) {
@@ -402,7 +316,7 @@ reservations.ensureIndex({ fieldName: 'resourceId' }, (err) => {
 });
 
 /**
- * Index pentru căutarea rezervărilor după status.
+ * Index pentru c─âutarea rezerv─ârilor dup─â status.
  */
 reservations.ensureIndex({ fieldName: 'status' }, (err) => {
   if (err) {
@@ -411,7 +325,7 @@ reservations.ensureIndex({ fieldName: 'status' }, (err) => {
 });
 
 /**
- * Index compus pentru rezervări per tenant + resursă.
+ * Index compus pentru rezerv─âri per tenant + resurs─â.
  */
 reservations.ensureIndex({ fieldName: 'tenantId_resourceId', fieldName: ['tenantId', 'resourceId'] }, (err) => {
   if (err) {
@@ -420,7 +334,7 @@ reservations.ensureIndex({ fieldName: 'tenantId_resourceId', fieldName: ['tenant
 });
 
 /**
- * Index compus pentru rezervări per tenant + status.
+ * Index compus pentru rezerv─âri per tenant + status.
  */
 reservations.ensureIndex({ fieldName: 'tenantId_status', fieldName: ['tenantId', 'status'] }, (err) => {
   if (err) {
@@ -429,11 +343,11 @@ reservations.ensureIndex({ fieldName: 'tenantId_status', fieldName: ['tenantId',
 });
 
 // ---------------------------------------------------------------------------
-// Indexuri – inventoryItems
+// Indexuri ÔÇô inventoryItems
 // ---------------------------------------------------------------------------
 
 /**
- * Index pentru căutarea articolelor după tenantId.
+ * Index pentru c─âutarea articolelor dup─â tenantId.
  */
 inventoryItems.ensureIndex({ fieldName: 'tenantId' }, (err) => {
   if (err) {
@@ -442,7 +356,7 @@ inventoryItems.ensureIndex({ fieldName: 'tenantId' }, (err) => {
 });
 
 /**
- * Index pentru căutarea articolelor după SKU (unic per tenant).
+ * Index pentru c─âutarea articolelor dup─â SKU (unic per tenant).
  */
 inventoryItems.ensureIndex({ fieldName: 'sku', unique: true, sparse: true }, (err) => {
   if (err) {
@@ -451,7 +365,7 @@ inventoryItems.ensureIndex({ fieldName: 'sku', unique: true, sparse: true }, (er
 });
 
 /**
- * Index pentru căutarea articolelor după categorie.
+ * Index pentru c─âutarea articolelor dup─â categorie.
  */
 inventoryItems.ensureIndex({ fieldName: 'category' }, (err) => {
   if (err) {
@@ -460,7 +374,7 @@ inventoryItems.ensureIndex({ fieldName: 'category' }, (err) => {
 });
 
 /**
- * Index pentru căutarea articolelor după status (activ/inactiv).
+ * Index pentru c─âutarea articolelor dup─â status (activ/inactiv).
  */
 inventoryItems.ensureIndex({ fieldName: 'status' }, (err) => {
   if (err) {
@@ -469,7 +383,7 @@ inventoryItems.ensureIndex({ fieldName: 'status' }, (err) => {
 });
 
 /**
- * Index compus pentru articolele per tenant după categorie.
+ * Index compus pentru articolele per tenant dup─â categorie.
  */
 inventoryItems.ensureIndex({ fieldName: 'tenantId_category', fieldName: ['tenantId', 'category'] }, (err) => {
   if (err) {
@@ -478,11 +392,11 @@ inventoryItems.ensureIndex({ fieldName: 'tenantId_category', fieldName: ['tenant
 });
 
 // ---------------------------------------------------------------------------
-// Indexuri – inventoryTransactions
+// Indexuri ÔÇô inventoryTransactions
 // ---------------------------------------------------------------------------
 
 /**
- * Index pentru căutarea tranzacţiilor după tenantId.
+ * Index pentru c─âutarea tranzac┼úiilor dup─â tenantId.
  */
 inventoryTransactions.ensureIndex({ fieldName: 'tenantId' }, (err) => {
   if (err) {
@@ -491,7 +405,7 @@ inventoryTransactions.ensureIndex({ fieldName: 'tenantId' }, (err) => {
 });
 
 /**
- * Index pentru căutarea tranzacţiilor după itemId (articolul implicat).
+ * Index pentru c─âutarea tranzac┼úiilor dup─â itemId (articolul implicat).
  */
 inventoryTransactions.ensureIndex({ fieldName: 'itemId' }, (err) => {
   if (err) {
@@ -500,7 +414,7 @@ inventoryTransactions.ensureIndex({ fieldName: 'itemId' }, (err) => {
 });
 
 /**
- * Index pentru căutarea tranzacţiilor după tip (in/out/adjustment/transfer).
+ * Index pentru c─âutarea tranzac┼úiilor dup─â tip (in/out/adjustment/transfer).
  */
 inventoryTransactions.ensureIndex({ fieldName: 'type' }, (err) => {
   if (err) {
@@ -509,7 +423,7 @@ inventoryTransactions.ensureIndex({ fieldName: 'type' }, (err) => {
 });
 
 /**
- * Index pentru căutarea tranzacţiilor după referinţă (id comandă/livrare).
+ * Index pentru c─âutarea tranzac┼úiilor dup─â referin┼ú─â (id comand─â/livrare).
  */
 inventoryTransactions.ensureIndex({ fieldName: 'referenceId' }, (err) => {
   if (err) {
@@ -518,7 +432,7 @@ inventoryTransactions.ensureIndex({ fieldName: 'referenceId' }, (err) => {
 });
 
 /**
- * Index pentru căutarea tranzacţiilor după dată.
+ * Index pentru c─âutarea tranzac┼úiilor dup─â dat─â.
  */
 inventoryTransactions.ensureIndex({ fieldName: 'createdAt' }, (err) => {
   if (err) {
@@ -527,7 +441,7 @@ inventoryTransactions.ensureIndex({ fieldName: 'createdAt' }, (err) => {
 });
 
 /**
- * Index compus pentru tranzacţii per tenant + item.
+ * Index compus pentru tranzac┼úii per tenant + item.
  */
 inventoryTransactions.ensureIndex({ fieldName: 'tenantId_itemId', fieldName: ['tenantId', 'itemId'] }, (err) => {
   if (err) {
@@ -536,11 +450,11 @@ inventoryTransactions.ensureIndex({ fieldName: 'tenantId_itemId', fieldName: ['t
 });
 
 // ---------------------------------------------------------------------------
-// Indexuri – suppliers
+// Indexuri ÔÇô suppliers
 // ---------------------------------------------------------------------------
 
 /**
- * Index pentru căutarea furnizorilor după tenantId.
+ * Index pentru c─âutarea furnizorilor dup─â tenantId.
  */
 suppliers.ensureIndex({ fieldName: 'tenantId' }, (err) => {
   if (err) {
@@ -558,7 +472,7 @@ suppliers.ensureIndex({ fieldName: 'taxId', unique: true, sparse: true }, (err) 
 });
 
 /**
- * Index pentru căutarea furnizorilor după status.
+ * Index pentru c─âutarea furnizorilor dup─â status.
  */
 suppliers.ensureIndex({ fieldName: 'status' }, (err) => {
   if (err) {
@@ -567,7 +481,7 @@ suppliers.ensureIndex({ fieldName: 'status' }, (err) => {
 });
 
 /**
- * Index pentru căutarea furnizorilor după nume.
+ * Index pentru c─âutarea furnizorilor dup─â nume.
  */
 suppliers.ensureIndex({ fieldName: 'name' }, (err) => {
   if (err) {
@@ -585,11 +499,11 @@ suppliers.ensureIndex({ fieldName: 'tenantId_status', fieldName: ['tenantId', 's
 });
 
 // ---------------------------------------------------------------------------
-// Indexuri – deliveries
+// Indexuri ÔÇô deliveries
 // ---------------------------------------------------------------------------
 
 /**
- * Index pentru căutarea livrărilor după tenantId.
+ * Index pentru c─âutarea livr─ârilor dup─â tenantId.
  */
 deliveries.ensureIndex({ fieldName: 'tenantId' }, (err) => {
   if (err) {
@@ -598,7 +512,7 @@ deliveries.ensureIndex({ fieldName: 'tenantId' }, (err) => {
 });
 
 /**
- * Index pentru căutarea livrărilor după supplierId.
+ * Index pentru c─âutarea livr─ârilor dup─â supplierId.
  */
 deliveries.ensureIndex({ fieldName: 'supplierId' }, (err) => {
   if (err) {
@@ -607,7 +521,7 @@ deliveries.ensureIndex({ fieldName: 'supplierId' }, (err) => {
 });
 
 /**
- * Index pentru căutarea livrărilor după status.
+ * Index pentru c─âutarea livr─ârilor dup─â status.
  */
 deliveries.ensureIndex({ fieldName: 'status' }, (err) => {
   if (err) {
@@ -616,7 +530,7 @@ deliveries.ensureIndex({ fieldName: 'status' }, (err) => {
 });
 
 /**
- * Index pentru căutarea livrărilor după dată programată.
+ * Index pentru c─âutarea livr─ârilor dup─â dat─â programat─â.
  */
 deliveries.ensureIndex({ fieldName: 'scheduledDate' }, (err) => {
   if (err) {
@@ -625,7 +539,7 @@ deliveries.ensureIndex({ fieldName: 'scheduledDate' }, (err) => {
 });
 
 /**
- * Index pentru căutarea livrărilor după dată reală de primire.
+ * Index pentru c─âutarea livr─ârilor dup─â dat─â real─â de primire.
  */
 deliveries.ensureIndex({ fieldName: 'receivedDate' }, (err) => {
   if (err) {
@@ -634,7 +548,7 @@ deliveries.ensureIndex({ fieldName: 'receivedDate' }, (err) => {
 });
 
 /**
- * Index compus pentru livrări per tenant + status.
+ * Index compus pentru livr─âri per tenant + status.
  */
 deliveries.ensureIndex({ fieldName: 'tenantId_status', fieldName: ['tenantId', 'status'] }, (err) => {
   if (err) {
@@ -643,7 +557,7 @@ deliveries.ensureIndex({ fieldName: 'tenantId_status', fieldName: ['tenantId', '
 });
 
 /**
- * Index compus pentru livrări per tenant + supplier.
+ * Index compus pentru livr─âri per tenant + supplier.
  */
 deliveries.ensureIndex({ fieldName: 'tenantId_supplierId', fieldName: ['tenantId', 'supplierId'] }, (err) => {
   if (err) {
@@ -652,132 +566,7 @@ deliveries.ensureIndex({ fieldName: 'tenantId_supplierId', fieldName: ['tenantId
 });
 
 // ---------------------------------------------------------------------------
-// Indexuri – attendance (pontaje)
-// ---------------------------------------------------------------------------
-
-/**
- * Index pentru căutarea pontajelor după employeeId.
- */
-attendance.ensureIndex({ fieldName: 'employeeId' }, (err) => {
-  if (err) {
-    console.error('[db] Eroare la crearea indexului pe employeeId (attendance):', err.message);
-  }
-});
-
-/**
- * Index pentru căutarea pontajelor după tenantId.
- */
-attendance.ensureIndex({ fieldName: 'tenantId' }, (err) => {
-  if (err) {
-    console.error('[db] Eroare la crearea indexului pe tenantId (attendance):', err.message);
-  }
-});
-
-/**
- * Index pentru căutarea pontajelor după type (checkIn/checkOut).
- */
-attendance.ensureIndex({ fieldName: 'type' }, (err) => {
-  if (err) {
-    console.error('[db] Eroare la crearea indexului pe type (attendance):', err.message);
-  }
-});
-
-/**
- * Index pentru căutarea pontajelor după timestamp.
- */
-attendance.ensureIndex({ fieldName: 'timestamp' }, (err) => {
-  if (err) {
-    console.error('[db] Eroare la crearea indexului pe timestamp (attendance):', err.message);
-  }
-});
-
-/**
- * Index compus pentru pontaje per tenant + employee.
- */
-attendance.ensureIndex({ fieldName: 'tenantId_employeeId', fieldName: ['tenantId', 'employeeId'] }, (err) => {
-  if (err) {
-    console.error('[db] Eroare la crearea indexului compus tenantId+employeeId (attendance):', err.message);
-  }
-});
-
-/**
- * Index compus pentru pontaje per employee + timestamp.
- */
-attendance.ensureIndex({ fieldName: 'employeeId_timestamp', fieldName: ['employeeId', 'timestamp'] }, (err) => {
-  if (err) {
-    console.error('[db] Eroare la crearea indexului compus employeeId+timestamp (attendance):', err.message);
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Indexuri – salaries (salarii brute)
-// ---------------------------------------------------------------------------
-
-/**
- * Index pentru căutarea salariilor după employeeId.
- */
-salaries.ensureIndex({ fieldName: 'employeeId' }, (err) => {
-  if (err) {
-    console.error('[db] Eroare la crearea indexului pe employeeId (salaries):', err.message);
-  }
-});
-
-/**
- * Index pentru căutarea salariilor după tenantId.
- */
-salaries.ensureIndex({ fieldName: 'tenantId' }, (err) => {
-  if (err) {
-    console.error('[db] Eroare la crearea indexului pe tenantId (salaries):', err.message);
-  }
-});
-
-/**
- * Index pentru căutarea salariilor după period.
- */
-salaries.ensureIndex({ fieldName: 'period' }, (err) => {
-  if (err) {
-    console.error('[db] Eroare la crearea indexului pe period (salaries):', err.message);
-  }
-});
-
-/**
- * Index compus pentru salarii per tenant + employee.
- */
-salaries.ensureIndex({ fieldName: 'tenantId_employeeId', fieldName: ['tenantId', 'employeeId'] }, (err) => {
-  if (err) {
-    console.error('[db] Eroare la crearea indexului compus tenantId+employeeId (salaries):', err.message);
-  }
-});
-
-/**
- * Index compus pentru salarii per employee + period.
- */
-salaries.ensureIndex({ fieldName: 'employeeId_period', fieldName: ['employeeId', 'period'] }, (err) => {
-  if (err) {
-    console.error('[db] Eroare la crearea indexului compus employeeId+period (salaries):', err.message);
-  }
-});
-
-// ---------------------------------------------------------------------------
 // Export singleton
 // ---------------------------------------------------------------------------
 
-module.exports = {
-  users,
-  tenants,
-  restaurants,
-  hotels,
-  reservations,
-  inventoryItems,
-  inventoryTransactions,
-  suppliers,
-  deliveries,
-  attendance,
-  salaries,
-  dataDir,
-  run,
-  get,
-  all,
-  initDb,
-  sqliteDb,
-};
+module.exports = { users, tenants, restaurants, hotels, reservations, inventoryItems, inventoryTransactions, suppliers, deliveries, dataDir, run, get, all };

@@ -5,9 +5,14 @@
 // Definirea structurii, validărilor și operațiilor CRUD pentru itemele de meniu.
 // Câmpuri suportate: categorie, nume, descriere, preț, alergeni, ingrediente,
 // disponibilitate, tenantId, restaurantId
+//
+// Compatibilitate duală: verificarea restaurantului funcționează atât cu
+// SQLite (via getDb()) cât și cu NeDB (via restaurants).
+// Itemii de meniu sunt stocați per-tenant prin config/tenant.js.
 // ---------------------------------------------------------------------------
 
-const { restaurants } = require('../config/db');
+const { restaurants, getDb } = require('../config/db');
+const { getTenantDb } = require('../config/tenant');
 const { AppError } = require('../middleware/errorHandler');
 
 // ---------------------------------------------------------------------------
@@ -67,6 +72,73 @@ const VALID_ALLERGENS = [
 // ---------------------------------------------------------------------------
 
 const VALID_AVAILABILITY = ['available', 'unavailable', 'seasonal', 'temporary'];
+
+// ---------------------------------------------------------------------------
+// Detecție backend SQLite (compatibilitate cu restaurantModel.js)
+// ---------------------------------------------------------------------------
+
+let _sqlAvailable = null;
+
+/**
+ * Returnează `true` dacă SQLite este disponibil și inițializat.
+ * Cache-uiește rezultatul după prima verificare.
+ * @returns {boolean}
+ */
+function _isSqlAvailable() {
+  if (_sqlAvailable !== null) return _sqlAvailable;
+  try {
+    getDb();
+    _sqlAvailable = true;
+  } catch (_e) {
+    _sqlAvailable = false;
+  }
+  return _sqlAvailable;
+}
+
+/**
+ * Verifică existența unui restaurant, folosind SQLite (dacă e disponibil)
+ * sau NeDB ca fallback. Asigură compatibilitatea cu restaurantModel.js care
+ * scrie în SQLite când acesta este inițializat.
+ *
+ * @param {string} restaurantId - ID-ul restaurantului
+ * @param {string} tenantId - ID-ul tenant-ului
+ * @returns {Promise<boolean>} `true` dacă restaurantul există
+ * @throws {AppError} În caz de eroare de interogare
+ */
+function _restaurantExists(restaurantId, tenantId) {
+  return new Promise((resolve, reject) => {
+    // ---- SQLite ----
+    if (_isSqlAvailable()) {
+      try {
+        const numericId = parseInt(restaurantId, 10);
+        const sql = !isNaN(numericId)
+          ? 'SELECT id FROM restaurants WHERE id = ? AND tenantId = ?'
+          : 'SELECT id FROM restaurants WHERE CAST(id AS TEXT) = ? AND tenantId = ?';
+        const param = !isNaN(numericId) ? numericId : String(restaurantId);
+
+        // Folosim get() din config/db – import inline pentru a evita probleme
+        // de circularitate (get este definit în config/db.js)
+        const { get } = require('../config/db');
+        const row = get(sql, [param, tenantId]);
+        return resolve(!!row);
+      } catch (sqlErr) {
+        // Dacă SQLite eșuează, încercăm NeDB
+      }
+    }
+
+    // ---- NeDB ----
+    restaurants.findOne({ _id: restaurantId, tenantId }, (findErr, restaurant) => {
+      if (findErr) {
+        return reject(new AppError(
+          `Eroare la verificarea restaurantului: ${findErr.message}`,
+          500,
+          'DB_QUERY_ERROR'
+        ));
+      }
+      resolve(!!restaurant);
+    });
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Funcții de validare
@@ -142,13 +214,12 @@ function isValidStringArray(arr) {
 // ---------------------------------------------------------------------------
 
 /**
- * Obține colecția NeDB pentru itemele de meniu ale unui restaurant.
+ * Obține colecția NeDB pentru itemele de meniu ale unui tenant.
  * Folosește baza de date per-tenant din config/tenant.js.
  * @param {string} tenantId
  * @returns {Datastore}
  */
 function getMenuItemsDb(tenantId) {
-  const { getTenantDb } = require('../config/tenant');
   return getTenantDb(tenantId);
 }
 
@@ -276,56 +347,56 @@ function createMenuItem(itemData) {
     const finalImageUrl = imageUrl || '';
 
     // -----------------------------------------------------------------------
-    // Verificare existență restaurant
+    // Verificare existență restaurant (compatibilă SQLite + NeDB)
     // -----------------------------------------------------------------------
-    restaurants.findOne({ _id: restaurantId, tenantId }, (findErr, restaurant) => {
-      if (findErr) {
-        return reject(new AppError(
-          `Eroare la verificarea restaurantului: ${findErr.message}`,
-          500,
-          'DB_QUERY_ERROR'
-        ));
-      }
-
-      if (!restaurant) {
-        return reject(new AppError(
-          'Restaurantul specificat nu există sau nu aparține acestui tenant.',
-          404,
-          'RESTAURANT_NOT_FOUND'
-        ));
-      }
-
-      // -----------------------------------------------------------------------
-      // Creare document menu item
-      // -----------------------------------------------------------------------
-      const menuItemDoc = {
-        name: name.trim(),
-        category,
-        price,
-        description: typeof finalDescription === 'string' ? finalDescription.trim() : '',
-        allergens: finalAllergens,
-        ingredients: finalIngredients.map((i) => i.trim()),
-        availability: finalAvailability,
-        imageUrl: finalImageUrl,
-        tenantId,
-        restaurantId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      const menuDb = getMenuItemsDb(tenantId);
-      menuDb.insert(menuItemDoc, (insertErr, newItem) => {
-        if (insertErr) {
+    _restaurantExists(restaurantId, tenantId)
+      .then((exists) => {
+        if (!exists) {
           return reject(new AppError(
-            `Eroare la crearea itemului de meniu: ${insertErr.message}`,
-            500,
-            'DB_INSERT_ERROR'
+            'Restaurantul specificat nu există sau nu aparține acestui tenant.',
+            404,
+            'RESTAURANT_NOT_FOUND'
           ));
         }
 
-        resolve(newItem);
+        // -------------------------------------------------------------------
+        // Creare document menu item
+        // -------------------------------------------------------------------
+        const menuItemDoc = {
+          name: name.trim(),
+          category,
+          price,
+          description: typeof finalDescription === 'string' ? finalDescription.trim() : '',
+          allergens: finalAllergens,
+          ingredients: finalIngredients.map((i) => i.trim()),
+          availability: finalAvailability,
+          imageUrl: finalImageUrl,
+          tenantId,
+          restaurantId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        const menuDb = getMenuItemsDb(tenantId);
+        menuDb.insert(menuItemDoc, (insertErr, newItem) => {
+          if (insertErr) {
+            return reject(new AppError(
+              `Eroare la crearea itemului de meniu: ${insertErr.message}`,
+              500,
+              'DB_INSERT_ERROR'
+            ));
+          }
+
+          resolve(newItem);
+        });
+      })
+      .catch((err) => {
+        reject(err instanceof AppError ? err : new AppError(
+          `Eroare la verificarea restaurantului: ${err.message}`,
+          500,
+          'DB_QUERY_ERROR'
+        ));
       });
-    });
   });
 }
 
@@ -1077,4 +1148,9 @@ module.exports = {
   countMenuItemsByCategory,
   searchMenuItemsByName,
   getMenuCategories,
+
+  // Expunere pentru debugging / testare
+  _isSqlAvailable,
+  _restaurantExists,
+  _resetSqlAvailable: function () { _sqlAvailable = null; },
 };

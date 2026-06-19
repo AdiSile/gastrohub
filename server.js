@@ -119,12 +119,19 @@ const { errorHandler } = require('./middleware/errorHandler');
 app.use(errorHandler);
 
 // ---------------------------------------------------------------------------
-// Pornire server
+// Inițializare bază de date + Pornire server
 // ---------------------------------------------------------------------------
 
-app.listen(PORT, () => {
-  console.log(`[GastroHub] Server pornit pe portul ${PORT}`);
-  console.log(`[GastroHub] Mediul: ${process.env.NODE_ENV || 'development'}`);
+const { initDb } = require('./config/db');
+
+initDb().then(() => {
+  app.listen(PORT, () => {
+    console.log(`[GastroHub] Server pornit pe portul ${PORT}`);
+    console.log(`[GastroHub] Mediul: ${process.env.NODE_ENV || 'development'}`);
+  });
+}).catch((err) => {
+  console.error('[GastroHub] Eroare la inițializarea bazei de date:', err);
+  process.exit(1);
 });
 
 module.exports = app;

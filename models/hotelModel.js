@@ -4,16 +4,30 @@
 // Model Hotel - GastroHub
 // Contine operatii CRUD pentru hoteluri, camere si rezervari.
 // Foloseste NeDB (@seald-io/nedb) ca baza de date embedded.
+// Instantele partajate hotels & reservations vin din config/db.js.
 // ---------------------------------------------------------------------------
 
 const Datastore = require('nedb');
 const path = require('path');
+const {
+  hotels,
+  reservations,
+  dataDir,
+} = require('../config/db');
 
 // ---------------------------------------------------------------------------
-// Directorul implicit pentru bazele de date NeDB
+// Baza de date dedicata pentru camere (rooms)
+// Nu exista o colectie partajata in config/db.js, asa ca o cream aici,
+// dar folosim acelasi dataDir pentru consistenta.
 // ---------------------------------------------------------------------------
 
-const DB_DIR = './data';
+const roomsDb = new Datastore({
+  filename: process.env.NODE_ENV === 'test'
+    ? undefined
+    : path.join(dataDir, 'rooms.db'),
+  autoload: true,
+  timestampData: false,
+});
 
 // ---------------------------------------------------------------------------
 // Constante si liste valide
@@ -81,39 +95,22 @@ function isValidPhone(phone) {
 }
 
 // ---------------------------------------------------------------------------
-// Initializare baze de date NeDB
+// Indexuri specifice modelului hotel (complementare celor din config/db.js)
 // ---------------------------------------------------------------------------
+// config/db.js seteaza deja: hotels.ensureIndex('tenantId'), hotels.ensureIndex('status')
+// Adaugam aici cele specifice doar domeniului hotel:
+hotels.ensureIndex({ fieldName: 'nume' });
 
-const hotelsDb = new Datastore({
-  filename: path.join(DB_DIR, 'hotels.db'),
-  autoload: true,
-});
+// config/db.js seteaza deja pt reservations: tenantId, resourceId, status,
+//   [tenantId, resourceId], [tenantId, status]
+// Adaugam aici indexurile specifice rezervarilor de hotel:
+reservations.ensureIndex({ fieldName: 'hotelId' });
+reservations.ensureIndex({ fieldName: 'guestId' });
 
-const roomsDb = new Datastore({
-  filename: path.join(DB_DIR, 'rooms.db'),
-  autoload: true,
-});
-
-const reservationsDb = new Datastore({
-  filename: path.join(DB_DIR, 'reservations.db'),
-  autoload: true,
-});
-
-// ---------------------------------------------------------------------------
-// Indexuri pentru performanta
-// ---------------------------------------------------------------------------
-
-hotelsDb.ensureIndex({ fieldName: 'tenantId' });
-hotelsDb.ensureIndex({ fieldName: 'nume' });
-
+// Indexuri pentru roomsDb (colectie locala)
 roomsDb.ensureIndex({ fieldName: 'tenantId' });
 roomsDb.ensureIndex({ fieldName: 'hotelId' });
 roomsDb.ensureIndex({ fieldName: 'numar' });
-
-reservationsDb.ensureIndex({ fieldName: 'tenantId' });
-reservationsDb.ensureIndex({ fieldName: 'hotelId' });
-reservationsDb.ensureIndex({ fieldName: 'guestId' });
-reservationsDb.ensureIndex({ fieldName: 'status' });
 
 // =========================================================================
 // Operatii CRUD - Hoteluri
@@ -191,7 +188,7 @@ function createHotel(data) {
       updatedAt: new Date().toISOString(),
     };
 
-    hotelsDb.insert(doc, (err, newDoc) => {
+    hotels.insert(doc, (err, newDoc) => {
       if (err) {
         return reject(new Error(`Eroare la crearea hotelului: ${err.message}`));
       }
@@ -211,7 +208,7 @@ function getHotelById(id) {
       return reject(new Error('ID-ul hotelului este invalid.'));
     }
 
-    hotelsDb.findOne({ _id: id }, (err, doc) => {
+    hotels.findOne({ _id: id }, (err, doc) => {
       if (err) {
         return reject(new Error(`Eroare la cautarea hotelului: ${err.message}`));
       }
@@ -231,7 +228,7 @@ function getHotelsByTenant(tenantId) {
       return reject(new Error('ID-ul tenant-ului este obligatoriu.'));
     }
 
-    hotelsDb.find({ tenantId }).sort({ nume: 1 }).exec((err, docs) => {
+    hotels.find({ tenantId }).sort({ nume: 1 }).exec((err, docs) => {
       if (err) {
         return reject(new Error(`Eroare la cautarea hotelurilor: ${err.message}`));
       }
@@ -303,7 +300,7 @@ function updateHotel(id, updates) {
 
     const $set = { ...updates, updatedAt: new Date().toISOString() };
 
-    hotelsDb.update({ _id: id }, { $set }, {}, (err, numReplaced) => {
+    hotels.update({ _id: id }, { $set }, {}, (err, numReplaced) => {
       if (err) {
         return reject(new Error(`Eroare la actualizarea hotelului: ${err.message}`));
       }
@@ -312,7 +309,7 @@ function updateHotel(id, updates) {
         return resolve(null);
       }
 
-      hotelsDb.findOne({ _id: id }, (findErr, doc) => {
+      hotels.findOne({ _id: id }, (findErr, doc) => {
         if (findErr) {
           return reject(new Error(`Eroare la regasirea hotelului actualizat: ${findErr.message}`));
         }
@@ -333,7 +330,7 @@ function deleteHotel(id) {
       return reject(new Error('ID-ul hotelului este invalid.'));
     }
 
-    hotelsDb.remove({ _id: id }, {}, (err, numRemoved) => {
+    hotels.remove({ _id: id }, {}, (err, numRemoved) => {
       if (err) {
         return reject(new Error(`Eroare la stergerea hotelului: ${err.message}`));
       }
@@ -353,7 +350,7 @@ function deleteHotel(id) {
  */
 function listAllHotels() {
   return new Promise((resolve, reject) => {
-    hotelsDb.find({}).sort({ nume: 1 }).exec((err, docs) => {
+    hotels.find({}).sort({ nume: 1 }).exec((err, docs) => {
       if (err) {
         return reject(new Error(`Eroare la listarea hotelurilor: ${err.message}`));
       }
@@ -654,7 +651,7 @@ function createReservation(data) {
       updatedAt: new Date().toISOString(),
     };
 
-    reservationsDb.insert(doc, (err, newDoc) => {
+    reservations.insert(doc, (err, newDoc) => {
       if (err) {
         return reject(new Error(`Eroare la crearea rezervarii: ${err.message}`));
       }
@@ -674,7 +671,7 @@ function getReservationById(id) {
       return reject(new Error('ID-ul rezervarii este invalid.'));
     }
 
-    reservationsDb.findOne({ _id: id }, (err, doc) => {
+    reservations.findOne({ _id: id }, (err, doc) => {
       if (err) {
         return reject(new Error(`Eroare la cautarea rezervarii: ${err.message}`));
       }
@@ -694,7 +691,7 @@ function getReservationsByHotel(hotelId) {
       return reject(new Error('ID-ul hotelului este invalid.'));
     }
 
-    reservationsDb.find({ hotelId }).sort({ checkIn: 1 }).exec((err, docs) => {
+    reservations.find({ hotelId }).sort({ checkIn: 1 }).exec((err, docs) => {
       if (err) {
         return reject(new Error(`Eroare la cautarea rezervarilor: ${err.message}`));
       }
@@ -716,7 +713,7 @@ function getReservationsByGuest(guestInfo) {
 
     const searchTerm = guestInfo.trim();
 
-    reservationsDb.find({
+    reservations.find({
       $or: [
         { numePersoana: { $regex: new RegExp(searchTerm, 'i') } },
         { telefon: { $regex: new RegExp(searchTerm, 'i') } },
@@ -747,7 +744,7 @@ function updateReservationStatus(id, status) {
       return reject(new Error(`Statusul "${status}" nu este valid. Statusuri permise: ${VALID_RESERVATION_STATUSES.join(', ')}.`));
     }
 
-    reservationsDb.update(
+    reservations.update(
       { _id: id },
       { $set: { status, updatedAt: new Date().toISOString() } },
       { returnUpdatedDocs: true },
@@ -777,7 +774,7 @@ function cancelReservation(id) {
       return reject(new Error('ID-ul rezervarii este invalid.'));
     }
 
-    reservationsDb.findOne({ _id: id }, (err, reservation) => {
+    reservations.findOne({ _id: id }, (err, reservation) => {
       if (err) {
         return reject(new Error(`Eroare la cautarea rezervarii: ${err.message}`));
       }
@@ -794,7 +791,7 @@ function cancelReservation(id) {
         return reject(new Error('Rezervarile finalizate nu pot fi anulate.'));
       }
 
-      reservationsDb.update(
+      reservations.update(
         { _id: id },
         { $set: { status: 'anulata', updatedAt: new Date().toISOString() } },
         { returnUpdatedDocs: true },

@@ -3,7 +3,6 @@
 const chai = require('chai');
 const sinon = require('sinon');
 const path = require('path');
-const fs = require('fs');
 
 const { expect } = chai;
 
@@ -106,6 +105,14 @@ describe('InventoryItemModel', () => {
         expect(inventoryModel.isValidName(undefined)).to.be.false;
         expect(inventoryModel.isValidName({})).to.be.false;
       });
+
+      it('să returneze false pentru nume mai lung de 200 de caractere', () => {
+        expect(inventoryModel.isValidName('A'.repeat(201))).to.be.false;
+      });
+
+      it('să returneze true pentru nume exact de 200 de caractere', () => {
+        expect(inventoryModel.isValidName('A'.repeat(200))).to.be.true;
+      });
     });
 
     describe('isValidCategory', () => {
@@ -127,6 +134,13 @@ describe('InventoryItemModel', () => {
         expect(inventoryModel.isValidUnit('kg')).to.be.true;
         expect(inventoryModel.isValidUnit('l')).to.be.true;
         expect(inventoryModel.isValidUnit('buc')).to.be.true;
+        expect(inventoryModel.isValidUnit('g')).to.be.true;
+        expect(inventoryModel.isValidUnit('ml')).to.be.true;
+        expect(inventoryModel.isValidUnit('pachet')).to.be.true;
+        expect(inventoryModel.isValidUnit('cutie')).to.be.true;
+        expect(inventoryModel.isValidUnit('sticlă')).to.be.true;
+        expect(inventoryModel.isValidUnit('bax')).to.be.true;
+        expect(inventoryModel.isValidUnit('kg/l')).to.be.true;
       });
 
       it('să returneze false pentru unități invalide', () => {
@@ -201,6 +215,14 @@ describe('InventoryItemModel', () => {
     it('să seteze minThreshold default la 0 dacă nu este furnizat', async () => {
       const { minThreshold, ...rest } = baseItem;
       const item = await inventoryModel.createInventoryItem(rest);
+      expect(item.minThreshold).to.equal(0);
+    });
+
+    it('să seteze minThreshold default la 0 dacă este null', async () => {
+      const item = await inventoryModel.createInventoryItem({
+        ...baseItem,
+        minThreshold: null,
+      });
       expect(item.minThreshold).to.equal(0);
     });
 
@@ -361,9 +383,26 @@ describe('InventoryItemModel', () => {
       expect(items).to.have.lengthOf(2);
     });
 
+    it('să filtreze după supplierId', async () => {
+      await clearCollection();
+      await seedItems([
+        { ...baseItem, name: 'A', tenantId: tenantA, supplierId: 'sup-1' },
+        { ...baseItem, name: 'B', tenantId: tenantA, supplierId: 'sup-2' },
+        { ...baseItem, name: 'C', tenantId: tenantA },
+      ]);
+      const items = await inventoryModel.findInventoryItemsByTenant(tenantA, { supplierId: 'sup-1' });
+      expect(items).to.have.lengthOf(1);
+      expect(items[0].name).to.equal('A');
+    });
+
     it('să sorteze descendent', async () => {
       const items = await inventoryModel.findInventoryItemsByTenant(tenantA, { sortBy: 'name', sortOrder: 'desc' });
       expect(items[0].name).to.equal('B');
+    });
+
+    it('să sorteze ascendent (default)', async () => {
+      const items = await inventoryModel.findInventoryItemsByTenant(tenantA);
+      expect(items[0].name).to.equal('A');
     });
 
     it('să respingă tenantId gol', async () => {
@@ -416,6 +455,15 @@ describe('InventoryItemModel', () => {
       } catch (err) {
         expect(err).to.be.instanceOf(AppError);
         expect(err.code).to.equal('INVALID_LOCATION_TYPE');
+      }
+    });
+
+    it('să respingă locationType gol', async () => {
+      try {
+        await inventoryModel.findInventoryItemsByLocation('loc-1', '');
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
       }
     });
   });
@@ -489,6 +537,16 @@ describe('InventoryItemModel', () => {
       }
     });
 
+    it('să respingă cantitate NaN', async () => {
+      try {
+        await inventoryModel.updateQuantity(createdItem._id, NaN);
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.code).to.equal('INVALID_QUANTITY');
+      }
+    });
+
     it('să respingă ID gol', async () => {
       try {
         await inventoryModel.updateQuantity('', 10);
@@ -530,6 +588,11 @@ describe('InventoryItemModel', () => {
       expect(updated.quantity).to.equal(30);
     });
 
+    it('să permită ajustare până la 0', async () => {
+      const updated = await inventoryModel.adjustQuantity(createdItem._id, -50);
+      expect(updated.quantity).to.equal(0);
+    });
+
     it('să respingă rezultat negativ', async () => {
       try {
         await inventoryModel.adjustQuantity(createdItem._id, -100);
@@ -543,6 +606,16 @@ describe('InventoryItemModel', () => {
     it('să respingă delta invalid (non-numeric)', async () => {
       try {
         await inventoryModel.adjustQuantity(createdItem._id, 'abc');
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.code).to.equal('INVALID_DELTA');
+      }
+    });
+
+    it('să respingă delta NaN', async () => {
+      try {
+        await inventoryModel.adjustQuantity(createdItem._id, NaN);
         throw new Error('A trebuit să arunce o eroare');
       } catch (err) {
         expect(err).to.be.instanceOf(AppError);
@@ -591,12 +664,32 @@ describe('InventoryItemModel', () => {
       expect(updated.minThreshold).to.equal(5);
     });
 
+    it('să actualizeze supplierId la null', async () => {
+      // Creăm un item cu supplierId
+      const itemWithSupplier = await inventoryModel.createInventoryItem({
+        ...baseItem,
+        name: 'Cu furnizor',
+        supplierId: 'sup-1',
+      });
+      const updated = await inventoryModel.updateInventoryItem(itemWithSupplier._id, {
+        supplierId: null,
+      });
+      expect(updated.supplierId).to.be.null;
+    });
+
     it('să nu actualizeze câmpuri nepermise (quantity)', async () => {
       const updated = await inventoryModel.updateInventoryItem(createdItem._id, {
         quantity: 999,
       });
       // quantity nu e în allowedFields, deci nu s-a schimbat
       expect(updated.quantity).to.equal(50);
+    });
+
+    it('să nu actualizeze câmpuri nepermise (locationId)', async () => {
+      const updated = await inventoryModel.updateInventoryItem(createdItem._id, {
+        locationId: 'loc-hacked',
+      });
+      expect(updated.locationId).to.equal('loc-1');
     });
 
     it('să respingă dacă nu există câmpuri valide', async () => {
@@ -606,6 +699,16 @@ describe('InventoryItemModel', () => {
       } catch (err) {
         expect(err).to.be.instanceOf(AppError);
         expect(err.code).to.equal('NO_VALID_FIELDS');
+      }
+    });
+
+    it('să respingă date de actualizare nule', async () => {
+      try {
+        await inventoryModel.updateInventoryItem(createdItem._id, null);
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.code).to.equal('INVALID_UPDATE_DATA');
       }
     });
 
@@ -626,6 +729,36 @@ describe('InventoryItemModel', () => {
       } catch (err) {
         expect(err).to.be.instanceOf(AppError);
         expect(err.code).to.equal('INVALID_CATEGORY');
+      }
+    });
+
+    it('să respingă unitate invalidă', async () => {
+      try {
+        await inventoryModel.updateInventoryItem(createdItem._id, { unit: 'galon' });
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.code).to.equal('INVALID_UNIT');
+      }
+    });
+
+    it('să respingă minThreshold invalid', async () => {
+      try {
+        await inventoryModel.updateInventoryItem(createdItem._id, { minThreshold: -1 });
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.code).to.equal('INVALID_THRESHOLD');
+      }
+    });
+
+    it('să respingă ID gol', async () => {
+      try {
+        await inventoryModel.updateInventoryItem('', { name: 'Test' });
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.code).to.equal('INVALID_ITEM_ID');
       }
     });
 
@@ -704,6 +837,16 @@ describe('InventoryItemModel', () => {
 
     it('să returneze 0 pentru tenantId gol', async () => {
       const count = await inventoryModel.countInventoryItems('');
+      expect(count).to.equal(0);
+    });
+
+    it('să returneze 0 pentru tenant fără iteme', async () => {
+      const count = await inventoryModel.countInventoryItems('inexistent');
+      expect(count).to.equal(0);
+    });
+
+    it('să returneze 0 pentru categorie fără iteme', async () => {
+      const count = await inventoryModel.countInventoryItems(tenantA, { category: 'consumabile' });
       expect(count).to.equal(0);
     });
   });
@@ -788,11 +931,13 @@ describe('InventoryItemModel', () => {
   });
 
   // =========================================================================
-  // Teste suplimentare de acoperire (branch-uri)
+  // Teste suplimentare de acoperire (branch-uri și erori DB)
   // =========================================================================
   describe('Branch-uri suplimentare pentru acoperire > 80%', () => {
+    // -----------------------------------------------------------------------
+    // Erori DB – createInventoryItem
+    // -----------------------------------------------------------------------
     it('să gestioneze eroare DB la findOne în createInventoryItem', async () => {
-      // Forțăm o eroare făcând stub pe findOne
       const stub = sinon.stub(inventoryModel.inventoryItems, 'findOne').yields(new Error('DB down'));
 
       try {
@@ -808,7 +953,6 @@ describe('InventoryItemModel', () => {
     });
 
     it('să gestioneze eroare DB la insert în createInventoryItem', async () => {
-      // Mai întâi facem să treacă de findOne, apoi să pice la insert
       const findStub = sinon.stub(inventoryModel.inventoryItems, 'findOne').yields(null, null);
       const insertStub = sinon.stub(inventoryModel.inventoryItems, 'insert').yields(new Error('Insert failed'));
 
@@ -825,6 +969,67 @@ describe('InventoryItemModel', () => {
       }
     });
 
+    // -----------------------------------------------------------------------
+    // Erori DB – findInventoryItemById (findOne)
+    // -----------------------------------------------------------------------
+    it('să gestioneze eroare DB la findOne în findInventoryItemById', async () => {
+      const stub = sinon.stub(inventoryModel.inventoryItems, 'findOne').yields(new Error('DB down'));
+
+      try {
+        await inventoryModel.findInventoryItemById('valid-id');
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.statusCode).to.equal(500);
+        expect(err.message).to.include('Eroare la căutarea itemului');
+      } finally {
+        stub.restore();
+      }
+    });
+
+    // -----------------------------------------------------------------------
+    // Erori DB – findInventoryItemsByTenant (chained: find().sort().exec())
+    // -----------------------------------------------------------------------
+    it('să gestioneze eroare DB la find/sort/exec în findInventoryItemsByTenant', async () => {
+      const execStub = sinon.stub().callsFake((callback) => callback(new Error('Query failed')));
+      const sortStub = sinon.stub().returns({ exec: execStub });
+      const findStub = sinon.stub(inventoryModel.inventoryItems, 'find').returns({ sort: sortStub });
+
+      try {
+        await inventoryModel.findInventoryItemsByTenant(tenantA);
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.statusCode).to.equal(500);
+        expect(err.message).to.include('Eroare la căutarea itemelor');
+      } finally {
+        findStub.restore();
+      }
+    });
+
+    // -----------------------------------------------------------------------
+    // Erori DB – findInventoryItemsByLocation (chained: find().sort().exec())
+    // -----------------------------------------------------------------------
+    it('să gestioneze eroare DB la find/sort/exec în findInventoryItemsByLocation', async () => {
+      const execStub = sinon.stub().callsFake((callback) => callback(new Error('Query failed')));
+      const sortStub = sinon.stub().returns({ exec: execStub });
+      const findStub = sinon.stub(inventoryModel.inventoryItems, 'find').returns({ sort: sortStub });
+
+      try {
+        await inventoryModel.findInventoryItemsByLocation('loc-1', 'restaurant');
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.statusCode).to.equal(500);
+        expect(err.message).to.include('Eroare la căutarea itemelor');
+      } finally {
+        findStub.restore();
+      }
+    });
+
+    // -----------------------------------------------------------------------
+    // Erori DB – findLowStockItems (find)
+    // -----------------------------------------------------------------------
     it('să gestioneze eroare DB la find în findLowStockItems', async () => {
       const stub = sinon.stub(inventoryModel.inventoryItems, 'find').yields(new Error('Query failed'));
 
@@ -839,13 +1044,14 @@ describe('InventoryItemModel', () => {
       }
     });
 
+    // -----------------------------------------------------------------------
+    // Erori DB – updateQuantity (update)
+    // -----------------------------------------------------------------------
     it('să gestioneze eroare DB la update în updateQuantity', async () => {
       const stub = sinon.stub(inventoryModel.inventoryItems, 'update').yields(new Error('Update failed'));
 
       try {
-        // Mai întâi creăm itemul
         const item = await inventoryModel.createInventoryItem(baseItem);
-        // Acum testăm update
         await inventoryModel.updateQuantity(item._id, 10);
         throw new Error('A trebuit să arunce o eroare');
       } catch (err) {
@@ -856,6 +1062,71 @@ describe('InventoryItemModel', () => {
       }
     });
 
+    // -----------------------------------------------------------------------
+    // Erori DB – adjustQuantity (findOne)
+    // -----------------------------------------------------------------------
+    it('să gestioneze eroare DB la findOne în adjustQuantity', async () => {
+      const findOneStub = sinon.stub(inventoryModel.inventoryItems, 'findOne').yields(new Error('DB down'));
+
+      try {
+        await inventoryModel.adjustQuantity('some-id', 10);
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.statusCode).to.equal(500);
+        expect(err.message).to.include('Eroare la căutarea itemului');
+      } finally {
+        findOneStub.restore();
+      }
+    });
+
+    // -----------------------------------------------------------------------
+    // Erori DB – adjustQuantity (update)
+    // -----------------------------------------------------------------------
+    it('să gestioneze eroare DB la update în adjustQuantity', async () => {
+      const fakeItem = {
+        _id: 'fake-id',
+        name: 'Test',
+        quantity: 50,
+        tenantId: tenantA,
+      };
+      const findOneStub = sinon.stub(inventoryModel.inventoryItems, 'findOne').yields(null, fakeItem);
+      const updateStub = sinon.stub(inventoryModel.inventoryItems, 'update').yields(new Error('Update failed'));
+
+      try {
+        await inventoryModel.adjustQuantity('fake-id', 10);
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.statusCode).to.equal(500);
+        expect(err.message).to.include('Eroare la ajustarea cantității');
+      } finally {
+        findOneStub.restore();
+        updateStub.restore();
+      }
+    });
+
+    // -----------------------------------------------------------------------
+    // Erori DB – updateInventoryItem (update)
+    // -----------------------------------------------------------------------
+    it('să gestioneze eroare DB la update în updateInventoryItem', async () => {
+      const stub = sinon.stub(inventoryModel.inventoryItems, 'update').yields(new Error('Update failed'));
+
+      try {
+        const item = await inventoryModel.createInventoryItem(baseItem);
+        await inventoryModel.updateInventoryItem(item._id, { name: 'Nou' });
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.statusCode).to.equal(500);
+      } finally {
+        stub.restore();
+      }
+    });
+
+    // -----------------------------------------------------------------------
+    // Erori DB – deleteInventoryItem (remove)
+    // -----------------------------------------------------------------------
     it('să gestioneze eroare DB la remove în deleteInventoryItem', async () => {
       const stub = sinon.stub(inventoryModel.inventoryItems, 'remove').yields(new Error('Remove failed'));
 
@@ -871,5 +1142,142 @@ describe('InventoryItemModel', () => {
       }
     });
 
-    it('să gestioneze eroare DB la count', async () => {
-      const stub = sinon.stub(inventoryModel.inventoryItems, 'count').yields(new Error('Count failed
+    // -----------------------------------------------------------------------
+    // Erori DB – countInventoryItems (count)
+    // -----------------------------------------------------------------------
+    it('să gestioneze eroare DB la count în countInventoryItems', async () => {
+      const stub = sinon.stub(inventoryModel.inventoryItems, 'count').yields(new Error('Count failed'));
+
+      try {
+        await inventoryModel.countInventoryItems(tenantA);
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.statusCode).to.equal(500);
+        expect(err.message).to.include('Eroare la numărarea itemelor');
+      } finally {
+        stub.restore();
+      }
+    });
+
+    // -----------------------------------------------------------------------
+    // Erori DB – findInventoryItemsBySupplier (find)
+    // -----------------------------------------------------------------------
+    it('să gestioneze eroare DB la find în findInventoryItemsBySupplier', async () => {
+      const stub = sinon.stub(inventoryModel.inventoryItems, 'find').yields(new Error('Query failed'));
+
+      try {
+        await inventoryModel.findInventoryItemsBySupplier('supplier-1');
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.statusCode).to.equal(500);
+        expect(err.message).to.include('Eroare la căutarea itemelor');
+      } finally {
+        stub.restore();
+      }
+    });
+
+    // -----------------------------------------------------------------------
+    // Erori DB – getInventorySummary (find)
+    // -----------------------------------------------------------------------
+    it('să gestioneze eroare DB la find în getInventorySummary', async () => {
+      const stub = sinon.stub(inventoryModel.inventoryItems, 'find').yields(new Error('Query failed'));
+
+      try {
+        await inventoryModel.getInventorySummary(tenantA);
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.statusCode).to.equal(500);
+        expect(err.message).to.include('Eroare la căutarea itemelor');
+      } finally {
+        stub.restore();
+      }
+    });
+
+    // -----------------------------------------------------------------------
+    // Teste edge-case suplimentare
+    // -----------------------------------------------------------------------
+
+    it('countInventoryItems să trateze tenantId null', async () => {
+      const count = await inventoryModel.countInventoryItems(null);
+      expect(count).to.equal(0);
+    });
+
+    it('createInventoryItem să respingă date de tip non-object (array)', async () => {
+      try {
+        await inventoryModel.createInventoryItem([]);
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.code).to.equal('INVALID_ITEM_DATA');
+      }
+    });
+
+    it('createInventoryItem să respingă date de tip non-object (string)', async () => {
+      try {
+        await inventoryModel.createInventoryItem('invalid');
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.code).to.equal('INVALID_ITEM_DATA');
+      }
+    });
+
+    it('updateInventoryItem să actualizeze și updatedAt/lastUpdated', async () => {
+      const item = await inventoryModel.createInventoryItem(baseItem);
+      const beforeUpdate = item.updatedAt;
+
+      // Așteptăm 10ms pentru a diferenția timestamp-urile
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const updated = await inventoryModel.updateInventoryItem(item._id, { name: 'Nume nou' });
+      expect(updated.updatedAt).to.not.equal(beforeUpdate);
+      expect(updated.lastUpdated).to.not.equal(beforeUpdate);
+    });
+
+    it('updateQuantity să actualizeze lastUpdated', async () => {
+      const item = await inventoryModel.createInventoryItem(baseItem);
+      const beforeUpdate = item.lastUpdated;
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const updated = await inventoryModel.updateQuantity(item._id, 30);
+      expect(updated.lastUpdated).to.not.equal(beforeUpdate);
+    });
+
+    it('adjustQuantity să actualizeze lastUpdated', async () => {
+      const item = await inventoryModel.createInventoryItem(baseItem);
+      const beforeUpdate = item.lastUpdated;
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const updated = await inventoryModel.adjustQuantity(item._id, 5);
+      expect(updated.lastUpdated).to.not.equal(beforeUpdate);
+    });
+
+    it('adjustQuantity să trateze cazul în care update returnează numUpdated=0', async () => {
+      const fakeItem = {
+        _id: 'fake-id',
+        name: 'Test',
+        quantity: 50,
+        tenantId: tenantA,
+      };
+      const findOneStub = sinon.stub(inventoryModel.inventoryItems, 'findOne').yields(null, fakeItem);
+      const updateStub = sinon.stub(inventoryModel.inventoryItems, 'update').yields(null, 0, null);
+
+      try {
+        await inventoryModel.adjustQuantity('fake-id', 10);
+        throw new Error('A trebuit să arunce o eroare');
+      } catch (err) {
+        expect(err).to.be.instanceOf(AppError);
+        expect(err.statusCode).to.equal(404);
+        expect(err.code).to.equal('ITEM_NOT_FOUND');
+      } finally {
+        findOneStub.restore();
+        updateStub.restore();
+      }
+    });
+  });
+});
