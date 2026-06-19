@@ -1,28 +1,36 @@
 'use strict';
 
 // ---------------------------------------------------------------------------
-// Model Reservation – GastroHub
-// Definirea structurii, validărilor și operațiilor CRUD pentru rezervări.
-// Suportă rezervări pentru restaurante (mese) și hoteluri (camere cu check-in/check-out).
-// Câmpuri suportate: tip, tenantId, restaurantId, hotelId, masă, cameră,
-// numePersoană, telefon, email, dată, oră, numărPersoane, status, note,
-// checkInData, checkOutData, guestId, sumarFacturare
+// Model Reservation – GastroHub (SQLite / better-sqlite3 via config/db)
+// ---------------------------------------------------------------------------
+// Gestionează rezervările hoteliere: creare, căutare după ID, hotel, guest,
+// actualizare status și anulare.
+//
+// Presupune existența tabelei:
+//   CREATE TABLE IF NOT EXISTS reservations (
+//     id          INTEGER PRIMARY KEY AUTOINCREMENT,
+//     hotelId     TEXT    NOT NULL,
+//     guestId     TEXT,
+//     guestName   TEXT    NOT NULL,
+//     guestPhone  TEXT    DEFAULT '',
+//     guestEmail  TEXT    DEFAULT '',
+//     checkIn     TEXT    NOT NULL,   -- YYYY-MM-DD
+//     checkOut    TEXT    NOT NULL,   -- YYYY-MM-DD
+//     roomId      TEXT,
+//     numGuests   INTEGER DEFAULT 1,
+//     status      TEXT    DEFAULT 'confirmată',
+//     notes       TEXT    DEFAULT '',
+//     createdAt   TEXT    DEFAULT (datetime('now')),
+//     updatedAt   TEXT    DEFAULT (datetime('now'))
+//   );
 // ---------------------------------------------------------------------------
 
-const { restaurants } = require('../config/db');
-const { AppError } = require('../middleware/errorHandler');
+const db = require('../config/db');
 
 // ---------------------------------------------------------------------------
-// Tipuri de rezervare valide
+// Statusuri valide
 // ---------------------------------------------------------------------------
-
-const VALID_RESERVATION_TYPES = ['restaurant', 'hotel'];
-
-// ---------------------------------------------------------------------------
-// Statusuri valide pentru o rezervare
-// ---------------------------------------------------------------------------
-
-const VALID_RESERVATION_STATUSES = [
+const VALID_STATUSES = [
   'confirmată',
   'în așteptare',
   'anulată',
@@ -34,907 +42,313 @@ const VALID_RESERVATION_STATUSES = [
 ];
 
 // ---------------------------------------------------------------------------
-// Statusuri valide pentru facturare
-// ---------------------------------------------------------------------------
-
-const VALID_BILLING_STATUSES = [
-  'nefacturat',
-  'facturat parțial',
-  'facturat integral',
-  'achitat',
-  'anulat',
-];
-
-// ---------------------------------------------------------------------------
-// Funcții de validare
+// Helpers
 // ---------------------------------------------------------------------------
 
 /**
- * Verifică dacă un șir nu este gol și are lungimea între limite.
- * @param {*} val - Valoarea de verificat
- * @param {number} [min=1] - Lungimea minimă
- * @param {number} [max=255] - Lungimea maximă
- * @returns {boolean}
+ * Verifică dacă un șir are lungimea între min și max.
  */
 function isValidString(val, min = 1, max = 255) {
   return typeof val === 'string' && val.trim().length >= min && val.trim().length <= max;
 }
 
 /**
- * Verifică dacă o valoare este un număr întreg pozitiv.
- * @param {*} val
- * @returns {boolean}
- */
-function isValidPositiveInt(val) {
-  return Number.isInteger(val) && val >= 0;
-}
-
-/**
- * Verifică dacă un tip de rezervare este valid.
- * @param {string} tip
- * @returns {boolean}
- */
-function isValidReservationType(tip) {
-  return VALID_RESERVATION_TYPES.includes(tip);
-}
-
-/**
- * Verifică dacă un status de rezervare este valid.
- * @param {string} status
- * @returns {boolean}
- */
-function isValidReservationStatus(status) {
-  return VALID_RESERVATION_STATUSES.includes(status);
-}
-
-/**
- * Verifică dacă un status de facturare este valid.
- * @param {string} status
- * @returns {boolean}
- */
-function isValidBillingStatus(status) {
-  return VALID_BILLING_STATUSES.includes(status);
-}
-
-/**
- * Verifică dacă un șir este o adresă de email validă (format simplu).
- * @param {string} email
- * @returns {boolean}
- */
-function isValidEmail(email) {
-  if (typeof email !== 'string') return false;
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
-
-/**
- * Verifică dacă un șir este un număr de telefon valid (format simplu românesc/internațional).
- * @param {string} phone
- * @returns {boolean}
- */
-function isValidPhone(phone) {
-  if (typeof phone !== 'string') return false;
-  const phoneRegex = /^[+]?[\d\s\-./()]{6,20}$/;
-  return phoneRegex.test(phone.trim());
-}
-
-/**
- * Verifică dacă o dată este un string ISO valid și reprezintă o dată din viitor (sau azi).
- * @param {string} dateStr - Data în format ISO (YYYY-MM-DD)
- * @returns {boolean}
+ * Verifică dacă o dată este în format YYYY-MM-DD valid.
  */
 function isValidDate(dateStr) {
   if (typeof dateStr !== 'string') return false;
-  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-  if (!dateRegex.test(dateStr)) return false;
-  const date = new Date(dateStr + 'T00:00:00.000Z');
-  if (isNaN(date.getTime())) return false;
-  return true;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const d = new Date(dateStr + 'T00:00:00.000Z');
+  return !isNaN(d.getTime());
 }
 
 /**
- * Verifică dacă o oră este validă (format HH:MM).
- * @param {string} timeStr
- * @returns {boolean}
+ * Verifică dacă un status este permis.
  */
-function isValidTime(timeStr) {
-  if (typeof timeStr !== 'string') return false;
-  const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
-  return timeRegex.test(timeStr);
+function isValidStatus(status) {
+  return VALID_STATUSES.includes(status);
 }
 
 /**
- * Verifică dacă un datetime ISO este valid.
- * @param {string} datetimeStr
- * @returns {boolean}
+ * Verifică dacă un email este valid (format simplu).
  */
-function isValidISODateTime(datetimeStr) {
-  if (typeof datetimeStr !== 'string') return false;
-  const date = new Date(datetimeStr);
-  return !isNaN(date.getTime()) && date.toISOString() === datetimeStr;
+function isValidEmail(email) {
+  if (typeof email !== 'string') return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 /**
- * Verifică dacă numărul de persoane este valid (întreg între 1 și 999).
- * @param {*} val
- * @returns {boolean}
+ * Verifică dacă un telefon este valid.
  */
-function isValidNumberOfPersons(val) {
-  return Number.isInteger(val) && val >= 1 && val <= 999;
-}
-
-/**
- * Verifică dacă o valoare este un număr pozitiv (inclusiv 0).
- * @param {*} val
- * @returns {boolean}
- */
-function isValidPositiveNumber(val) {
-  return typeof val === 'number' && !isNaN(val) && val >= 0;
-}
-
-/**
- * Verifică dacă check-out este după check-in.
- * @param {string} checkIn - Data check-in (YYYY-MM-DD)
- * @param {string} checkOut - Data check-out (YYYY-MM-DD)
- * @returns {boolean}
- */
-function isValidDateRange(checkIn, checkOut) {
-  if (!isValidDate(checkIn) || !isValidDate(checkOut)) return false;
-  return new Date(checkOut) > new Date(checkIn);
+function isValidPhone(phone) {
+  if (typeof phone !== 'string') return false;
+  return /^[+]?[\d\s\-./()]{6,20}$/.test(phone.trim());
 }
 
 // ---------------------------------------------------------------------------
-// Funcții de inițializare a colecției per-tenant
+// createReservation
 // ---------------------------------------------------------------------------
 
 /**
- * Obține colecția NeDB pentru rezervările unui tenant.
- * Folosește baza de date per-tenant din config/tenant.js.
- * @param {string} tenantId
- * @returns {Datastore}
- */
-function getReservationsDb(tenantId) {
-  const { getTenantDb } = require('../config/tenant');
-  return getTenantDb(tenantId);
-}
-
-// ---------------------------------------------------------------------------
-// Operații CRUD – Reservations
-// ---------------------------------------------------------------------------
-
-/**
- * Creează o rezervare nouă.
+ * Creează o rezervare hotelieră nouă.
  *
- * @param {Object} reservationData - Datele rezervării
- * @param {string} reservationData.tip - Tipul rezervării ('restaurant' | 'hotel') (obligatoriu)
- * @param {string} reservationData.tenantId - ID-ul tenant-ului (obligatoriu)
- * @param {string} [reservationData.restaurantId] - ID-ul restaurantului (obligatoriu pentru tip='restaurant')
- * @param {string} [reservationData.hotelId] - ID-ul hotelului (obligatoriu pentru tip='hotel')
- * @param {number} [reservationData.masa] - Numărul mesei (pentru restaurante)
- * @param {string} [reservationData.camera] - Identificatorul camerei (pentru hoteluri)
- * @param {string} reservationData.numePersoana - Numele persoanei care rezervă (obligatoriu)
- * @param {string} [reservationData.telefon] - Numărul de telefon
- * @param {string} [reservationData.email] - Adresa de email
- * @param {string} reservationData.data - Data rezervării (format YYYY-MM-DD) (obligatoriu)
- * @param {string} [reservationData.ora] - Ora rezervării (format HH:MM)
- * @param {number} reservationData.numarPersoane - Numărul de persoane (obligatoriu)
- * @param {string} [reservationData.status='confirmată'] - Statusul rezervării
- * @param {string} [reservationData.note=''] - Note adiționale
- * @param {string} [reservationData.checkInData] - Data check-in (pentru hoteluri, format YYYY-MM-DD)
- * @param {string} [reservationData.checkOutData] - Data check-out (pentru hoteluri, format YYYY-MM-DD)
- * @param {string} [reservationData.guestId] - ID-ul guest-ului (pentru hoteluri)
- * @param {Object} [reservationData.sumarFacturare] - Sumar facturare
- * @param {number} [reservationData.sumarFacturare.totalBrut] - Total brut
- * @param {number} [reservationData.sumarFacturare.totalTVA] - Total TVA
- * @param {number} [reservationData.sumarFacturare.totalNet] - Total net de plată
- * @param {string} [reservationData.sumarFacturare.moneda='RON'] - Moneda
- * @param {string} [reservationData.sumarFacturare.statusFacturare='nefacturat'] - Status facturare
- * @param {Array} [reservationData.sumarFacturare.elementeFacturare] - Elemente facturare
- * @returns {Promise<Object>} Documentul rezervării creat
- * @throws {AppError} Dacă validarea eșuează
+ * @param {Object} data
+ * @param {string} data.hotelId      - ID-ul hotelului (obligatoriu)
+ * @param {string} data.guestName    - Numele persoanei (obligatoriu)
+ * @param {string} data.checkIn      - Data check-in, YYYY-MM-DD (obligatoriu)
+ * @param {string} data.checkOut     - Data check-out, YYYY-MM-DD (obligatoriu)
+ * @param {string} [data.guestId]    - ID-ul guest-ului
+ * @param {string} [data.guestPhone] - Telefon
+ * @param {string} [data.guestEmail] - Email
+ * @param {string} [data.roomId]     - ID-ul camerei
+ * @param {number} [data.numGuests=1] - Număr persoane
+ * @param {string} [data.status='confirmată'] - Status
+ * @param {string} [data.notes='']   - Note
+ * @returns {Object} Rezervarea creată (cu id)
  */
-function createReservation(reservationData) {
-  return new Promise((resolve, reject) => {
-    // Validare date de bază
-    if (!reservationData || typeof reservationData !== 'object') {
-      return reject(new AppError('Datele rezervării sunt invalide.', 400, 'INVALID_RESERVATION_DATA'));
-    }
-
-    const {
-      tip,
-      tenantId,
-      restaurantId,
-      hotelId,
-      masa,
-      camera,
-      numePersoana,
-      telefon,
-      email,
-      data,
-      ora,
-      numarPersoane,
-      status,
-      note,
-      checkInData,
-      checkOutData,
-      guestId,
-      sumarFacturare,
-    } = reservationData;
-
-    // -----------------------------------------------------------------------
-    // Validări individuale
-    // -----------------------------------------------------------------------
-
-    // Validare tenantId
-    if (!tenantId) {
-      return reject(new AppError(
-        'ID-ul tenant-ului este obligatoriu.',
-        400,
-        'MISSING_TENANT_ID'
-      ));
-    }
-
-    // Validare tip
-    if (!tip || !isValidReservationType(tip)) {
-      return reject(new AppError(
-        `Tipul rezervării trebuie să fie unul dintre: ${VALID_RESERVATION_TYPES.join(', ')}.`,
-        400,
-        'INVALID_RESERVATION_TYPE'
-      ));
-    }
-
-    // Validare nume persoană
-    if (!numePersoana || !isValidString(numePersoana, 2, 200)) {
-      return reject(new AppError(
-        'Numele persoanei trebuie să aibă între 2 și 200 de caractere.',
-        400,
-        'INVALID_PERSON_NAME'
-      ));
-    }
-
-    // Validare telefon (opțional)
-    if (telefon !== undefined && telefon !== null && telefon !== '') {
-      if (!isValidPhone(telefon)) {
-        return reject(new AppError(
-          'Numărul de telefon nu este valid.',
-          400,
-          'INVALID_PHONE'
-        ));
-      }
-    }
-
-    // Validare email (opțional)
-    if (email !== undefined && email !== null && email !== '') {
-      if (!isValidEmail(email)) {
-        return reject(new AppError(
-          'Adresa de email nu este validă.',
-          400,
-          'INVALID_EMAIL'
-        ));
-      }
-    }
-
-    // Validare dată
-    if (!data || !isValidDate(data)) {
-      return reject(new AppError(
-        'Data rezervării trebuie să fie o dată validă (format YYYY-MM-DD).',
-        400,
-        'INVALID_DATE'
-      ));
-    }
-
-    // Validare oră (opțional)
-    if (ora !== undefined && ora !== null && ora !== '') {
-      if (!isValidTime(ora)) {
-        return reject(new AppError(
-          'Ora rezervării trebuie să fie în format HH:MM (24h).',
-          400,
-          'INVALID_TIME'
-        ));
-      }
-    }
-
-    // Validare număr persoane
-    if (numarPersoane === undefined || numarPersoane === null || !isValidNumberOfPersons(numarPersoane)) {
-      return reject(new AppError(
-        'Numărul de persoane trebuie să fie un număr întreg între 1 și 999.',
-        400,
-        'INVALID_PERSON_COUNT'
-      ));
-    }
-
-    // Validare status (opțional)
-    const finalStatus = status || 'confirmată';
-    if (!isValidReservationStatus(finalStatus)) {
-      return reject(new AppError(
-        `Statusul "${finalStatus}" nu este valid. Statusuri permise: ${VALID_RESERVATION_STATUSES.join(', ')}.`,
-        400,
-        'INVALID_RESERVATION_STATUS'
-      ));
-    }
-
-    // Validare note (opțional)
-    const finalNote = note !== undefined && note !== null ? String(note) : '';
-    if (finalNote.length > 2000) {
-      return reject(new AppError(
-        'Notele pot avea maximum 2000 de caractere.',
-        400,
-        'INVALID_NOTES'
-      ));
-    }
-
-    // -----------------------------------------------------------------------
-    // Validări specifice tipului hotel
-    // -----------------------------------------------------------------------
-
-    if (tip === 'hotel') {
-      // checkInData și checkOutData
-      if (checkInData !== undefined && checkInData !== null && checkInData !== '') {
-        if (!isValidDate(checkInData)) {
-          return reject(new AppError(
-            'Data de check-in trebuie să fie o dată validă (format YYYY-MM-DD).',
-            400,
-            'INVALID_CHECKIN_DATE'
-          ));
-        }
-      }
-
-      if (checkOutData !== undefined && checkOutData !== null && checkOutData !== '') {
-        if (!isValidDate(checkOutData)) {
-          return reject(new AppError(
-            'Data de check-out trebuie să fie o dată validă (format YYYY-MM-DD).',
-            400,
-            'INVALID_CHECKOUT_DATE'
-          ));
-        }
-      }
-
-      // Dacă avem ambele date, validăm că check-out este după check-in
-      if (checkInData && checkOutData) {
-        if (!isValidDateRange(checkInData, checkOutData)) {
-          return reject(new AppError(
-            'Data de check-out trebuie să fie după data de check-in.',
-            400,
-            'INVALID_DATE_RANGE'
-          ));
-        }
-      }
-
-      // Validare guestId (opțional)
-      if (guestId !== undefined && guestId !== null && guestId !== '') {
-        if (typeof guestId !== 'string' || guestId.trim().length === 0) {
-          return reject(new AppError(
-            'ID-ul guest-ului este invalid.',
-            400,
-            'INVALID_GUEST_ID'
-          ));
-        }
-      }
-
-      // Validare sumarFacturare (opțional)
-      if (sumarFacturare !== undefined && sumarFacturare !== null) {
-        if (typeof sumarFacturare !== 'object' || Array.isArray(sumarFacturare)) {
-          return reject(new AppError(
-            'Sumarul de facturare trebuie să fie un obiect.',
-            400,
-            'INVALID_BILLING_SUMMARY'
-          ));
-        }
-
-        const {
-          totalBrut,
-          totalTVA,
-          totalNet,
-          moneda,
-          statusFacturare,
-          elementeFacturare,
-        } = sumarFacturare;
-
-        // Validare totalBrut
-        if (totalBrut !== undefined && totalBrut !== null) {
-          if (!isValidPositiveNumber(totalBrut)) {
-            return reject(new AppError(
-              'Totalul brut trebuie să fie un număr pozitiv.',
-              400,
-              'INVALID_BILLING_TOTAL_BRUT'
-            ));
-          }
-        }
-
-        // Validare totalTVA
-        if (totalTVA !== undefined && totalTVA !== null) {
-          if (!isValidPositiveNumber(totalTVA)) {
-            return reject(new AppError(
-              'Totalul TVA trebuie să fie un număr pozitiv.',
-              400,
-              'INVALID_BILLING_TOTAL_TVA'
-            ));
-          }
-        }
-
-        // Validare totalNet
-        if (totalNet !== undefined && totalNet !== null) {
-          if (!isValidPositiveNumber(totalNet)) {
-            return reject(new AppError(
-              'Totalul net trebuie să fie un număr pozitiv.',
-              400,
-              'INVALID_BILLING_TOTAL_NET'
-            ));
-          }
-        }
-
-        // Validare monedă
-        if (moneda !== undefined && moneda !== null) {
-          if (typeof moneda !== 'string' || moneda.trim().length !== 3) {
-            return reject(new AppError(
-              'Moneda trebuie să fie un cod ISO de 3 caractere (ex: RON, EUR, USD).',
-              400,
-              'INVALID_BILLING_CURRENCY'
-            ));
-          }
-        }
-
-        // Validare statusFacturare
-        if (statusFacturare !== undefined && statusFacturare !== null) {
-          if (!isValidBillingStatus(statusFacturare)) {
-            return reject(new AppError(
-              `Statusul de facturare "${statusFacturare}" nu este valid. Statusuri permise: ${VALID_BILLING_STATUSES.join(', ')}.`,
-              400,
-              'INVALID_BILLING_STATUS'
-            ));
-          }
-        }
-
-        // Validare elementeFacturare
-        if (elementeFacturare !== undefined && elementeFacturare !== null) {
-          if (!Array.isArray(elementeFacturare)) {
-            return reject(new AppError(
-              'Elementele de facturare trebuie să fie un array.',
-              400,
-              'INVALID_BILLING_ITEMS'
-            ));
-          }
-
-          for (let i = 0; i < elementeFacturare.length; i++) {
-            const item = elementeFacturare[i];
-            if (!item || typeof item !== 'object') {
-              return reject(new AppError(
-                `Elementul de facturare #${i + 1} este invalid.`,
-                400,
-                'INVALID_BILLING_ITEM'
-              ));
-            }
-
-            // denumire obligatorie
-            if (!item.denumire || !isValidString(item.denumire, 1, 500)) {
-              return reject(new AppError(
-                `Elementul de facturare #${i + 1} trebuie să aibă o denumire validă.`,
-                400,
-                'INVALID_BILLING_ITEM_NAME'
-              ));
-            }
-
-            // cantitate opțională
-            if (item.cantitate !== undefined && item.cantitate !== null) {
-              if (!isValidPositiveNumber(item.cantitate) || item.cantitate === 0) {
-                return reject(new AppError(
-                  `Cantitatea pentru elementul #${i + 1} trebuie să fie un număr pozitiv.`,
-                  400,
-                  'INVALID_BILLING_ITEM_QUANTITY'
-                ));
-              }
-            }
-
-            // preț unitar opțional
-            if (item.pretUnitar !== undefined && item.pretUnitar !== null) {
-              if (!isValidPositiveNumber(item.pretUnitar)) {
-                return reject(new AppError(
-                  `Prețul unitar pentru elementul #${i + 1} trebuie să fie un număr pozitiv.`,
-                  400,
-                  'INVALID_BILLING_ITEM_PRICE'
-                ));
-              }
-            }
-
-            // total opțional
-            if (item.total !== undefined && item.total !== null) {
-              if (!isValidPositiveNumber(item.total)) {
-                return reject(new AppError(
-                  `Totalul pentru elementul #${i + 1} trebuie să fie un număr pozitiv.`,
-                  400,
-                  'INVALID_BILLING_ITEM_TOTAL'
-                ));
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // -----------------------------------------------------------------------
-    // Validări specifice tipului
-    // -----------------------------------------------------------------------
-
-    if (tip === 'restaurant') {
-      // Pentru rezervări la restaurant, restaurantId este obligatoriu
-      if (!restaurantId) {
-        return reject(new AppError(
-          'ID-ul restaurantului este obligatoriu pentru rezervările de tip restaurant.',
-          400,
-          'MISSING_RESTAURANT_ID'
-        ));
-      }
-
-      // Validare masă (opțională)
-      if (masa !== undefined && masa !== null && masa !== 0) {
-        if (!isValidPositiveInt(masa) || masa === 0) {
-          return reject(new AppError(
-            'Numărul mesei trebuie să fie un număr întreg pozitiv.',
-            400,
-            'INVALID_TABLE_NUMBER'
-          ));
-        }
-      }
-
-      // Verificare existență restaurant
-      restaurants.findOne({ _id: restaurantId, tenantId }, (findErr, restaurant) => {
-        if (findErr) {
-          return reject(new AppError(
-            `Eroare la verificarea restaurantului: ${findErr.message}`,
-            500,
-            'DB_QUERY_ERROR'
-          ));
-        }
-
-        if (!restaurant) {
-          return reject(new AppError(
-            'Restaurantul specificat nu există sau nu aparține acestui tenant.',
-            404,
-            'RESTAURANT_NOT_FOUND'
-          ));
-        }
-
-        // Dacă restaurantul are un număr limitat de mese, verificăm că masa există
-        if (masa !== undefined && masa !== null && masa !== 0) {
-          if (restaurant.tableCount && masa > restaurant.tableCount) {
-            return reject(new AppError(
-              `Masa #${masa} depășește numărul total de mese (${restaurant.tableCount}) al restaurantului.`,
-              400,
-              'TABLE_EXCEEDS_COUNT'
-            ));
-          }
-        }
-
-        // Creare efectivă
-        _insertReservation(resolve, reject, reservationData, tip, finalStatus, finalNote, tenantId);
-      });
-    } else if (tip === 'hotel') {
-      // Pentru rezervări la hotel, hotelId este obligatoriu
-      if (!hotelId) {
-        return reject(new AppError(
-          'ID-ul hotelului este obligatoriu pentru rezervările de tip hotel.',
-          400,
-          'MISSING_HOTEL_ID'
-        ));
-      }
-
-      // Încercăm să verificăm existența hotelului prin hotelModel
-      try {
-        const { getHotelById } = require('./hotelModel');
-
-        getHotelById(hotelId)
-          .then((hotel) => {
-            if (!hotel) {
-              return reject(new AppError(
-                'Hotelul specificat nu există.',
-                404,
-                'HOTEL_NOT_FOUND'
-              ));
-            }
-
-            // Verificăm că hotelul aparține tenantului corect
-            if (hotel.tenantId !== tenantId) {
-              return reject(new AppError(
-                'Hotelul specificat nu aparține acestui tenant.',
-                403,
-                'HOTEL_TENANT_MISMATCH'
-              ));
-            }
-
-            // Creare efectivă
-            _insertReservation(resolve, reject, reservationData, tip, finalStatus, finalNote, tenantId);
-          })
-          .catch((err) => {
-            // Dacă getHotelById e disponibil dar dă eroare, încercăm oricum inserarea
-            _insertReservation(resolve, reject, reservationData, tip, finalStatus, finalNote, tenantId);
-          });
-      } catch (err) {
-        // Dacă hotelModel nu este disponibil, inserăm direct
-        _insertReservation(resolve, reject, reservationData, tip, finalStatus, finalNote, tenantId);
-      }
-    }
-  });
-}
-
-/**
- * Funcție internă pentru inserarea efectivă a rezervării în baza de date.
- * @param {Function} resolve
- * @param {Function} reject
- * @param {Object} reservationData
- * @param {string} tip
- * @param {string} finalStatus
- * @param {string} finalNote
- * @param {string} tenantId
- * @private
- */
-function _insertReservation(resolve, reject, reservationData, tip, finalStatus, finalNote, tenantId) {
-  const {
-    restaurantId,
-    hotelId,
-    masa,
-    camera,
-    numePersoana,
-    telefon,
-    email,
-    data,
-    ora,
-    numarPersoane,
-    checkInData,
-    checkOutData,
-    guestId,
-    sumarFacturare,
-  } = reservationData;
-
-  const reservationDoc = {
-    tip,
-    tenantId,
-    restaurantId: tip === 'restaurant' ? restaurantId : null,
-    hotelId: tip === 'hotel' ? hotelId : null,
-    masa: tip === 'restaurant' && masa !== undefined && masa !== null ? masa : null,
-    camera: tip === 'hotel' && camera !== undefined && camera !== null ? camera : null,
-    numePersoana: numePersoana.trim(),
-    telefon: telefon || '',
-    email: email ? email.toLowerCase().trim() : '',
-    data,
-    ora: ora || '',
-    numarPersoane,
-    status: finalStatus,
-    note: finalNote,
-    // Câmpuri specifice hotel
-    checkInData: tip === 'hotel' ? (checkInData || data) : null,
-    checkOutData: tip === 'hotel' ? (checkOutData || null) : null,
-    guestId: tip === 'hotel' ? (guestId || null) : null,
-    // Sumar facturare
-    sumarFacturare: tip === 'hotel' ? _buildBillingSummary(sumarFacturare) : null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-
-  const reservationsDb = getReservationsDb(tenantId);
-  reservationsDb.insert(reservationDoc, (insertErr, newReservation) => {
-    if (insertErr) {
-      return reject(new AppError(
-        `Eroare la crearea rezervării: ${insertErr.message}`,
-        500,
-        'DB_INSERT_ERROR'
-      ));
-    }
-
-    resolve(newReservation);
-  });
-}
-
-/**
- * Construiește obiectul sumar facturare cu valori implicite.
- * @param {Object} [sumarFacturare]
- * @returns {Object}
- * @private
- */
-function _buildBillingSummary(sumarFacturare) {
-  const defaultSummary = {
-    totalBrut: 0,
-    totalTVA: 0,
-    totalNet: 0,
-    moneda: 'RON',
-    statusFacturare: 'nefacturat',
-    elementeFacturare: [],
-    dataEmiterii: null,
-    dataScadentei: null,
-    numarFactura: null,
-    observatii: '',
-  };
-
-  if (!sumarFacturare || typeof sumarFacturare !== 'object') {
-    return defaultSummary;
+function createReservation(data) {
+  if (!data || typeof data !== 'object') {
+    throw new Error('Datele rezervării sunt invalide.');
   }
 
-  return {
-    totalBrut: sumarFacturare.totalBrut !== undefined && sumarFacturare.totalBrut !== null
-      ? Math.round(sumarFacturare.totalBrut * 100) / 100 : defaultSummary.totalBrut,
-    totalTVA: sumarFacturare.totalTVA !== undefined && sumarFacturare.totalTVA !== null
-      ? Math.round(sumarFacturare.totalTVA * 100) / 100 : defaultSummary.totalTVA,
-    totalNet: sumarFacturare.totalNet !== undefined && sumarFacturare.totalNet !== null
-      ? Math.round(sumarFacturare.totalNet * 100) / 100 : defaultSummary.totalNet,
-    moneda: sumarFacturare.moneda || defaultSummary.moneda,
-    statusFacturare: sumarFacturare.statusFacturare || defaultSummary.statusFacturare,
-    elementeFacturare: Array.isArray(sumarFacturare.elementeFacturare)
-      ? sumarFacturare.elementeFacturare.map((item) => ({
-          denumire: item.denumire || '',
-          cantitate: item.cantitate || 1,
-          pretUnitar: item.pretUnitar || 0,
-          total: item.total || 0,
-          cotaTVA: item.cotaTVA || 19,
-        }))
-      : defaultSummary.elementeFacturare,
-    dataEmiterii: sumarFacturare.dataEmiterii || defaultSummary.dataEmiterii,
-    dataScadentei: sumarFacturare.dataScadentei || defaultSummary.dataScadentei,
-    numarFactura: sumarFacturare.numarFactura || defaultSummary.numarFactura,
-    observatii: sumarFacturare.observatii || defaultSummary.observatii,
-  };
+  const {
+    hotelId,
+    guestId = null,
+    guestName,
+    guestPhone = '',
+    guestEmail = '',
+    checkIn,
+    checkOut,
+    roomId = null,
+    numGuests = 1,
+    status = 'confirmată',
+    notes = '',
+  } = data;
+
+  // --- validări ---
+  if (!hotelId || !isValidString(hotelId, 1, 100)) {
+    throw new Error('ID-ul hotelului este obligatoriu.');
+  }
+
+  if (!guestName || !isValidString(guestName, 2, 200)) {
+    throw new Error('Numele persoanei este obligatoriu (2-200 caractere).');
+  }
+
+  if (!checkIn || !isValidDate(checkIn)) {
+    throw new Error('Data de check-in este obligatorie (YYYY-MM-DD).');
+  }
+
+  if (!checkOut || !isValidDate(checkOut)) {
+    throw new Error('Data de check-out este obligatorie (YYYY-MM-DD).');
+  }
+
+  if (new Date(checkOut) <= new Date(checkIn)) {
+    throw new Error('Data de check-out trebuie să fie după data de check-in.');
+  }
+
+  if (guestPhone && !isValidPhone(guestPhone)) {
+    throw new Error('Numărul de telefon nu este valid.');
+  }
+
+  if (guestEmail && !isValidEmail(guestEmail)) {
+    throw new Error('Adresa de email nu este validă.');
+  }
+
+  if (!Number.isInteger(numGuests) || numGuests < 1 || numGuests > 999) {
+    throw new Error('Numărul de persoane trebuie să fie un întreg între 1 și 999.');
+  }
+
+  if (!isValidStatus(status)) {
+    throw new Error(`Statusul "${status}" nu este valid. Permise: ${VALID_STATUSES.join(', ')}.`);
+  }
+
+  const finalNotes = typeof notes === 'string' ? notes : '';
+
+  // --- inserare ---
+  const sql = `
+    INSERT INTO reservations
+      (hotelId, guestId, guestName, guestPhone, guestEmail,
+       checkIn, checkOut, roomId, numGuests, status, notes)
+    VALUES
+      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  const info = db.run(sql, [
+    hotelId,
+    guestId,
+    guestName.trim(),
+    guestPhone.trim(),
+    guestEmail.trim().toLowerCase(),
+    checkIn,
+    checkOut,
+    roomId,
+    numGuests,
+    status,
+    finalNotes,
+  ]);
+
+  // returnăm documentul complet
+  return getReservationById(info.lastInsertRowid);
 }
+
+// ---------------------------------------------------------------------------
+// getReservationById
+// ---------------------------------------------------------------------------
 
 /**
  * Găsește o rezervare după ID.
- * @param {string} id - ID-ul NeDB
- * @param {string} tenantId - ID-ul tenant-ului
- * @returns {Promise<Object|null>}
+ *
+ * @param {number} id
+ * @returns {Object|undefined} Rezervarea sau undefined
  */
-function findReservationById(id, tenantId) {
-  return new Promise((resolve, reject) => {
-    if (!id) {
-      return reject(new AppError('ID-ul rezervării este invalid.', 400, 'INVALID_RESERVATION_ID'));
-    }
+function getReservationById(id) {
+  if (id === undefined || id === null) {
+    throw new Error('ID-ul rezervării este invalid.');
+  }
 
-    if (!tenantId) {
-      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
-    }
-
-    const reservationsDb = getReservationsDb(tenantId);
-    reservationsDb.findOne({ _id: id }, (err, reservation) => {
-      if (err) {
-        return reject(new AppError(
-          `Eroare la căutarea rezervării: ${err.message}`,
-          500,
-          'DB_QUERY_ERROR'
-        ));
-      }
-      resolve(reservation || null);
-    });
-  });
+  const sql = `SELECT * FROM reservations WHERE id = ?`;
+  return db.get(sql, [id]);
 }
 
+// ---------------------------------------------------------------------------
+// getReservationsByHotel
+// ---------------------------------------------------------------------------
+
 /**
- * Găsește rezervări după restaurant.
- * @param {string} restaurantId - ID-ul restaurantului
- * @param {string} tenantId - ID-ul tenant-ului
- * @param {Object} [options={}] - Opțiuni (sort, limit, skip, status, data)
- * @returns {Promise<Array>}
+ * Returnează toate rezervările unui hotel, ordonate după checkIn.
+ *
+ * @param {string} hotelId
+ * @returns {Array<Object>}
  */
-function findReservationsByRestaurant(restaurantId, tenantId, options = {}) {
-  return new Promise((resolve, reject) => {
-    if (!restaurantId) {
-      return reject(new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID'));
-    }
+function getReservationsByHotel(hotelId) {
+  if (!hotelId || !isValidString(hotelId)) {
+    throw new Error('ID-ul hotelului este invalid.');
+  }
 
-    if (!tenantId) {
-      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
-    }
-
-    const filter = { tip: 'restaurant', restaurantId };
-
-    // Filtrare opțională după status
-    if (options.status) {
-      if (!isValidReservationStatus(options.status)) {
-        return reject(new AppError(
-          `Statusul "${options.status}" nu este valid. Statusuri permise: ${VALID_RESERVATION_STATUSES.join(', ')}.`,
-          400,
-          'INVALID_RESERVATION_STATUS'
-        ));
-      }
-      filter.status = options.status;
-    }
-
-    // Filtrare opțională după dată
-    if (options.data) {
-      if (!isValidDate(options.data)) {
-        return reject(new AppError(
-          'Data specificată nu este validă (format YYYY-MM-DD).',
-          400,
-          'INVALID_DATE'
-        ));
-      }
-      filter.data = options.data;
-    }
-
-    // Filtrare opțională după masă
-    if (options.masa !== undefined && options.masa !== null) {
-      if (!isValidPositiveInt(options.masa) || options.masa === 0) {
-        return reject(new AppError(
-          'Numărul mesei trebuie să fie un număr întreg pozitiv.',
-          400,
-          'INVALID_TABLE_NUMBER'
-        ));
-      }
-      filter.masa = options.masa;
-    }
-
-    const reservationsDb = getReservationsDb(tenantId);
-    let query = reservationsDb.find(filter);
-
-    // Sortare
-    if (options.sort) {
-      query = query.sort(options.sort);
-    } else {
-      query = query.sort({ data: 1, ora: 1 });
-    }
-
-    // Limit
-    if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
-      query = query.limit(options.limit);
-    }
-
-    // Skip
-    if (options.skip && Number.isInteger(options.skip) && options.skip > 0) {
-      query = query.skip(options.skip);
-    }
-
-    query.exec((err, reservations) => {
-      if (err) {
-        return reject(new AppError(
-          `Eroare la căutarea rezervărilor: ${err.message}`,
-          500,
-          'DB_QUERY_ERROR'
-        ));
-      }
-
-      resolve(reservations || []);
-    });
-  });
+  const sql = `
+    SELECT * FROM reservations
+    WHERE hotelId = ?
+    ORDER BY checkIn ASC, id DESC
+  `;
+  return db.all(sql, [hotelId]);
 }
 
+// ---------------------------------------------------------------------------
+// getReservationsByGuest
+// ---------------------------------------------------------------------------
+
 /**
- * Găsește rezervări după hotel.
- * @param {string} hotelId - ID-ul hotelului
- * @param {string} tenantId - ID-ul tenant-ului
- * @param {Object} [options={}] - Opțiuni (sort, limit, skip, status, data, checkInData, checkOutData)
- * @returns {Promise<Array>}
+ * Caută rezervări după nume, telefon sau email ale guest-ului.
+ *
+ * @param {string} guestInfo - Termen de căutare
+ * @returns {Array<Object>}
  */
-function findReservationsByHotel(hotelId, tenantId, options = {}) {
-  return new Promise((resolve, reject) => {
-    if (!hotelId) {
-      return reject(new AppError('ID-ul hotelului este invalid.', 400, 'INVALID_HOTEL_ID'));
-    }
+function getReservationsByGuest(guestInfo) {
+  if (!guestInfo || typeof guestInfo !== 'string' || guestInfo.trim().length === 0) {
+    throw new Error('Informațiile despre guest sunt invalide.');
+  }
 
-    if (!tenantId) {
-      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
-    }
+  const term = `%${guestInfo.trim()}%`;
 
-    const filter = { tip: 'hotel', hotelId };
+  const sql = `
+    SELECT * FROM reservations
+    WHERE guestName  LIKE ?
+       OR guestPhone LIKE ?
+       OR guestEmail LIKE ?
+    ORDER BY checkIn DESC, id DESC
+  `;
 
-    // Filtrare opțională după status
-    if (options.status) {
-      if (!isValidReservationStatus(options.status)) {
-        return reject(new AppError(
-          `Statusul "${options.status}" nu este valid. Statusuri permise: ${VALID_RESERVATION_STATUSES.join(', ')}.`,
-          400,
-          'INVALID_RESERVATION_STATUS'
-        ));
-      }
-      filter.status = options.status;
-    }
+  return db.all(sql, [term, term, term]);
+}
 
-    // Filtrare opțională după dată (data rezervării)
-    if (options.data) {
-      if (!isValidDate(options.data)) {
-        return reject(new AppError(
-          'Data specificată nu este validă (format YYYY-MM-DD).',
-          400,
-          'INVALID_DATE'
-        ));
-      }
-      filter.data = options.data;
-    }
+// ---------------------------------------------------------------------------
+// updateReservationStatus
+// ---------------------------------------------------------------------------
 
-    // Filtrare opțională după checkInData
-    if (options.checkInData) {
-      if (!
+/**
+ * Actualizează statusul unei rezervări.
+ *
+ * @param {number} id     - ID-ul rezervării
+ * @param {string} status - Noul status
+ * @returns {Object|undefined} Rezervarea actualizată sau undefined dacă nu există
+ */
+function updateReservationStatus(id, status) {
+  if (id === undefined || id === null) {
+    throw new Error('ID-ul rezervării este invalid.');
+  }
+
+  if (!status || !isValidStatus(status)) {
+    throw new Error(`Statusul "${status}" nu este valid. Permise: ${VALID_STATUSES.join(', ')}.`);
+  }
+
+  const existing = getReservationById(id);
+  if (!existing) {
+    return undefined;
+  }
+
+  const sql = `
+    UPDATE reservations
+    SET status    = ?,
+        updatedAt = datetime('now')
+    WHERE id = ?
+  `;
+
+  db.run(sql, [status, id]);
+
+  return getReservationById(id);
+}
+
+// ---------------------------------------------------------------------------
+// cancelReservation
+// ---------------------------------------------------------------------------
+
+/**
+ * Anulează o rezervare (setează status = 'anulată').
+ *
+ * @param {number} id - ID-ul rezervării
+ * @returns {Object|undefined} Rezervarea actualizată sau undefined
+ * @throws {Error} Dacă rezervarea este deja anulată sau finalizată
+ */
+function cancelReservation(id) {
+  if (id === undefined || id === null) {
+    throw new Error('ID-ul rezervării este invalid.');
+  }
+
+  const existing = getReservationById(id);
+  if (!existing) {
+    return undefined;
+  }
+
+  if (existing.status === 'anulată') {
+    throw new Error('Rezervarea este deja anulată.');
+  }
+
+  if (existing.status === 'finalizată' || existing.status === 'check-out') {
+    throw new Error('Rezervările finalizate nu pot fi anulate.');
+  }
+
+  const sql = `
+    UPDATE reservations
+    SET status    = 'anulată',
+        updatedAt = datetime('now')
+    WHERE id = ?
+  `;
+
+  db.run(sql, [id]);
+
+  return getReservationById(id);
+}
+
+// ---------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------
+
+module.exports = {
+  createReservation,
+  getReservationById,
+  getReservationsByHotel,
+  getReservationsByGuest,
+  updateReservationStatus,
+  cancelReservation,
+  VALID_STATUSES,
+};
