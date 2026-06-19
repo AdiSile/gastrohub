@@ -8,81 +8,13 @@
 // estimatedDelivery, actualDelivery, notes, locationId, locationType, tenantId
 // ---------------------------------------------------------------------------
 
-const Datastore = require('nedb');
-const path = require('path');
-const fs = require('fs');
+const { deliveries } = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
 
 // ---------------------------------------------------------------------------
-// Configurare colecție separată pentru deliveries
+// Indexuri specifice modelului (cele generice – tenantId, status, supplierId –
+// sunt deja definite în config/db.js pe colecția partajată).
 // ---------------------------------------------------------------------------
-
-/**
- * Determină calea absolută către directorul de date.
- * Citeşte variabila de mediu `DB_PATH` sau implicit `./data/`.
- */
-function resolveDataPath() {
-  const rel = process.env.DB_PATH || './data';
-  return path.resolve(rel);
-}
-
-/**
- * Asigură existenţa directorului de date (creare recursivă dacă nu există).
- */
-function ensureDataDir(dirPath) {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-}
-
-function isTestEnv() {
-  return process.env.NODE_ENV === 'test';
-}
-
-const dataDir = resolveDataPath();
-ensureDataDir(dataDir);
-
-/**
- * Colecţia de livrări.
- * Fişierul pe disc: <dataDir>/deliveries.db
- * În mediu de test se folosește baza în-memory.
- */
-const deliveries = new Datastore({
-  filename: isTestEnv() ? undefined : path.join(dataDir, 'deliveries.db'),
-  autoload: true,
-  timestampData: false,
-});
-
-// ---------------------------------------------------------------------------
-// Indexuri
-// ---------------------------------------------------------------------------
-
-/**
- * Index pentru căutarea rapidă a livrărilor după tenantId.
- */
-deliveries.ensureIndex({ fieldName: 'tenantId' }, (err) => {
-  if (err) {
-    console.error('[deliveryModel] Eroare la crearea indexului pe tenantId:', err.message);
-  }
-});
-
-/**
- * Index pentru căutarea livrărilor după status.
- */
-deliveries.ensureIndex({ fieldName: 'status' }, (err) => {
-  if (err) {
-    console.error('[deliveryModel] Eroare la crearea indexului pe status:', err.message);
-  }
-});
-
-/**
- * Index pentru căutarea livrărilor după supplierId.
- */
-deliveries.ensureIndex({ fieldName: 'supplierId' }, (err) => {
-  if (err) {
-    console.error('[deliveryModel] Eroare la crearea indexului pe supplierId:', err.message);
-  }
-});
 
 /**
  * Index pentru căutarea livrărilor după locationId.

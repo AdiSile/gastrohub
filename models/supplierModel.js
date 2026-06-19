@@ -7,6 +7,7 @@
 // paymentTerms, rating, status, tenantId
 // ---------------------------------------------------------------------------
 
+const fs = require('fs');
 const path = require('path');
 const Datastore = require('nedb');
 const { AppError } = require('../middleware/errorHandler');
@@ -111,6 +112,19 @@ function validateProducts(products) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Asigură existența directorului pentru fișierele de date.
+ * Dacă directorul nu există, îl creează recursiv.
+ *
+ * @param {string} dataDir - Calea absolută către directorul de date
+ */
+function ensureDataDir(dataDir) {
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+    console.log('[supplierModel] Director creat:', dataDir);
+  }
+}
+
+/**
  * Variabilă privată care reține instanța colecției NeDB pentru furnizori.
  * Este populată la primul apel al funcției getSuppliersDb().
  * @type {Datastore|null}
@@ -139,10 +153,22 @@ function getSuppliersDb() {
     const isTest = process.env.NODE_ENV === 'test';
     const dataDir = path.resolve(process.env.DB_PATH || './data');
 
+    // Asigură existența directorului de date (doar în afara testelor)
+    if (!isTest) {
+      ensureDataDir(dataDir);
+    }
+
     _suppliersDb = new Datastore({
       filename: isTest ? undefined : path.join(dataDir, 'suppliers.db'),
-      autoload: true,
+      autoload: false,
       timestampData: false,
+    });
+
+    // Încărcare cu handler de eroare
+    _suppliersDb.loadDatabase((loadErr) => {
+      if (loadErr) {
+        console.error('[supplierModel] Eroare la încărcarea bazei suppliers:', loadErr.message);
+      }
     });
 
     // Indexuri
@@ -189,10 +215,22 @@ function getSupplierOrdersDb() {
     const isTest = process.env.NODE_ENV === 'test';
     const dataDir = path.resolve(process.env.DB_PATH || './data');
 
+    // Asigură existența directorului de date (doar în afara testelor)
+    if (!isTest) {
+      ensureDataDir(dataDir);
+    }
+
     _supplierOrdersDb = new Datastore({
       filename: isTest ? undefined : path.join(dataDir, 'supplierOrders.db'),
-      autoload: true,
+      autoload: false,
       timestampData: false,
+    });
+
+    // Încărcare cu handler de eroare
+    _supplierOrdersDb.loadDatabase((loadErr) => {
+      if (loadErr) {
+        console.error('[supplierModel] Eroare la încărcarea bazei supplierOrders:', loadErr.message);
+      }
     });
 
     // Indexuri

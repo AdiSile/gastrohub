@@ -70,6 +70,49 @@ function isTestEnv() {
 }
 
 // ---------------------------------------------------------------------------
+// NeDB onload error handler – recreare fișiere corupte
+// ---------------------------------------------------------------------------
+
+/**
+ * Returnează un handler `onload` pentru un Datastore NeDB.
+ *
+ * La eroare de încărcare (fișier corupt, trunchiat, etc.):
+ *   1. Afișează un mesaj de avertizare în consolă.
+ *   2. Șterge fișierul corupt de pe disc.
+ *   3. Colecția rămâne operațională în memorie; la următoarea
+ *      persistență fișierul va fi recreat automat de la zero.
+ *
+ * @param {string} collectionName - numele colecției (pentru logging)
+ * @param {string|undefined} filePath - calea absolută către fișierul .db
+ * @returns {Function} callback pentru evenimentul `onload`
+ */
+function onloadErrorHandler(collectionName, filePath) {
+  return function (err) {
+    if (err) {
+      console.error(
+        `[db] Fișier corupt detectat pentru ${collectionName} (${filePath}): ${err.message}`
+      );
+      console.warn(
+        `[db] Se șterge fișierul corupt și se recreează ${collectionName} de la zero...`
+      );
+      try {
+        if (filePath && fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          console.log(`[db] Fișierul ${filePath} a fost șters cu succes.`);
+        }
+      } catch (cleanupErr) {
+        console.error(
+          `[db] Eroare la ștergerea fișierului corupt ${filePath}: ${cleanupErr.message}`
+        );
+      }
+      console.log(
+        `[db] Colecția ${collectionName} funcționează în memorie; va fi persistată la următoarea scriere.`
+      );
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Initializare baze de date
 // ---------------------------------------------------------------------------
 
@@ -83,7 +126,11 @@ ensureDataDir(dataDir);
 const users = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'users.db'),
   autoload: true,
-  timestampData: false,
+  timestampData: true,
+  onload: onloadErrorHandler(
+    'users',
+    isTestEnv() ? undefined : path.join(dataDir, 'users.db')
+  ),
 });
 
 /**
@@ -93,7 +140,11 @@ const users = new Datastore({
 const tenants = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'tenants.db'),
   autoload: true,
-  timestampData: false,
+  timestampData: true,
+  onload: onloadErrorHandler(
+    'tenants',
+    isTestEnv() ? undefined : path.join(dataDir, 'tenants.db')
+  ),
 });
 
 /**
@@ -103,7 +154,11 @@ const tenants = new Datastore({
 const restaurants = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'restaurants.db'),
   autoload: true,
-  timestampData: false,
+  timestampData: true,
+  onload: onloadErrorHandler(
+    'restaurants',
+    isTestEnv() ? undefined : path.join(dataDir, 'restaurants.db')
+  ),
 });
 
 /**
@@ -113,7 +168,11 @@ const restaurants = new Datastore({
 const hotels = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'hotels.db'),
   autoload: true,
-  timestampData: false,
+  timestampData: true,
+  onload: onloadErrorHandler(
+    'hotels',
+    isTestEnv() ? undefined : path.join(dataDir, 'hotels.db')
+  ),
 });
 
 /**
@@ -123,7 +182,11 @@ const hotels = new Datastore({
 const reservations = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'reservations.db'),
   autoload: true,
-  timestampData: false,
+  timestampData: true,
+  onload: onloadErrorHandler(
+    'reservations',
+    isTestEnv() ? undefined : path.join(dataDir, 'reservations.db')
+  ),
 });
 
 /**
@@ -133,7 +196,11 @@ const reservations = new Datastore({
 const inventoryItems = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'inventoryItems.db'),
   autoload: true,
-  timestampData: false,
+  timestampData: true,
+  onload: onloadErrorHandler(
+    'inventoryItems',
+    isTestEnv() ? undefined : path.join(dataDir, 'inventoryItems.db')
+  ),
 });
 
 /**
@@ -143,7 +210,11 @@ const inventoryItems = new Datastore({
 const inventoryTransactions = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'inventoryTransactions.db'),
   autoload: true,
-  timestampData: false,
+  timestampData: true,
+  onload: onloadErrorHandler(
+    'inventoryTransactions',
+    isTestEnv() ? undefined : path.join(dataDir, 'inventoryTransactions.db')
+  ),
 });
 
 /**
@@ -153,7 +224,11 @@ const inventoryTransactions = new Datastore({
 const suppliers = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'suppliers.db'),
   autoload: true,
-  timestampData: false,
+  timestampData: true,
+  onload: onloadErrorHandler(
+    'suppliers',
+    isTestEnv() ? undefined : path.join(dataDir, 'suppliers.db')
+  ),
 });
 
 /**
@@ -163,7 +238,11 @@ const suppliers = new Datastore({
 const deliveries = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'deliveries.db'),
   autoload: true,
-  timestampData: false,
+  timestampData: true,
+  onload: onloadErrorHandler(
+    'deliveries',
+    isTestEnv() ? undefined : path.join(dataDir, 'deliveries.db')
+  ),
 });
 
 /**
@@ -173,7 +252,11 @@ const deliveries = new Datastore({
 const attendance = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'attendance.db'),
   autoload: true,
-  timestampData: false,
+  timestampData: true,
+  onload: onloadErrorHandler(
+    'attendance',
+    isTestEnv() ? undefined : path.join(dataDir, 'attendance.db')
+  ),
 });
 
 /**
@@ -183,7 +266,11 @@ const attendance = new Datastore({
 const salaries = new Datastore({
   filename: isTestEnv() ? undefined : path.join(dataDir, 'salaries.db'),
   autoload: true,
-  timestampData: false,
+  timestampData: true,
+  onload: onloadErrorHandler(
+    'salaries',
+    isTestEnv() ? undefined : path.join(dataDir, 'salaries.db')
+  ),
 });
 
 // ---------------------------------------------------------------------------

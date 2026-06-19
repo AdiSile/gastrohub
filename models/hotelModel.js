@@ -9,6 +9,7 @@
 
 const Datastore = require('nedb');
 const path = require('path');
+const fs = require('fs');
 const {
   hotels,
   reservations,
@@ -21,12 +22,32 @@ const {
 // dar folosim acelasi dataDir pentru consistenta.
 // ---------------------------------------------------------------------------
 
+// Asiguram ca directorul data/ exista inainte de a instantia roomsDb.
+if (process.env.NODE_ENV !== 'test') {
+  try {
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+      console.log(`[hotelModel] Director creat: ${dataDir}`);
+    }
+  } catch (err) {
+    console.error(`[hotelModel] Eroare critica la crearea directorului "${dataDir}":`, err.message);
+    throw err;
+  }
+}
+
 const roomsDb = new Datastore({
   filename: process.env.NODE_ENV === 'test'
     ? undefined
     : path.join(dataDir, 'rooms.db'),
   autoload: true,
   timestampData: false,
+});
+
+// Handler dedicat pentru erorile de incarcare ale instantei roomsDb.
+// NeDB (@seald-io/nedb) mosteneste EventEmitter si emite 'error' la
+// probleme de I/O (fisier inaccesibil, permisiuni, corupere etc.).
+roomsDb.on('error', (err) => {
+  console.error('[hotelModel] Eroare la incarcarea roomsDb:', err.message);
 });
 
 // ---------------------------------------------------------------------------

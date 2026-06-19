@@ -8,6 +8,7 @@
 
 const Datastore = require('nedb');
 const path = require('path');
+const fs = require('fs');
 
 // ---------------------------------------------------------------------------
 // Tipuri valide de camere
@@ -101,9 +102,20 @@ class RoomModel {
    * @param {string} dbDir - Directorul unde se stochează baza de date NeDB
    */
   constructor(dbDir = './data') {
+    // Verifică existența directorului pentru baza de date; îl creează dacă nu există
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+
     this.db = new Datastore({
       filename: path.join(dbDir, 'rooms.db'),
       autoload: true,
+      onload: (err) => {
+        if (err) {
+          console.error('Eroare la încărcarea bazei de date rooms.db:', err.message);
+          throw err;
+        }
+      },
     });
     this.db.ensureIndex({ fieldName: 'tenantId' });
     this.db.ensureIndex({ fieldName: 'hotelId' });
