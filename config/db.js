@@ -13,7 +13,8 @@
  *
  * Folosire:
  *    const { getDb, run, get, all, users, tenants } = require('../config/db');
- *    const row = get('SELECT * FROM tenants WHERE slug = ?', [slug]);
+ *    const db = await getDb();
+ *    const row = await get('SELECT * FROM tenants WHERE slug = ?', [slug]);
  *
  * ============================================================
  */
@@ -22,15 +23,23 @@ const path = require('path');
 const fs   = require('fs');
 
 // ---------------------------------------------------------------------------
-// sql.js — inițializare
+// sql.js — inițializare asincronă
 // ---------------------------------------------------------------------------
 
-let SQL;
+/** @type {import('sql.js').SqlJsStatic|null} */
+let SQL = null;
+
+/**
+ * Funcția initSqlJs — factory-ul asincron exportat de sql.js.
+ * @type {Function|null}
+ */
+let initSqlJs = null;
+
 try {
-  SQL = require('sql.js');
+  initSqlJs = require('sql.js');
 } catch (_err) {
   console.error('[db] Eroare la încărcarea sql.js. Verifică npm install.');
-  SQL = null;
+  initSqlJs = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -39,6 +48,9 @@ try {
 
 /** @type {import('sql.js').Database|null} */
 let _db = null;
+
+/** @type {Promise<void>|null} Promisiunea de inițializare */
+let _initPromise = null;
 
 // ---------------------------------------------------------------------------
 // Calea fișierului de date
@@ -78,6 +90,97 @@ function _loadOrCreateDb() {
   }
 
   return new SQL.Database();
+}
+
+/**
+ * Salvează baza de date pe disc.
+ * Folosită la shutdown și poate fi apelată manual.
+ */
+function _saveToDisk() {
+  if (!_db) return;
+  try {
+    const data = _db.export();
+    const buffer = Buffer.from(data);
+    _ensureDataDir();
+    fs.writeFileSync(DB_PATH, buffer);
+    console.log('[db] Baza de date salvată pe disc:', DB_PATH);
+  } catch (err) {
+    console.error('[db] Eroare la salvarea bazei de date:', err.message);
+  }
+}
+
+/**
+ * Înregistrează handler-e pentru salvarea bazei la shutdown.
+ */
+function _registerShutdownHandlers() {
+  const handleShutdown = (signal) => {
+    console.log(`[db] Primit semnal ${signal} — se salvează baza de date...`);
+    _saveToDisk();
+    if (signal === 'SIGINT' || signal === 'SIGTERM') {
+      process.exit(0);
+    }
+  };
+
+  // SIGINT  — Ctrl+C
+  process.on('SIGINT', () => handleShutdown('SIGINT'));
+
+  // SIGTERM — kill
+  process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+
+  // exit    — procesul se termină normal
+  process.on('exit', () => {
+    // La acest moment doar operații sincrone sunt permise în handler-ul 'exit'
+    if (_db) {
+      try {
+        _saveToDisk();
+      } catch (_) { /* ignorăm erorile la exit */ }
+    }
+  });
+
+  // uncaughtException — crash neașteptat
+  process.on('uncaughtException', (err) => {
+    console.error('[db] Excepție neprinsă:', err.message);
+    _saveToDisk();
+    process.exit(1);
+  });
+
+  console.log('[db] Handler-e de shutdown înregistrate.');
+}
+
+/**
+ * Inițializează baza de date asincron.
+ * @returns {Promise<void>}
+ */
+async function _initialize() {
+  if (!initSqlJs) {
+    throw new Error('[db] sql.js nu este disponibil. Verifică npm install.');
+  }
+
+  try {
+    SQL = await initSqlJs();
+    console.log('[db] sql.js (WebAssembly) încărcat cu succes.');
+  } catch (err) {
+    console.error('[db] Eroare la inițializarea sql.js (WebAssembly):', err.message);
+    throw err;
+  }
+
+  _db = _loadOrCreateDb();
+  _createTables(_db);
+  _registerShutdownHandlers();
+  console.log('[db] Baza de date SQLite inițializată cu succes.');
+}
+
+// ---------------------------------------------------------------------------
+// Pornire eager a inițializării (promisiunea e stocată, nu blocăm event loop-ul)
+// ---------------------------------------------------------------------------
+
+if (initSqlJs) {
+  _initPromise = _initialize().catch((err) => {
+    console.error('[db] Inițializarea bazei de date a eșuat:', err.message);
+    _initPromise = null; // permite reîncercare la următorul apel getDb()
+  });
+} else {
+  console.error('[db] Nu s-a putut încărca sql.js. Baza de date nu este disponibilă.');
 }
 
 // ---------------------------------------------------------------------------
@@ -499,29 +602,33 @@ function _createTables(db) {
 }
 
 // ---------------------------------------------------------------------------
-// Inițializare
-// ---------------------------------------------------------------------------
-
-if (SQL) {
-  _db = _loadOrCreateDb();
-  _createTables(_db);
-  console.log('[db] Baza de date SQLite inițializată cu succes.');
-} else {
-  console.error('[db] Nu s-a putut inițializa sql.js. Baza de date nu este disponibilă.');
-}
-
-// ---------------------------------------------------------------------------
-// API public: run / get / all / getDb
+// API public: getDb (async) / run / get / all
 // ---------------------------------------------------------------------------
 
 /**
- * Returnează instanța bazei de date sql.js.
- * @returns {import('sql.js').Database}
+ * Returnează instanța bazei de date sql.js (async).
+ * Așteaptă finalizarea inițializării dacă este necesar.
+ * @returns {Promise<import('sql.js').Database>}
  */
-function getDb() {
+async function getDb() {
+  // Dacă există deja o promisiune de inițializare, o așteptăm
+  if (_initPromise) {
+    await _initPromise;
+  }
+
+  // Dacă _db e null dar _initPromise a fost resetat (eroare), reîncercăm
+  if (!_db) {
+    _initPromise = _initialize().catch((err) => {
+      console.error('[db] Reîncercarea inițializării a eșuat:', err.message);
+      _initPromise = null;
+    });
+    await _initPromise;
+  }
+
   if (!_db) {
     throw new Error('[db] Baza de date nu este inițializată. Verifică instalarea sql.js.');
   }
+
   return _db;
 }
 
@@ -529,10 +636,10 @@ function getDb() {
  * Execută o interogare SQL și returnează { changes, lastInsertRowid }.
  * @param {string} sql
  * @param {Array} [params=[]]
- * @returns {{ changes: number, lastInsertRowid: number }}
+ * @returns {Promise<{ changes: number, lastInsertRowid: number }>}
  */
-function run(sql, params = []) {
-  const db = getDb();
+async function run(sql, params = []) {
+  const db = await getDb();
   db.run(sql, params);
   // sql.js nu returnează automat lastInsertRowid și changes,
   // așa că le extragem manual
@@ -548,10 +655,10 @@ function run(sql, params = []) {
  * Execută o interogare SQL și returnează primul rând sau undefined.
  * @param {string} sql
  * @param {Array} [params=[]]
- * @returns {Object|undefined}
+ * @returns {Promise<Object|undefined>}
  */
-function get(sql, params = []) {
-  const db = getDb();
+async function get(sql, params = []) {
+  const db = await getDb();
   const stmt = db.prepare(sql);
   if (params.length > 0) {
     stmt.bind(params);
@@ -568,10 +675,10 @@ function get(sql, params = []) {
  * Execută o interogare SQL și returnează toate rândurile ca array.
  * @param {string} sql
  * @param {Array} [params=[]]
- * @returns {Array<Object>}
+ * @returns {Promise<Array<Object>>}
  */
-function all(sql, params = []) {
-  const db = getDb();
+async function all(sql, params = []) {
+  const db = await getDb();
   const stmt = db.prepare(sql);
   if (params.length > 0) {
     stmt.bind(params);
@@ -595,29 +702,31 @@ const users = {
    * @param {Function} cb - Callback (err, doc)
    */
   findOne(query, cb) {
-    try {
-      let sql, params;
-      if (query._id) {
-        sql = 'SELECT * FROM users WHERE id = ?';
-        params = [parseInt(query._id, 10)];
-      } else if (query.email) {
-        sql = 'SELECT * FROM users WHERE email = ?';
-        params = [query.email.toLowerCase().trim()];
-      } else {
-        // Căutare generică — construim WHERE din chei
-        const keys = Object.keys(query);
-        const conditions = keys.map((k) => `${k} = ?`);
-        sql = `SELECT * FROM users WHERE ${conditions.join(' AND ')} LIMIT 1`;
-        params = keys.map((k) => query[k]);
+    (async () => {
+      try {
+        let sql, params;
+        if (query._id) {
+          sql = 'SELECT * FROM users WHERE id = ?';
+          params = [parseInt(query._id, 10)];
+        } else if (query.email) {
+          sql = 'SELECT * FROM users WHERE email = ?';
+          params = [query.email.toLowerCase().trim()];
+        } else {
+          // Căutare generică — construim WHERE din chei
+          const keys = Object.keys(query);
+          const conditions = keys.map((k) => `${k} = ?`);
+          sql = `SELECT * FROM users WHERE ${conditions.join(' AND ')} LIMIT 1`;
+          params = keys.map((k) => query[k]);
+        }
+        const row = await get(sql, params);
+        if (row) {
+          row._id = String(row.id);
+        }
+        cb(null, row || null);
+      } catch (err) {
+        cb(err, null);
       }
-      const row = get(sql, params);
-      if (row) {
-        row._id = String(row.id);
-      }
-      cb(null, row || null);
-    } catch (err) {
-      cb(err, null);
-    }
+    })();
   },
 
   /**
@@ -652,28 +761,30 @@ const users = {
         return this;
       },
       exec(cb) {
-        try {
-          const keys = Object.keys(query);
-          const conditions = keys.map((k) => `${k} = ?`);
-          let sql = `SELECT * FROM users WHERE ${conditions.join(' AND ')}`;
-          const params = keys.map((k) => query[k]);
+        (async () => {
+          try {
+            const keys = Object.keys(query);
+            const conditions = keys.map((k) => `${k} = ?`);
+            let sql = `SELECT * FROM users WHERE ${conditions.join(' AND ')}`;
+            const params = keys.map((k) => query[k]);
 
-          if (_sortField) {
-            sql += ` ORDER BY ${_sortField} ${_sortDir}`;
-          }
-          if (_limit !== null) {
-            sql += ` LIMIT ${_limit}`;
-          }
-          if (_skip !== null) {
-            sql += ` OFFSET ${_skip}`;
-          }
+            if (_sortField) {
+              sql += ` ORDER BY ${_sortField} ${_sortDir}`;
+            }
+            if (_limit !== null) {
+              sql += ` LIMIT ${_limit}`;
+            }
+            if (_skip !== null) {
+              sql += ` OFFSET ${_skip}`;
+            }
 
-          const rows = all(sql, params);
-          const docs = rows.map((r) => { r._id = String(r.id); return r; });
-          cb(null, docs);
-        } catch (err) {
-          cb(err, []);
-        }
+            const rows = await all(sql, params);
+            const docs = rows.map((r) => { r._id = String(r.id); return r; });
+            cb(null, docs);
+          } catch (err) {
+            cb(err, []);
+          }
+        })();
       },
     };
     return builder;
@@ -685,22 +796,24 @@ const users = {
    * @param {Function} cb
    */
   count(query, cb) {
-    try {
-      const keys = Object.keys(query);
-      let sql, params;
-      if (keys.length === 0) {
-        sql = 'SELECT COUNT(*) AS cnt FROM users';
-        params = [];
-      } else {
-        const conditions = keys.map((k) => `${k} = ?`);
-        sql = `SELECT COUNT(*) AS cnt FROM users WHERE ${conditions.join(' AND ')}`;
-        params = keys.map((k) => query[k]);
+    (async () => {
+      try {
+        const keys = Object.keys(query);
+        let sql, params;
+        if (keys.length === 0) {
+          sql = 'SELECT COUNT(*) AS cnt FROM users';
+          params = [];
+        } else {
+          const conditions = keys.map((k) => `${k} = ?`);
+          sql = `SELECT COUNT(*) AS cnt FROM users WHERE ${conditions.join(' AND ')}`;
+          params = keys.map((k) => query[k]);
+        }
+        const row = await get(sql, params);
+        cb(null, row ? row.cnt : 0);
+      } catch (err) {
+        cb(err, 0);
       }
-      const row = get(sql, params);
-      cb(null, row ? row.cnt : 0);
-    } catch (err) {
-      cb(err, 0);
-    }
+    })();
   },
 
   /**
@@ -709,27 +822,29 @@ const users = {
    * @param {Function} cb
    */
   insert(doc, cb) {
-    try {
-      const now = new Date().toISOString();
-      const result = run(
-        `INSERT INTO users (email, password, role, tenantId, restaurante, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          doc.email || '',
-          doc.password || '',
-          doc.role || 'client',
-          doc.tenantId || null,
-          typeof doc.restaurante === 'string' ? doc.restaurante : JSON.stringify(doc.restaurante || []),
-          doc.createdAt || now,
-          doc.updatedAt || now,
-        ]
-      );
-      const newDoc = get('SELECT * FROM users WHERE id = ?', [result.lastInsertRowid]);
-      if (newDoc) newDoc._id = String(newDoc.id);
-      cb(null, newDoc);
-    } catch (err) {
-      cb(err, null);
-    }
+    (async () => {
+      try {
+        const now = new Date().toISOString();
+        const result = await run(
+          `INSERT INTO users (email, password, role, tenantId, restaurante, createdAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            doc.email || '',
+            doc.password || '',
+            doc.role || 'client',
+            doc.tenantId || null,
+            typeof doc.restaurante === 'string' ? doc.restaurante : JSON.stringify(doc.restaurante || []),
+            doc.createdAt || now,
+            doc.updatedAt || now,
+          ]
+        );
+        const newDoc = await get('SELECT * FROM users WHERE id = ?', [result.lastInsertRowid]);
+        if (newDoc) newDoc._id = String(newDoc.id);
+        cb(null, newDoc);
+      } catch (err) {
+        cb(err, null);
+      }
+    })();
   },
 
   /**
@@ -741,28 +856,30 @@ const users = {
    */
   update(query, update, options, cb) {
     if (typeof options === 'function') { cb = options; options = {}; }
-    try {
-      const setOps = update.$set || update;
-      const setKeys = Object.keys(setOps);
-      const setClauses = setKeys.map((k) => `${k} = ?`);
-      const setParams = setKeys.map((k) => setOps[k]);
+    (async () => {
+      try {
+        const setOps = update.$set || update;
+        const setKeys = Object.keys(setOps);
+        const setClauses = setKeys.map((k) => `${k} = ?`);
+        const setParams = setKeys.map((k) => setOps[k]);
 
-      const qKeys = Object.keys(query);
-      const qConditions = qKeys.map((k) => `${k} = ?`);
-      const qParams = qKeys.map((k) => query[k]);
+        const qKeys = Object.keys(query);
+        const qConditions = qKeys.map((k) => `${k} = ?`);
+        const qParams = qKeys.map((k) => query[k]);
 
-      const now = new Date().toISOString();
-      setClauses.push('updatedAt = ?');
-      setParams.push(now);
+        const now = new Date().toISOString();
+        setClauses.push('updatedAt = ?');
+        setParams.push(now);
 
-      const result = run(
-        `UPDATE users SET ${setClauses.join(', ')} WHERE ${qConditions.join(' AND ')}`,
-        [...setParams, ...qParams]
-      );
-      cb(null, result.changes);
-    } catch (err) {
-      cb(err, 0);
-    }
+        const result = await run(
+          `UPDATE users SET ${setClauses.join(', ')} WHERE ${qConditions.join(' AND ')}`,
+          [...setParams, ...qParams]
+        );
+        cb(null, result.changes);
+      } catch (err) {
+        cb(err, 0);
+      }
+    })();
   },
 
   /**
@@ -773,18 +890,20 @@ const users = {
    */
   remove(query, options, cb) {
     if (typeof options === 'function') { cb = options; options = {}; }
-    try {
-      const keys = Object.keys(query);
-      const conditions = keys.map((k) => `${k} = ?`);
-      const params = keys.map((k) => query[k]);
-      const result = run(
-        `DELETE FROM users WHERE ${conditions.join(' AND ')}`,
-        params
-      );
-      cb(null, result.changes);
-    } catch (err) {
-      cb(err, 0);
-    }
+    (async () => {
+      try {
+        const keys = Object.keys(query);
+        const conditions = keys.map((k) => `${k} = ?`);
+        const params = keys.map((k) => query[k]);
+        const result = await run(
+          `DELETE FROM users WHERE ${conditions.join(' AND ')}`,
+          params
+        );
+        cb(null, result.changes);
+      } catch (err) {
+        cb(err, 0);
+      }
+    })();
   },
 };
 
@@ -799,34 +918,36 @@ const tenants = {
    * @param {Function} cb
    */
   findOne(query, cb) {
-    try {
-      let sql, params;
-      if (query._id) {
-        sql = 'SELECT * FROM tenants WHERE id = ?';
-        params = [parseInt(query._id, 10)];
-      } else if (query.slug) {
-        sql = 'SELECT * FROM tenants WHERE slug = ?';
-        params = [query.slug];
-      } else {
-        const keys = Object.keys(query);
-        const conditions = keys.map((k) => `${k} = ?`);
-        sql = `SELECT * FROM tenants WHERE ${conditions.join(' AND ')} LIMIT 1`;
-        params = keys.map((k) => query[k]);
-      }
-      const row = get(sql, params);
-      if (row) {
-        row._id = String(row.id);
-        // Parsează settings dacă e JSON
-        if (typeof row.settings === 'string') {
-          try { row.config = JSON.parse(row.settings); } catch (_e) { row.config = {}; }
+    (async () => {
+      try {
+        let sql, params;
+        if (query._id) {
+          sql = 'SELECT * FROM tenants WHERE id = ?';
+          params = [parseInt(query._id, 10)];
+        } else if (query.slug) {
+          sql = 'SELECT * FROM tenants WHERE slug = ?';
+          params = [query.slug];
         } else {
-          row.config = row.settings || {};
+          const keys = Object.keys(query);
+          const conditions = keys.map((k) => `${k} = ?`);
+          sql = `SELECT * FROM tenants WHERE ${conditions.join(' AND ')} LIMIT 1`;
+          params = keys.map((k) => query[k]);
         }
+        const row = await get(sql, params);
+        if (row) {
+          row._id = String(row.id);
+          // Parsează settings dacă e JSON
+          if (typeof row.settings === 'string') {
+            try { row.config = JSON.parse(row.settings); } catch (_e) { row.config = {}; }
+          } else {
+            row.config = row.settings || {};
+          }
+        }
+        cb(null, row || null);
+      } catch (err) {
+        cb(err, null);
       }
-      cb(null, row || null);
-    } catch (err) {
-      cb(err, null);
-    }
+    })();
   },
 
   /**
@@ -855,39 +976,41 @@ const tenants = {
         return this;
       },
       exec(cb) {
-        try {
-          const keys = Object.keys(query || {});
-          let sql, params;
-          if (keys.length === 0) {
-            sql = 'SELECT * FROM tenants';
-            params = [];
-          } else {
-            const conditions = keys.map((k) => `${k} = ?`);
-            sql = `SELECT * FROM tenants WHERE ${conditions.join(' AND ')}`;
-            params = keys.map((k) => query[k]);
-          }
-
-          if (_sortField) {
-            sql += ` ORDER BY ${_sortField} ${_sortDir}`;
-          }
-          if (_limit !== null) {
-            sql += ` LIMIT ${_limit}`;
-          }
-
-          const rows = all(sql, params);
-          const docs = rows.map((r) => {
-            r._id = String(r.id);
-            if (typeof r.settings === 'string') {
-              try { r.config = JSON.parse(r.settings); } catch (_e) { r.config = {}; }
+        (async () => {
+          try {
+            const keys = Object.keys(query || {});
+            let sql, params;
+            if (keys.length === 0) {
+              sql = 'SELECT * FROM tenants';
+              params = [];
             } else {
-              r.config = r.settings || {};
+              const conditions = keys.map((k) => `${k} = ?`);
+              sql = `SELECT * FROM tenants WHERE ${conditions.join(' AND ')}`;
+              params = keys.map((k) => query[k]);
             }
-            return r;
-          });
-          cb(null, docs);
-        } catch (err) {
-          cb(err, []);
-        }
+
+            if (_sortField) {
+              sql += ` ORDER BY ${_sortField} ${_sortDir}`;
+            }
+            if (_limit !== null) {
+              sql += ` LIMIT ${_limit}`;
+            }
+
+            const rows = await all(sql, params);
+            const docs = rows.map((r) => {
+              r._id = String(r.id);
+              if (typeof r.settings === 'string') {
+                try { r.config = JSON.parse(r.settings); } catch (_e) { r.config = {}; }
+              } else {
+                r.config = r.settings || {};
+              }
+              return r;
+            });
+            cb(null, docs);
+          } catch (err) {
+            cb(err, []);
+          }
+        })();
       },
     };
     return builder;
@@ -899,22 +1022,24 @@ const tenants = {
    * @param {Function} cb
    */
   count(query, cb) {
-    try {
-      const keys = Object.keys(query || {});
-      let sql, params;
-      if (keys.length === 0) {
-        sql = 'SELECT COUNT(*) AS cnt FROM tenants';
-        params = [];
-      } else {
-        const conditions = keys.map((k) => `${k} = ?`);
-        sql = `SELECT COUNT(*) AS cnt FROM tenants WHERE ${conditions.join(' AND ')}`;
-        params = keys.map((k) => query[k]);
+    (async () => {
+      try {
+        const keys = Object.keys(query || {});
+        let sql, params;
+        if (keys.length === 0) {
+          sql = 'SELECT COUNT(*) AS cnt FROM tenants';
+          params = [];
+        } else {
+          const conditions = keys.map((k) => `${k} = ?`);
+          sql = `SELECT COUNT(*) AS cnt FROM tenants WHERE ${conditions.join(' AND ')}`;
+          params = keys.map((k) => query[k]);
+        }
+        const row = await get(sql, params);
+        cb(null, row ? row.cnt : 0);
+      } catch (err) {
+        cb(err, 0);
       }
-      const row = get(sql, params);
-      cb(null, row ? row.cnt : 0);
-    } catch (err) {
-      cb(err, 0);
-    }
+    })();
   },
 
   /**
@@ -923,31 +1048,33 @@ const tenants = {
    * @param {Function} cb
    */
   insert(doc, cb) {
-    try {
-      const now = new Date().toISOString();
-      const settings = doc.config || doc.settings || {};
-      const result = run(
-        `INSERT INTO tenants (name, slug, settings, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?)`,
-        [
-          doc.name || '',
-          doc.slug || '',
-          typeof settings === 'string' ? settings : JSON.stringify(settings),
-          doc.createdAt || now,
-          doc.updatedAt || now,
-        ]
-      );
-      const newDoc = get('SELECT * FROM tenants WHERE id = ?', [result.lastInsertRowid]);
-      if (newDoc) {
-        newDoc._id = String(newDoc.id);
-        if (typeof newDoc.settings === 'string') {
-          try { newDoc.config = JSON.parse(newDoc.settings); } catch (_e) { newDoc.config = {}; }
+    (async () => {
+      try {
+        const now = new Date().toISOString();
+        const settings = doc.config || doc.settings || {};
+        const result = await run(
+          `INSERT INTO tenants (name, slug, settings, createdAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            doc.name || '',
+            doc.slug || '',
+            typeof settings === 'string' ? settings : JSON.stringify(settings),
+            doc.createdAt || now,
+            doc.updatedAt || now,
+          ]
+        );
+        const newDoc = await get('SELECT * FROM tenants WHERE id = ?', [result.lastInsertRowid]);
+        if (newDoc) {
+          newDoc._id = String(newDoc.id);
+          if (typeof newDoc.settings === 'string') {
+            try { newDoc.config = JSON.parse(newDoc.settings); } catch (_e) { newDoc.config = {}; }
+          }
         }
+        cb(null, newDoc);
+      } catch (err) {
+        cb(err, null);
       }
-      cb(null, newDoc);
-    } catch (err) {
-      cb(err, null);
-    }
+    })();
   },
 
   /**
@@ -959,33 +1086,35 @@ const tenants = {
    */
   update(query, update, options, cb) {
     if (typeof options === 'function') { cb = options; options = {}; }
-    try {
-      const setOps = update.$set || update;
-      const setKeys = Object.keys(setOps);
-      const setClauses = setKeys.map((k) => `${k} = ?`);
-      const setParams = setKeys.map((k) => {
-        if (k === 'config' || k === 'settings') {
-          return typeof setOps[k] === 'string' ? setOps[k] : JSON.stringify(setOps[k]);
-        }
-        return setOps[k];
-      });
+    (async () => {
+      try {
+        const setOps = update.$set || update;
+        const setKeys = Object.keys(setOps);
+        const setClauses = setKeys.map((k) => `${k} = ?`);
+        const setParams = setKeys.map((k) => {
+          if (k === 'config' || k === 'settings') {
+            return typeof setOps[k] === 'string' ? setOps[k] : JSON.stringify(setOps[k]);
+          }
+          return setOps[k];
+        });
 
-      const qKeys = Object.keys(query);
-      const qConditions = qKeys.map((k) => `${k} = ?`);
-      const qParams = qKeys.map((k) => query[k]);
+        const qKeys = Object.keys(query);
+        const qConditions = qKeys.map((k) => `${k} = ?`);
+        const qParams = qKeys.map((k) => query[k]);
 
-      const now = new Date().toISOString();
-      setClauses.push('updatedAt = ?');
-      setParams.push(now);
+        const now = new Date().toISOString();
+        setClauses.push('updatedAt = ?');
+        setParams.push(now);
 
-      const result = run(
-        `UPDATE tenants SET ${setClauses.join(', ')} WHERE ${qConditions.join(' AND ')}`,
-        [...setParams, ...qParams]
-      );
-      cb(null, result.changes);
-    } catch (err) {
-      cb(err, 0);
-    }
+        const result = await run(
+          `UPDATE tenants SET ${setClauses.join(', ')} WHERE ${qConditions.join(' AND ')}`,
+          [...setParams, ...qParams]
+        );
+        cb(null, result.changes);
+      } catch (err) {
+        cb(err, 0);
+      }
+    })();
   },
 
   /**
@@ -996,18 +1125,20 @@ const tenants = {
    */
   remove(query, options, cb) {
     if (typeof options === 'function') { cb = options; options = {}; }
-    try {
-      const keys = Object.keys(query);
-      const conditions = keys.map((k) => `${k} = ?`);
-      const params = keys.map((k) => query[k]);
-      const result = run(
-        `DELETE FROM tenants WHERE ${conditions.join(' AND ')}`,
-        params
-      );
-      cb(null, result.changes);
-    } catch (err) {
-      cb(err, 0);
-    }
+    (async () => {
+      try {
+        const keys = Object.keys(query);
+        const conditions = keys.map((k) => `${k} = ?`);
+        const params = keys.map((k) => query[k]);
+        const result = await run(
+          `DELETE FROM tenants WHERE ${conditions.join(' AND ')}`,
+          params
+        );
+        cb(null, result.changes);
+      } catch (err) {
+        cb(err, 0);
+      }
+    })();
   },
 };
 
@@ -1016,15 +1147,18 @@ const tenants = {
 // ---------------------------------------------------------------------------
 
 module.exports = {
-  // API SQLite principal
+  // API SQLite principal (async)
   getDb,
   run,
   get,
   all,
 
-  // Wrapper-e de compatibilitate NeDB (deprecated, folosiți get/run/all direct)
+  // Wrapper-e de compatibilitate NeDB (callback-based; deprecated, folosiți get/run/all direct)
   users,
   tenants,
+
+  // Utilitar: salvare manuală pe disc
+  saveToDisk: _saveToDisk,
 
   // Constante
   DATA_DIR,

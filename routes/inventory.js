@@ -54,7 +54,6 @@ const {
 
 const {
   createInventoryTransaction,
-  findInventoryTransactionById,
   findTransactionsByItem,
   findTransactionsByTenant,
   findTransactionsByLocation,
@@ -62,7 +61,6 @@ const {
   countTransactions,
   getTransactionSummary,
   getItemTransactionHistory,
-  getItemConsumption,
   VALID_TRANSACTION_TYPES,
 } = require('../models/inventoryTransactionModel');
 
@@ -466,7 +464,7 @@ router.get(
 
       if (type && !locationId && !itemId) {
         // Filtrare doar după tip
-        transactions = await findTransactionsByType(tenantId, type, options);
+        transactions = await findTransactionsByType(type, { ...options, tenantId });
         total = await countTransactions(tenantId, { type });
       } else if (locationId && locationType) {
         // Filtrare după locație

@@ -6,11 +6,11 @@
 // Câmpuri suportate: categorie, nume, descriere, preț, alergeni, ingrediente,
 // disponibilitate, tenantId, restaurantId
 //
-// Toate operațiile CRUD folosesc SQLite via config/db (getDb, run, get, all).
+// Toate operațiile CRUD folosesc SQLite via config/db (getDb → db.run / db.exec).
 // Tabela: menu_items
 // ---------------------------------------------------------------------------
 
-const { run, get, all, isReady: _dbIsReady } = require('../config/db');
+const getDb = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
 
 // ---------------------------------------------------------------------------
@@ -72,6 +72,86 @@ const VALID_ALLERGENS = [
 const VALID_AVAILABILITY = ['available', 'unavailable', 'seasonal', 'temporary'];
 
 // ---------------------------------------------------------------------------
+// Helpers pentru operații SQLite directe pe instanța db (sql.js)
+// ---------------------------------------------------------------------------
+
+/**
+ * Execută o interogare SELECT și returnează primul rând ca obiect,
+ * sau `undefined` dacă nu există rezultate.
+ *
+ * @param {import('sql.js').Database} db - Instanța bazei de date
+ * @param {string} sql - Interogarea SQL
+ * @param {Array} [params=[]] - Parametrii
+ * @returns {Object|undefined}
+ */
+function _dbGet(db, sql, params = []) {
+  const stmt = db.prepare(sql);
+  try {
+    if (params.length > 0) {
+      stmt.bind(params);
+    }
+    if (stmt.step()) {
+      return stmt.getAsObject();
+    }
+    return undefined;
+  } finally {
+    stmt.free();
+  }
+}
+
+/**
+ * Execută o interogare SELECT și returnează toate rândurile ca array de obiecte.
+ *
+ * @param {import('sql.js').Database} db - Instanța bazei de date
+ * @param {string} sql - Interogarea SQL
+ * @param {Array} [params=[]] - Parametrii
+ * @returns {Array<Object>}
+ */
+function _dbAll(db, sql, params = []) {
+  const stmt = db.prepare(sql);
+  try {
+    if (params.length > 0) {
+      stmt.bind(params);
+    }
+    const rows = [];
+    while (stmt.step()) {
+      rows.push(stmt.getAsObject());
+    }
+    return rows;
+  } finally {
+    stmt.free();
+  }
+}
+
+/**
+ * Execută o instrucțiune INSERT / UPDATE / DELETE și returnează
+ * `{ changes, lastInsertRowid }`.
+ *
+ * @param {import('sql.js').Database} db - Instanța bazei de date
+ * @param {string} sql - Instrucțiunea SQL
+ * @param {Array} [params=[]] - Parametrii
+ * @returns {{ changes: number, lastInsertRowid: number }}
+ */
+function _dbRun(db, sql, params = []) {
+  db.run(sql, params);
+
+  const lastIdResult = db.exec('SELECT last_insert_rowid() AS id');
+  const changesResult = db.exec('SELECT changes() AS cnt');
+
+  const lastInsertRowid =
+    lastIdResult.length > 0 && lastIdResult[0].values.length > 0
+      ? lastIdResult[0].values[0][0]
+      : 0;
+
+  const changes =
+    changesResult.length > 0 && changesResult[0].values.length > 0
+      ? changesResult[0].values[0][0]
+      : 0;
+
+  return { changes, lastInsertRowid };
+}
+
+// ---------------------------------------------------------------------------
 // Verificare existență restaurant (SQL pur)
 // ---------------------------------------------------------------------------
 
@@ -83,25 +163,24 @@ const VALID_AVAILABILITY = ['available', 'unavailable', 'seasonal', 'temporary']
  * @returns {Promise<boolean>} `true` dacă restaurantul există
  * @throws {AppError} În caz de eroare de interogare
  */
-function _restaurantExists(restaurantId, tenantId) {
-  return new Promise((resolve, reject) => {
-    try {
-      const numericId = parseInt(restaurantId, 10);
-      const sql = !isNaN(numericId)
-        ? 'SELECT id FROM restaurants WHERE id = ? AND tenantId = ?'
-        : 'SELECT id FROM restaurants WHERE CAST(id AS TEXT) = ? AND tenantId = ?';
-      const param = !isNaN(numericId) ? numericId : String(restaurantId);
+async function _restaurantExists(restaurantId, tenantId) {
+  try {
+    const db = await getDb();
+    const numericId = parseInt(restaurantId, 10);
+    const sql = !isNaN(numericId)
+      ? 'SELECT id FROM restaurants WHERE id = ? AND tenantId = ?'
+      : 'SELECT id FROM restaurants WHERE CAST(id AS TEXT) = ? AND tenantId = ?';
+    const param = !isNaN(numericId) ? numericId : String(restaurantId);
 
-      const row = get(sql, [param, tenantId]);
-      resolve(!!row);
-    } catch (err) {
-      reject(new AppError(
-        `Eroare la verificarea restaurantului: ${err.message}`,
-        500,
-        'DB_QUERY_ERROR'
-      ));
-    }
-  });
+    const row = _dbGet(db, sql, [param, tenantId]);
+    return !!row;
+  } catch (err) {
+    throw new AppError(
+      `Eroare la verificarea restaurantului: ${err.message}`,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -244,188 +323,180 @@ function _rowToMenuItem(row) {
  * @returns {Promise<Object>} Documentul creat
  * @throws {AppError} Dacă validarea eșuează
  */
-function createMenuItem(itemData) {
-  return new Promise((resolve, reject) => {
-    // Validare date de bază
-    if (!itemData || typeof itemData !== 'object') {
-      return reject(new AppError('Datele itemului de meniu sunt invalide.', 400, 'INVALID_MENU_ITEM_DATA'));
-    }
+async function createMenuItem(itemData) {
+  // Validare date de bază
+  if (!itemData || typeof itemData !== 'object') {
+    throw new AppError('Datele itemului de meniu sunt invalide.', 400, 'INVALID_MENU_ITEM_DATA');
+  }
 
-    const {
-      name,
-      category,
-      price,
-      description,
-      allergens,
-      ingredients,
-      availability,
-      imageUrl,
-      tenantId,
-      restaurantId,
-    } = itemData;
+  const {
+    name,
+    category,
+    price,
+    description,
+    allergens,
+    ingredients,
+    availability,
+    imageUrl,
+    tenantId,
+    restaurantId,
+  } = itemData;
 
-    // Validare nume
-    if (!name || !isValidString(name, 1, 200)) {
-      return reject(new AppError(
-        'Numele itemului trebuie să aibă între 1 și 200 de caractere.',
+  // Validare nume
+  if (!name || !isValidString(name, 1, 200)) {
+    throw new AppError(
+      'Numele itemului trebuie să aibă între 1 și 200 de caractere.',
+      400,
+      'INVALID_MENU_ITEM_NAME'
+    );
+  }
+
+  // Validare categorie
+  if (!category || !isValidCategory(category)) {
+    throw new AppError(
+      `Categoria "${category}" nu este validă. Categorii permise: ${VALID_CATEGORIES.join(', ')}.`,
+      400,
+      'INVALID_CATEGORY'
+    );
+  }
+
+  // Validare preț
+  if (price === undefined || price === null || !isValidPrice(price)) {
+    throw new AppError(
+      'Prețul trebuie să fie un număr pozitiv.',
+      400,
+      'INVALID_PRICE'
+    );
+  }
+
+  // Validare tenantId
+  if (!tenantId) {
+    throw new AppError(
+      'ID-ul tenant-ului este obligatoriu.',
+      400,
+      'MISSING_TENANT_ID'
+    );
+  }
+
+  // Validare restaurantId
+  if (!restaurantId) {
+    throw new AppError(
+      'ID-ul restaurantului este obligatoriu.',
+      400,
+      'MISSING_RESTAURANT_ID'
+    );
+  }
+
+  // Validare descriere (opțional)
+  const finalDescription = description !== undefined && description !== null ? description : '';
+  if (finalDescription && !isValidString(finalDescription, 1, 2000)) {
+    throw new AppError(
+      'Descrierea poate avea maximum 2000 de caractere.',
+      400,
+      'INVALID_DESCRIPTION'
+    );
+  }
+
+  // Validare alergeni (opțional)
+  const finalAllergens = Array.isArray(allergens) ? allergens : [];
+  if (finalAllergens.length > 0) {
+    const allergenValidation = validateAllergens(finalAllergens);
+    if (!allergenValidation.valid) {
+      throw new AppError(
+        `Alergenii invalizi: ${allergenValidation.invalidItems.join(', ')}. ` +
+        `Alergeni valizi: ${VALID_ALLERGENS.join(', ')}.`,
         400,
-        'INVALID_MENU_ITEM_NAME'
-      ));
+        'INVALID_ALLERGENS'
+      );
+    }
+  }
+
+  // Validare ingrediente (opțional) – se validează chiar dacă nu persistăm
+  const finalIngredients = Array.isArray(ingredients) ? ingredients : [];
+  if (finalIngredients.length > 0 && !isValidStringArray(finalIngredients)) {
+    throw new AppError(
+      'Ingredientele trebuie să fie o listă de șiruri de caractere.',
+      400,
+      'INVALID_INGREDIENTS'
+    );
+  }
+
+  // Validare disponibilitate (opțional) → se stochează în `status`
+  const finalAvailability = availability || 'available';
+  if (!isValidAvailability(finalAvailability)) {
+    throw new AppError(
+      `Disponibilitatea "${finalAvailability}" nu este validă. ` +
+      `Valori permise: ${VALID_AVAILABILITY.join(', ')}.`,
+      400,
+      'INVALID_AVAILABILITY'
+    );
+  }
+
+  // Validare imageUrl (opțional) → se stochează în `image`
+  const finalImage = imageUrl || '';
+
+  // -----------------------------------------------------------------------
+  // Verificare existență restaurant (SQL)
+  // -----------------------------------------------------------------------
+  const exists = await _restaurantExists(restaurantId, tenantId);
+  if (!exists) {
+    throw new AppError(
+      'Restaurantul specificat nu există sau nu aparține acestui tenant.',
+      404,
+      'RESTAURANT_NOT_FOUND'
+    );
+  }
+
+  // -------------------------------------------------------------------
+  // INSERT în tabela menu_items
+  // -------------------------------------------------------------------
+  try {
+    const db = await getDb();
+    const now = new Date().toISOString();
+    const allergensJson = JSON.stringify(finalAllergens);
+
+    const result = _dbRun(
+      db,
+      `INSERT INTO menu_items
+         (tenantId, restaurantId, name, description, category, price,
+          allergens, status, image, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        tenantId,
+        restaurantId,
+        name.trim(),
+        typeof finalDescription === 'string' ? finalDescription.trim() : '',
+        category,
+        price,
+        allergensJson,
+        finalAvailability,
+        finalImage,
+        now,
+        now,
+      ]
+    );
+
+    const insertedId = result.lastInsertRowid;
+
+    // Citim înapoi rândul creat
+    const row = _dbGet(db, 'SELECT * FROM menu_items WHERE id = ?', [insertedId]);
+    if (!row) {
+      throw new AppError(
+        'Eroare la crearea itemului de meniu: documentul nu a putut fi citit după inserare.',
+        500,
+        'DB_INSERT_ERROR'
+      );
     }
 
-    // Validare categorie
-    if (!category || !isValidCategory(category)) {
-      return reject(new AppError(
-        `Categoria "${category}" nu este validă. Categorii permise: ${VALID_CATEGORIES.join(', ')}.`,
-        400,
-        'INVALID_CATEGORY'
-      ));
-    }
-
-    // Validare preț
-    if (price === undefined || price === null || !isValidPrice(price)) {
-      return reject(new AppError(
-        'Prețul trebuie să fie un număr pozitiv.',
-        400,
-        'INVALID_PRICE'
-      ));
-    }
-
-    // Validare tenantId
-    if (!tenantId) {
-      return reject(new AppError(
-        'ID-ul tenant-ului este obligatoriu.',
-        400,
-        'MISSING_TENANT_ID'
-      ));
-    }
-
-    // Validare restaurantId
-    if (!restaurantId) {
-      return reject(new AppError(
-        'ID-ul restaurantului este obligatoriu.',
-        400,
-        'MISSING_RESTAURANT_ID'
-      ));
-    }
-
-    // Validare descriere (opțional)
-    const finalDescription = description !== undefined && description !== null ? description : '';
-    if (finalDescription && !isValidString(finalDescription, 1, 2000)) {
-      return reject(new AppError(
-        'Descrierea poate avea maximum 2000 de caractere.',
-        400,
-        'INVALID_DESCRIPTION'
-      ));
-    }
-
-    // Validare alergeni (opțional)
-    const finalAllergens = Array.isArray(allergens) ? allergens : [];
-    if (finalAllergens.length > 0) {
-      const allergenValidation = validateAllergens(finalAllergens);
-      if (!allergenValidation.valid) {
-        return reject(new AppError(
-          `Alergenii invalizi: ${allergenValidation.invalidItems.join(', ')}. ` +
-          `Alergeni valizi: ${VALID_ALLERGENS.join(', ')}.`,
-          400,
-          'INVALID_ALLERGENS'
-        ));
-      }
-    }
-
-    // Validare ingrediente (opțional) – se validează chiar dacă nu persistăm
-    const finalIngredients = Array.isArray(ingredients) ? ingredients : [];
-    if (finalIngredients.length > 0 && !isValidStringArray(finalIngredients)) {
-      return reject(new AppError(
-        'Ingredientele trebuie să fie o listă de șiruri de caractere.',
-        400,
-        'INVALID_INGREDIENTS'
-      ));
-    }
-
-    // Validare disponibilitate (opțional) → se stochează în `status`
-    const finalAvailability = availability || 'available';
-    if (!isValidAvailability(finalAvailability)) {
-      return reject(new AppError(
-        `Disponibilitatea "${finalAvailability}" nu este validă. ` +
-        `Valori permise: ${VALID_AVAILABILITY.join(', ')}.`,
-        400,
-        'INVALID_AVAILABILITY'
-      ));
-    }
-
-    // Validare imageUrl (opțional) → se stochează în `image`
-    const finalImage = imageUrl || '';
-
-    // -----------------------------------------------------------------------
-    // Verificare existență restaurant (SQL)
-    // -----------------------------------------------------------------------
-    _restaurantExists(restaurantId, tenantId)
-      .then((exists) => {
-        if (!exists) {
-          return reject(new AppError(
-            'Restaurantul specificat nu există sau nu aparține acestui tenant.',
-            404,
-            'RESTAURANT_NOT_FOUND'
-          ));
-        }
-
-        // -------------------------------------------------------------------
-        // INSERT în tabela menu_items
-        // -------------------------------------------------------------------
-        try {
-          const now = new Date().toISOString();
-          const allergensJson = JSON.stringify(finalAllergens);
-
-          const result = run(
-            `INSERT INTO menu_items
-               (tenantId, restaurantId, name, description, category, price,
-                allergens, status, image, createdAt, updatedAt)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-              tenantId,
-              restaurantId,
-              name.trim(),
-              typeof finalDescription === 'string' ? finalDescription.trim() : '',
-              category,
-              price,
-              allergensJson,
-              finalAvailability,
-              finalImage,
-              now,
-              now,
-            ]
-          );
-
-          const insertedId = result.lastInsertRowid;
-
-          // Citim înapoi rândul creat
-          const row = get('SELECT * FROM menu_items WHERE id = ?', [insertedId]);
-          if (!row) {
-            return reject(new AppError(
-              'Eroare la crearea itemului de meniu: documentul nu a putut fi citit după inserare.',
-              500,
-              'DB_INSERT_ERROR'
-            ));
-          }
-
-          resolve(_rowToMenuItem(row));
-        } catch (insertErr) {
-          return reject(new AppError(
-            `Eroare la crearea itemului de meniu: ${insertErr.message}`,
-            500,
-            'DB_INSERT_ERROR'
-          ));
-        }
-      })
-      .catch((err) => {
-        reject(err instanceof AppError ? err : new AppError(
-          `Eroare la verificarea restaurantului: ${err.message}`,
-          500,
-          'DB_QUERY_ERROR'
-        ));
-      });
-  });
+    return _rowToMenuItem(row);
+  } catch (insertErr) {
+    if (insertErr instanceof AppError) throw insertErr;
+    throw new AppError(
+      `Eroare la crearea itemului de meniu: ${insertErr.message}`,
+      500,
+      'DB_INSERT_ERROR'
+    );
+  }
 }
 
 /**
@@ -434,31 +505,30 @@ function createMenuItem(itemData) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Object|null>}
  */
-function findMenuItemById(id, tenantId) {
-  return new Promise((resolve, reject) => {
-    if (!id) {
-      return reject(new AppError('ID-ul itemului de meniu este invalid.', 400, 'INVALID_MENU_ITEM_ID'));
-    }
+async function findMenuItemById(id, tenantId) {
+  if (!id) {
+    throw new AppError('ID-ul itemului de meniu este invalid.', 400, 'INVALID_MENU_ITEM_ID');
+  }
 
-    if (!tenantId) {
-      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
-    }
+  if (!tenantId) {
+    throw new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID');
+  }
 
-    try {
-      const numericId = parseInt(id, 10);
-      const row = !isNaN(numericId)
-        ? get('SELECT * FROM menu_items WHERE id = ? AND tenantId = ?', [numericId, tenantId])
-        : get('SELECT * FROM menu_items WHERE CAST(id AS TEXT) = ? AND tenantId = ?', [String(id), tenantId]);
+  try {
+    const db = await getDb();
+    const numericId = parseInt(id, 10);
+    const row = !isNaN(numericId)
+      ? _dbGet(db, 'SELECT * FROM menu_items WHERE id = ? AND tenantId = ?', [numericId, tenantId])
+      : _dbGet(db, 'SELECT * FROM menu_items WHERE CAST(id AS TEXT) = ? AND tenantId = ?', [String(id), tenantId]);
 
-      resolve(_rowToMenuItem(row));
-    } catch (err) {
-      reject(new AppError(
-        `Eroare la căutarea itemului de meniu: ${err.message}`,
-        500,
-        'DB_QUERY_ERROR'
-      ));
-    }
-  });
+    return _rowToMenuItem(row);
+  } catch (err) {
+    throw new AppError(
+      `Eroare la căutarea itemului de meniu: ${err.message}`,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 /**
@@ -468,79 +538,79 @@ function findMenuItemById(id, tenantId) {
  * @param {Object} [options={}] - Opțiuni (sort, limit, skip, category, availability)
  * @returns {Promise<Array>}
  */
-function findMenuItemsByRestaurant(restaurantId, tenantId, options = {}) {
-  return new Promise((resolve, reject) => {
-    if (!restaurantId) {
-      return reject(new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID'));
+async function findMenuItemsByRestaurant(restaurantId, tenantId, options = {}) {
+  if (!restaurantId) {
+    throw new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID');
+  }
+
+  if (!tenantId) {
+    throw new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID');
+  }
+
+  try {
+    const db = await getDb();
+    const conditions = ['restaurantId = ?', 'tenantId = ?'];
+    const params = [restaurantId, tenantId];
+
+    // Filtrare opțională după categorie
+    if (options.category) {
+      if (!isValidCategory(options.category)) {
+        throw new AppError(
+          `Categoria "${options.category}" nu este validă.`,
+          400,
+          'INVALID_CATEGORY'
+        );
+      }
+      conditions.push('category = ?');
+      params.push(options.category);
     }
 
-    if (!tenantId) {
-      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
+    // Filtrare opțională după disponibilitate (status)
+    if (options.availability) {
+      if (!isValidAvailability(options.availability)) {
+        throw new AppError(
+          `Disponibilitatea "${options.availability}" nu este validă.`,
+          400,
+          'INVALID_AVAILABILITY'
+        );
+      }
+      conditions.push('status = ?');
+      params.push(options.availability);
     }
 
-    try {
-      const conditions = ['restaurantId = ?', 'tenantId = ?'];
-      const params = [restaurantId, tenantId];
+    let sql = `SELECT * FROM menu_items WHERE ${conditions.join(' AND ')}`;
 
-      // Filtrare opțională după categorie
-      if (options.category) {
-        if (!isValidCategory(options.category)) {
-          return reject(new AppError(
-            `Categoria "${options.category}" nu este validă.`,
-            400,
-            'INVALID_CATEGORY'
-          ));
-        }
-        conditions.push('category = ?');
-        params.push(options.category);
-      }
-
-      // Filtrare opțională după disponibilitate (status)
-      if (options.availability) {
-        if (!isValidAvailability(options.availability)) {
-          return reject(new AppError(
-            `Disponibilitatea "${options.availability}" nu este validă.`,
-            400,
-            'INVALID_AVAILABILITY'
-          ));
-        }
-        conditions.push('status = ?');
-        params.push(options.availability);
-      }
-
-      let sql = `SELECT * FROM menu_items WHERE ${conditions.join(' AND ')}`;
-
-      // Sortare
-      if (options.sort && typeof options.sort === 'object') {
-        const sortClauses = Object.entries(options.sort).map(([col, dir]) => {
-          const dirStr = String(dir).toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
-          return `${col} ${dirStr}`;
-        });
-        sql += ` ORDER BY ${sortClauses.join(', ')}`;
-      } else {
-        sql += ' ORDER BY category ASC, name ASC';
-      }
-
-      // Limit
-      if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
-        sql += ` LIMIT ${options.limit}`;
-      }
-
-      // Skip / OFFSET
-      if (options.skip && Number.isInteger(options.skip) && options.skip > 0) {
-        sql += ` OFFSET ${options.skip}`;
-      }
-
-      const rows = all(sql, params);
-      resolve((rows || []).map(_rowToMenuItem));
-    } catch (err) {
-      reject(new AppError(
-        `Eroare la căutarea itemelor de meniu: ${err.message}`,
-        500,
-        'DB_QUERY_ERROR'
-      ));
+    // Sortare
+    if (options.sort && typeof options.sort === 'object') {
+      const sortClauses = Object.entries(options.sort).map(([col, dir]) => {
+        const dirStr = String(dir).toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+        return `${col} ${dirStr}`;
+      });
+      sql += ` ORDER BY ${sortClauses.join(', ')}`;
+    } else {
+      sql += ' ORDER BY category ASC, name ASC';
     }
-  });
+
+    // Limit
+    if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
+      sql += ` LIMIT ${options.limit}`;
+    }
+
+    // Skip / OFFSET
+    if (options.skip && Number.isInteger(options.skip) && options.skip > 0) {
+      sql += ` OFFSET ${options.skip}`;
+    }
+
+    const rows = _dbAll(db, sql, params);
+    return (rows || []).map(_rowToMenuItem);
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    throw new AppError(
+      `Eroare la căutarea itemelor de meniu: ${err.message}`,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 /**
@@ -550,38 +620,38 @@ function findMenuItemsByRestaurant(restaurantId, tenantId, options = {}) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Array>}
  */
-function findMenuItemsByCategory(category, restaurantId, tenantId) {
-  return new Promise((resolve, reject) => {
-    if (!category || !isValidCategory(category)) {
-      return reject(new AppError(
-        `Categoria "${category}" nu este validă. Categorii permise: ${VALID_CATEGORIES.join(', ')}.`,
-        400,
-        'INVALID_CATEGORY'
-      ));
-    }
+async function findMenuItemsByCategory(category, restaurantId, tenantId) {
+  if (!category || !isValidCategory(category)) {
+    throw new AppError(
+      `Categoria "${category}" nu este validă. Categorii permise: ${VALID_CATEGORIES.join(', ')}.`,
+      400,
+      'INVALID_CATEGORY'
+    );
+  }
 
-    if (!restaurantId) {
-      return reject(new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID'));
-    }
+  if (!restaurantId) {
+    throw new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID');
+  }
 
-    if (!tenantId) {
-      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
-    }
+  if (!tenantId) {
+    throw new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID');
+  }
 
-    try {
-      const rows = all(
-        'SELECT * FROM menu_items WHERE restaurantId = ? AND tenantId = ? AND category = ? ORDER BY name ASC',
-        [restaurantId, tenantId, category]
-      );
-      resolve((rows || []).map(_rowToMenuItem));
-    } catch (err) {
-      reject(new AppError(
-        `Eroare la căutarea itemelor pe categorie: ${err.message}`,
-        500,
-        'DB_QUERY_ERROR'
-      ));
-    }
-  });
+  try {
+    const db = await getDb();
+    const rows = _dbAll(
+      db,
+      'SELECT * FROM menu_items WHERE restaurantId = ? AND tenantId = ? AND category = ? ORDER BY name ASC',
+      [restaurantId, tenantId, category]
+    );
+    return (rows || []).map(_rowToMenuItem);
+  } catch (err) {
+    throw new AppError(
+      `Eroare la căutarea itemelor pe categorie: ${err.message}`,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 /**
@@ -591,46 +661,46 @@ function findMenuItemsByCategory(category, restaurantId, tenantId) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Array>}
  */
-function findMenuItemsByAllergen(allergen, restaurantId, tenantId) {
-  return new Promise((resolve, reject) => {
-    if (!allergen || !VALID_ALLERGENS.includes(allergen)) {
-      return reject(new AppError(
-        `Alergenul "${allergen}" nu este valid. Alergeni valizi: ${VALID_ALLERGENS.join(', ')}.`,
-        400,
-        'INVALID_ALLERGEN'
-      ));
-    }
+async function findMenuItemsByAllergen(allergen, restaurantId, tenantId) {
+  if (!allergen || !VALID_ALLERGENS.includes(allergen)) {
+    throw new AppError(
+      `Alergenul "${allergen}" nu este valid. Alergeni valizi: ${VALID_ALLERGENS.join(', ')}.`,
+      400,
+      'INVALID_ALLERGEN'
+    );
+  }
 
-    if (!restaurantId) {
-      return reject(new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID'));
-    }
+  if (!restaurantId) {
+    throw new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID');
+  }
 
-    if (!tenantId) {
-      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
-    }
+  if (!tenantId) {
+    throw new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID');
+  }
 
-    try {
-      // Căutare în câmpul JSON allergens folosind LIKE
-      const rows = all(
-        `SELECT * FROM menu_items
-         WHERE restaurantId = ? AND tenantId = ? AND allergens LIKE ?
-         ORDER BY name ASC`,
-        [restaurantId, tenantId, `%${allergen}%`]
-      );
-      // Post-filtrare: verificăm că alergenul este exact în array-ul parsat
-      const filtered = (rows || []).filter((row) => {
-        const parsed = _parseAllergens(row.allergens);
-        return parsed.some((a) => a.toLowerCase() === allergen.toLowerCase());
-      });
-      resolve(filtered.map(_rowToMenuItem));
-    } catch (err) {
-      reject(new AppError(
-        `Eroare la căutarea itemelor după alergen: ${err.message}`,
-        500,
-        'DB_QUERY_ERROR'
-      ));
-    }
-  });
+  try {
+    const db = await getDb();
+    // Căutare în câmpul JSON allergens folosind LIKE
+    const rows = _dbAll(
+      db,
+      `SELECT * FROM menu_items
+       WHERE restaurantId = ? AND tenantId = ? AND allergens LIKE ?
+       ORDER BY name ASC`,
+      [restaurantId, tenantId, `%${allergen}%`]
+    );
+    // Post-filtrare: verificăm că alergenul este exact în array-ul parsat
+    const filtered = (rows || []).filter((row) => {
+      const parsed = _parseAllergens(row.allergens);
+      return parsed.some((a) => a.toLowerCase() === allergen.toLowerCase());
+    });
+    return filtered.map(_rowToMenuItem);
+  } catch (err) {
+    throw new AppError(
+      `Eroare la căutarea itemelor după alergen: ${err.message}`,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 /**
@@ -640,164 +710,165 @@ function findMenuItemsByAllergen(allergen, restaurantId, tenantId) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Object>} Documentul actualizat
  */
-function updateMenuItem(id, updateData, tenantId) {
-  return new Promise((resolve, reject) => {
-    if (!id) {
-      return reject(new AppError('ID-ul itemului de meniu este invalid.', 400, 'INVALID_MENU_ITEM_ID'));
+async function updateMenuItem(id, updateData, tenantId) {
+  if (!id) {
+    throw new AppError('ID-ul itemului de meniu este invalid.', 400, 'INVALID_MENU_ITEM_ID');
+  }
+
+  if (!tenantId) {
+    throw new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID');
+  }
+
+  if (!updateData || typeof updateData !== 'object' || Object.keys(updateData).length === 0) {
+    throw new AppError(
+      'Nu s-au furnizat date pentru actualizare.',
+      400,
+      'EMPTY_UPDATE_DATA'
+    );
+  }
+
+  // -----------------------------------------------------------------------
+  // Câmpuri permise pentru actualizare
+  // -----------------------------------------------------------------------
+  const allowedFields = ['name', 'category', 'price', 'description', 'allergens', 'ingredients', 'availability', 'imageUrl'];
+  const setClauses = [];
+  const setParams = [];
+  const errors = [];
+
+  for (const [key, value] of Object.entries(updateData)) {
+    if (!allowedFields.includes(key)) {
+      continue;
     }
 
-    if (!tenantId) {
-      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
-    }
+    switch (key) {
+      case 'name':
+        if (!isValidString(value, 1, 200)) {
+          errors.push('Numele itemului trebuie să aibă între 1 și 200 de caractere.');
+        } else {
+          setClauses.push('name = ?');
+          setParams.push(value.trim());
+        }
+        break;
 
-    if (!updateData || typeof updateData !== 'object' || Object.keys(updateData).length === 0) {
-      return reject(new AppError(
-        'Nu s-au furnizat date pentru actualizare.',
-        400,
-        'EMPTY_UPDATE_DATA'
-      ));
-    }
+      case 'category':
+        if (!isValidCategory(value)) {
+          errors.push(`Categoria "${value}" nu este validă.`);
+        } else {
+          setClauses.push('category = ?');
+          setParams.push(value);
+        }
+        break;
 
-    // -----------------------------------------------------------------------
-    // Câmpuri permise pentru actualizare
-    // -----------------------------------------------------------------------
-    const allowedFields = ['name', 'category', 'price', 'description', 'allergens', 'ingredients', 'availability', 'imageUrl'];
-    const setClauses = [];
-    const setParams = [];
-    const errors = [];
+      case 'price':
+        if (!isValidPrice(value)) {
+          errors.push('Prețul trebuie să fie un număr pozitiv.');
+        } else {
+          setClauses.push('price = ?');
+          setParams.push(value);
+        }
+        break;
 
-    for (const [key, value] of Object.entries(updateData)) {
-      if (!allowedFields.includes(key)) {
-        continue;
-      }
+      case 'description':
+        if (value !== null && value !== undefined && !isValidString(value, 1, 2000)) {
+          errors.push('Descrierea poate avea maximum 2000 de caractere.');
+        } else {
+          setClauses.push('description = ?');
+          setParams.push(value ? value.trim() : '');
+        }
+        break;
 
-      switch (key) {
-        case 'name':
-          if (!isValidString(value, 1, 200)) {
-            errors.push('Numele itemului trebuie să aibă între 1 și 200 de caractere.');
+      case 'allergens':
+        if (!Array.isArray(value)) {
+          errors.push('Alergenii trebuie să fie o listă.');
+        } else {
+          const validation = validateAllergens(value);
+          if (!validation.valid) {
+            errors.push(`Alergenii invalizi: ${validation.invalidItems.join(', ')}.`);
           } else {
-            setClauses.push('name = ?');
-            setParams.push(value.trim());
+            setClauses.push('allergens = ?');
+            setParams.push(JSON.stringify(value));
           }
-          break;
+        }
+        break;
 
-        case 'category':
-          if (!isValidCategory(value)) {
-            errors.push(`Categoria "${value}" nu este validă.`);
-          } else {
-            setClauses.push('category = ?');
-            setParams.push(value);
-          }
-          break;
+      case 'ingredients':
+        // Se validează dar nu se persistă (tabela curentă nu are coloana ingredients)
+        if (!Array.isArray(value) || !isValidStringArray(value)) {
+          errors.push('Ingredientele trebuie să fie o listă de șiruri de caractere.');
+        }
+        // Nu adăugăm în setClauses – coloana nu există
+        break;
 
-        case 'price':
-          if (!isValidPrice(value)) {
-            errors.push('Prețul trebuie să fie un număr pozitiv.');
-          } else {
-            setClauses.push('price = ?');
-            setParams.push(value);
-          }
-          break;
+      case 'availability':
+        if (!isValidAvailability(value)) {
+          errors.push(`Disponibilitatea "${value}" nu este validă.`);
+        } else {
+          setClauses.push('status = ?');
+          setParams.push(value);
+        }
+        break;
 
-        case 'description':
-          if (value !== null && value !== undefined && !isValidString(value, 1, 2000)) {
-            errors.push('Descrierea poate avea maximum 2000 de caractere.');
-          } else {
-            setClauses.push('description = ?');
-            setParams.push(value ? value.trim() : '');
-          }
-          break;
+      case 'imageUrl':
+        setClauses.push('image = ?');
+        setParams.push(value || '');
+        break;
 
-        case 'allergens':
-          if (!Array.isArray(value)) {
-            errors.push('Alergenii trebuie să fie o listă.');
-          } else {
-            const validation = validateAllergens(value);
-            if (!validation.valid) {
-              errors.push(`Alergenii invalizi: ${validation.invalidItems.join(', ')}.`);
-            } else {
-              setClauses.push('allergens = ?');
-              setParams.push(JSON.stringify(value));
-            }
-          }
-          break;
+      // No default
+    }
+  }
 
-        case 'ingredients':
-          // Se validează dar nu se persistă (tabela curentă nu are coloana ingredients)
-          if (!Array.isArray(value) || !isValidStringArray(value)) {
-            errors.push('Ingredientele trebuie să fie o listă de șiruri de caractere.');
-          }
-          // Nu adăugăm în setClauses – coloana nu există
-          break;
+  if (errors.length > 0) {
+    throw new AppError(errors.join(' '), 400, 'VALIDATION_ERROR');
+  }
 
-        case 'availability':
-          if (!isValidAvailability(value)) {
-            errors.push(`Disponibilitatea "${value}" nu este validă.`);
-          } else {
-            setClauses.push('status = ?');
-            setParams.push(value);
-          }
-          break;
+  if (setClauses.length === 0) {
+    throw new AppError(
+      'Nu s-au furnizat câmpuri valide pentru actualizare.',
+      400,
+      'NO_VALID_FIELDS'
+    );
+  }
 
-        case 'imageUrl':
-          setClauses.push('image = ?');
-          setParams.push(value || '');
-          break;
+  // -----------------------------------------------------------------------
+  // UPDATE SQL
+  // -----------------------------------------------------------------------
+  try {
+    const db = await getDb();
+    const now = new Date().toISOString();
+    setClauses.push('updatedAt = ?');
+    setParams.push(now);
 
-        // No default
-      }
+    // Construim clauza WHERE în funcție de tipul ID-ului
+    const numericId = parseInt(id, 10);
+    const whereClause = !isNaN(numericId)
+      ? 'id = ? AND tenantId = ?'
+      : 'CAST(id AS TEXT) = ? AND tenantId = ?';
+    const whereParams = [!isNaN(numericId) ? numericId : String(id), tenantId];
+
+    const result = _dbRun(
+      db,
+      `UPDATE menu_items SET ${setClauses.join(', ')} WHERE ${whereClause}`,
+      [...setParams, ...whereParams]
+    );
+
+    if (result.changes === 0) {
+      throw new AppError('Itemul de meniu nu a fost găsit.', 404, 'MENU_ITEM_NOT_FOUND');
     }
 
-    if (errors.length > 0) {
-      return reject(new AppError(errors.join(' '), 400, 'VALIDATION_ERROR'));
-    }
+    // Citim rândul actualizat
+    const row = !isNaN(numericId)
+      ? _dbGet(db, 'SELECT * FROM menu_items WHERE id = ? AND tenantId = ?', [numericId, tenantId])
+      : _dbGet(db, 'SELECT * FROM menu_items WHERE CAST(id AS TEXT) = ? AND tenantId = ?', [String(id), tenantId]);
 
-    if (setClauses.length === 0) {
-      return reject(new AppError(
-        'Nu s-au furnizat câmpuri valide pentru actualizare.',
-        400,
-        'NO_VALID_FIELDS'
-      ));
-    }
-
-    // -----------------------------------------------------------------------
-    // UPDATE SQL
-    // -----------------------------------------------------------------------
-    try {
-      const now = new Date().toISOString();
-      setClauses.push('updatedAt = ?');
-      setParams.push(now);
-
-      // Construim clauza WHERE în funcție de tipul ID-ului
-      const numericId = parseInt(id, 10);
-      const whereClause = !isNaN(numericId)
-        ? 'id = ? AND tenantId = ?'
-        : 'CAST(id AS TEXT) = ? AND tenantId = ?';
-      const whereParams = [!isNaN(numericId) ? numericId : String(id), tenantId];
-
-      const result = run(
-        `UPDATE menu_items SET ${setClauses.join(', ')} WHERE ${whereClause}`,
-        [...setParams, ...whereParams]
-      );
-
-      if (result.changes === 0) {
-        return reject(new AppError('Itemul de meniu nu a fost găsit.', 404, 'MENU_ITEM_NOT_FOUND'));
-      }
-
-      // Citim rândul actualizat
-      const row = !isNaN(numericId)
-        ? get('SELECT * FROM menu_items WHERE id = ? AND tenantId = ?', [numericId, tenantId])
-        : get('SELECT * FROM menu_items WHERE CAST(id AS TEXT) = ? AND tenantId = ?', [String(id), tenantId]);
-
-      resolve(_rowToMenuItem(row));
-    } catch (updateErr) {
-      reject(new AppError(
-        `Eroare la actualizarea itemului de meniu: ${updateErr.message}`,
-        500,
-        'DB_UPDATE_ERROR'
-      ));
-    }
-  });
+    return _rowToMenuItem(row);
+  } catch (updateErr) {
+    if (updateErr instanceof AppError) throw updateErr;
+    throw new AppError(
+      `Eroare la actualizarea itemului de meniu: ${updateErr.message}`,
+      500,
+      'DB_UPDATE_ERROR'
+    );
+  }
 }
 
 /**
@@ -807,50 +878,51 @@ function updateMenuItem(id, updateData, tenantId) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Object>}
  */
-function updateMenuItemPrice(id, price, tenantId) {
-  return new Promise((resolve, reject) => {
-    if (!id) {
-      return reject(new AppError('ID-ul itemului de meniu este invalid.', 400, 'INVALID_MENU_ITEM_ID'));
+async function updateMenuItemPrice(id, price, tenantId) {
+  if (!id) {
+    throw new AppError('ID-ul itemului de meniu este invalid.', 400, 'INVALID_MENU_ITEM_ID');
+  }
+
+  if (!isValidPrice(price)) {
+    throw new AppError('Prețul trebuie să fie un număr pozitiv.', 400, 'INVALID_PRICE');
+  }
+
+  if (!tenantId) {
+    throw new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID');
+  }
+
+  try {
+    const db = await getDb();
+    const now = new Date().toISOString();
+    const numericId = parseInt(id, 10);
+    const whereClause = !isNaN(numericId)
+      ? 'id = ? AND tenantId = ?'
+      : 'CAST(id AS TEXT) = ? AND tenantId = ?';
+    const whereParams = [!isNaN(numericId) ? numericId : String(id), tenantId];
+
+    const result = _dbRun(
+      db,
+      `UPDATE menu_items SET price = ?, updatedAt = ? WHERE ${whereClause}`,
+      [price, now, ...whereParams]
+    );
+
+    if (result.changes === 0) {
+      throw new AppError('Itemul de meniu nu a fost găsit.', 404, 'MENU_ITEM_NOT_FOUND');
     }
 
-    if (!isValidPrice(price)) {
-      return reject(new AppError('Prețul trebuie să fie un număr pozitiv.', 400, 'INVALID_PRICE'));
-    }
+    const row = !isNaN(numericId)
+      ? _dbGet(db, 'SELECT * FROM menu_items WHERE id = ? AND tenantId = ?', [numericId, tenantId])
+      : _dbGet(db, 'SELECT * FROM menu_items WHERE CAST(id AS TEXT) = ? AND tenantId = ?', [String(id), tenantId]);
 
-    if (!tenantId) {
-      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
-    }
-
-    try {
-      const now = new Date().toISOString();
-      const numericId = parseInt(id, 10);
-      const whereClause = !isNaN(numericId)
-        ? 'id = ? AND tenantId = ?'
-        : 'CAST(id AS TEXT) = ? AND tenantId = ?';
-      const whereParams = [!isNaN(numericId) ? numericId : String(id), tenantId];
-
-      const result = run(
-        `UPDATE menu_items SET price = ?, updatedAt = ? WHERE ${whereClause}`,
-        [price, now, ...whereParams]
-      );
-
-      if (result.changes === 0) {
-        return reject(new AppError('Itemul de meniu nu a fost găsit.', 404, 'MENU_ITEM_NOT_FOUND'));
-      }
-
-      const row = !isNaN(numericId)
-        ? get('SELECT * FROM menu_items WHERE id = ? AND tenantId = ?', [numericId, tenantId])
-        : get('SELECT * FROM menu_items WHERE CAST(id AS TEXT) = ? AND tenantId = ?', [String(id), tenantId]);
-
-      resolve(_rowToMenuItem(row));
-    } catch (updateErr) {
-      reject(new AppError(
-        `Eroare la actualizarea prețului: ${updateErr.message}`,
-        500,
-        'DB_UPDATE_ERROR'
-      ));
-    }
-  });
+    return _rowToMenuItem(row);
+  } catch (updateErr) {
+    if (updateErr instanceof AppError) throw updateErr;
+    throw new AppError(
+      `Eroare la actualizarea prețului: ${updateErr.message}`,
+      500,
+      'DB_UPDATE_ERROR'
+    );
+  }
 }
 
 /**
@@ -860,54 +932,55 @@ function updateMenuItemPrice(id, price, tenantId) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Object>}
  */
-function updateMenuItemAvailability(id, availability, tenantId) {
-  return new Promise((resolve, reject) => {
-    if (!id) {
-      return reject(new AppError('ID-ul itemului de meniu este invalid.', 400, 'INVALID_MENU_ITEM_ID'));
+async function updateMenuItemAvailability(id, availability, tenantId) {
+  if (!id) {
+    throw new AppError('ID-ul itemului de meniu este invalid.', 400, 'INVALID_MENU_ITEM_ID');
+  }
+
+  if (!availability || !isValidAvailability(availability)) {
+    throw new AppError(
+      `Disponibilitatea "${availability}" nu este validă. Valori permise: ${VALID_AVAILABILITY.join(', ')}.`,
+      400,
+      'INVALID_AVAILABILITY'
+    );
+  }
+
+  if (!tenantId) {
+    throw new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID');
+  }
+
+  try {
+    const db = await getDb();
+    const now = new Date().toISOString();
+    const numericId = parseInt(id, 10);
+    const whereClause = !isNaN(numericId)
+      ? 'id = ? AND tenantId = ?'
+      : 'CAST(id AS TEXT) = ? AND tenantId = ?';
+    const whereParams = [!isNaN(numericId) ? numericId : String(id), tenantId];
+
+    const result = _dbRun(
+      db,
+      `UPDATE menu_items SET status = ?, updatedAt = ? WHERE ${whereClause}`,
+      [availability, now, ...whereParams]
+    );
+
+    if (result.changes === 0) {
+      throw new AppError('Itemul de meniu nu a fost găsit.', 404, 'MENU_ITEM_NOT_FOUND');
     }
 
-    if (!availability || !isValidAvailability(availability)) {
-      return reject(new AppError(
-        `Disponibilitatea "${availability}" nu este validă. Valori permise: ${VALID_AVAILABILITY.join(', ')}.`,
-        400,
-        'INVALID_AVAILABILITY'
-      ));
-    }
+    const row = !isNaN(numericId)
+      ? _dbGet(db, 'SELECT * FROM menu_items WHERE id = ? AND tenantId = ?', [numericId, tenantId])
+      : _dbGet(db, 'SELECT * FROM menu_items WHERE CAST(id AS TEXT) = ? AND tenantId = ?', [String(id), tenantId]);
 
-    if (!tenantId) {
-      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
-    }
-
-    try {
-      const now = new Date().toISOString();
-      const numericId = parseInt(id, 10);
-      const whereClause = !isNaN(numericId)
-        ? 'id = ? AND tenantId = ?'
-        : 'CAST(id AS TEXT) = ? AND tenantId = ?';
-      const whereParams = [!isNaN(numericId) ? numericId : String(id), tenantId];
-
-      const result = run(
-        `UPDATE menu_items SET status = ?, updatedAt = ? WHERE ${whereClause}`,
-        [availability, now, ...whereParams]
-      );
-
-      if (result.changes === 0) {
-        return reject(new AppError('Itemul de meniu nu a fost găsit.', 404, 'MENU_ITEM_NOT_FOUND'));
-      }
-
-      const row = !isNaN(numericId)
-        ? get('SELECT * FROM menu_items WHERE id = ? AND tenantId = ?', [numericId, tenantId])
-        : get('SELECT * FROM menu_items WHERE CAST(id AS TEXT) = ? AND tenantId = ?', [String(id), tenantId]);
-
-      resolve(_rowToMenuItem(row));
-    } catch (updateErr) {
-      reject(new AppError(
-        `Eroare la actualizarea disponibilității: ${updateErr.message}`,
-        500,
-        'DB_UPDATE_ERROR'
-      ));
-    }
-  });
+    return _rowToMenuItem(row);
+  } catch (updateErr) {
+    if (updateErr instanceof AppError) throw updateErr;
+    throw new AppError(
+      `Eroare la actualizarea disponibilității: ${updateErr.message}`,
+      500,
+      'DB_UPDATE_ERROR'
+    );
+  }
 }
 
 /**
@@ -917,61 +990,62 @@ function updateMenuItemAvailability(id, availability, tenantId) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Object>}
  */
-function updateMenuItemAllergens(id, allergens, tenantId) {
-  return new Promise((resolve, reject) => {
-    if (!id) {
-      return reject(new AppError('ID-ul itemului de meniu este invalid.', 400, 'INVALID_MENU_ITEM_ID'));
+async function updateMenuItemAllergens(id, allergens, tenantId) {
+  if (!id) {
+    throw new AppError('ID-ul itemului de meniu este invalid.', 400, 'INVALID_MENU_ITEM_ID');
+  }
+
+  if (!Array.isArray(allergens)) {
+    throw new AppError('Alergenii trebuie să fie o listă.', 400, 'INVALID_ALLERGENS');
+  }
+
+  const validation = validateAllergens(allergens);
+  if (!validation.valid) {
+    throw new AppError(
+      `Alergenii invalizi: ${validation.invalidItems.join(', ')}. ` +
+      `Alergeni valizi: ${VALID_ALLERGENS.join(', ')}.`,
+      400,
+      'INVALID_ALLERGENS'
+    );
+  }
+
+  if (!tenantId) {
+    throw new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID');
+  }
+
+  try {
+    const db = await getDb();
+    const now = new Date().toISOString();
+    const allergensJson = JSON.stringify(allergens);
+    const numericId = parseInt(id, 10);
+    const whereClause = !isNaN(numericId)
+      ? 'id = ? AND tenantId = ?'
+      : 'CAST(id AS TEXT) = ? AND tenantId = ?';
+    const whereParams = [!isNaN(numericId) ? numericId : String(id), tenantId];
+
+    const result = _dbRun(
+      db,
+      `UPDATE menu_items SET allergens = ?, updatedAt = ? WHERE ${whereClause}`,
+      [allergensJson, now, ...whereParams]
+    );
+
+    if (result.changes === 0) {
+      throw new AppError('Itemul de meniu nu a fost găsit.', 404, 'MENU_ITEM_NOT_FOUND');
     }
 
-    if (!Array.isArray(allergens)) {
-      return reject(new AppError('Alergenii trebuie să fie o listă.', 400, 'INVALID_ALLERGENS'));
-    }
+    const row = !isNaN(numericId)
+      ? _dbGet(db, 'SELECT * FROM menu_items WHERE id = ? AND tenantId = ?', [numericId, tenantId])
+      : _dbGet(db, 'SELECT * FROM menu_items WHERE CAST(id AS TEXT) = ? AND tenantId = ?', [String(id), tenantId]);
 
-    const validation = validateAllergens(allergens);
-    if (!validation.valid) {
-      return reject(new AppError(
-        `Alergenii invalizi: ${validation.invalidItems.join(', ')}. ` +
-        `Alergeni valizi: ${VALID_ALLERGENS.join(', ')}.`,
-        400,
-        'INVALID_ALLERGENS'
-      ));
-    }
-
-    if (!tenantId) {
-      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
-    }
-
-    try {
-      const now = new Date().toISOString();
-      const allergensJson = JSON.stringify(allergens);
-      const numericId = parseInt(id, 10);
-      const whereClause = !isNaN(numericId)
-        ? 'id = ? AND tenantId = ?'
-        : 'CAST(id AS TEXT) = ? AND tenantId = ?';
-      const whereParams = [!isNaN(numericId) ? numericId : String(id), tenantId];
-
-      const result = run(
-        `UPDATE menu_items SET allergens = ?, updatedAt = ? WHERE ${whereClause}`,
-        [allergensJson, now, ...whereParams]
-      );
-
-      if (result.changes === 0) {
-        return reject(new AppError('Itemul de meniu nu a fost găsit.', 404, 'MENU_ITEM_NOT_FOUND'));
-      }
-
-      const row = !isNaN(numericId)
-        ? get('SELECT * FROM menu_items WHERE id = ? AND tenantId = ?', [numericId, tenantId])
-        : get('SELECT * FROM menu_items WHERE CAST(id AS TEXT) = ? AND tenantId = ?', [String(id), tenantId]);
-
-      resolve(_rowToMenuItem(row));
-    } catch (updateErr) {
-      reject(new AppError(
-        `Eroare la actualizarea alergenilor: ${updateErr.message}`,
-        500,
-        'DB_UPDATE_ERROR'
-      ));
-    }
-  });
+    return _rowToMenuItem(row);
+  } catch (updateErr) {
+    if (updateErr instanceof AppError) throw updateErr;
+    throw new AppError(
+      `Eroare la actualizarea alergenilor: ${updateErr.message}`,
+      500,
+      'DB_UPDATE_ERROR'
+    );
+  }
 }
 
 /**
@@ -980,41 +1054,42 @@ function updateMenuItemAllergens(id, allergens, tenantId) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<boolean>}
  */
-function deleteMenuItem(id, tenantId) {
-  return new Promise((resolve, reject) => {
-    if (!id) {
-      return reject(new AppError('ID-ul itemului de meniu este invalid.', 400, 'INVALID_MENU_ITEM_ID'));
+async function deleteMenuItem(id, tenantId) {
+  if (!id) {
+    throw new AppError('ID-ul itemului de meniu este invalid.', 400, 'INVALID_MENU_ITEM_ID');
+  }
+
+  if (!tenantId) {
+    throw new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID');
+  }
+
+  try {
+    const db = await getDb();
+    const numericId = parseInt(id, 10);
+    const whereClause = !isNaN(numericId)
+      ? 'id = ? AND tenantId = ?'
+      : 'CAST(id AS TEXT) = ? AND tenantId = ?';
+    const whereParams = [!isNaN(numericId) ? numericId : String(id), tenantId];
+
+    const result = _dbRun(
+      db,
+      `DELETE FROM menu_items WHERE ${whereClause}`,
+      whereParams
+    );
+
+    if (result.changes === 0) {
+      throw new AppError('Itemul de meniu nu a fost găsit.', 404, 'MENU_ITEM_NOT_FOUND');
     }
 
-    if (!tenantId) {
-      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
-    }
-
-    try {
-      const numericId = parseInt(id, 10);
-      const whereClause = !isNaN(numericId)
-        ? 'id = ? AND tenantId = ?'
-        : 'CAST(id AS TEXT) = ? AND tenantId = ?';
-      const whereParams = [!isNaN(numericId) ? numericId : String(id), tenantId];
-
-      const result = run(
-        `DELETE FROM menu_items WHERE ${whereClause}`,
-        whereParams
-      );
-
-      if (result.changes === 0) {
-        return reject(new AppError('Itemul de meniu nu a fost găsit.', 404, 'MENU_ITEM_NOT_FOUND'));
-      }
-
-      resolve(true);
-    } catch (removeErr) {
-      reject(new AppError(
-        `Eroare la ștergerea itemului de meniu: ${removeErr.message}`,
-        500,
-        'DB_DELETE_ERROR'
-      ));
-    }
-  });
+    return true;
+  } catch (removeErr) {
+    if (removeErr instanceof AppError) throw removeErr;
+    throw new AppError(
+      `Eroare la ștergerea itemului de meniu: ${removeErr.message}`,
+      500,
+      'DB_DELETE_ERROR'
+    );
+  }
 }
 
 /**
@@ -1023,31 +1098,31 @@ function deleteMenuItem(id, tenantId) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<number>} Numărul de iteme șterse
  */
-function deleteAllMenuItemsByRestaurant(restaurantId, tenantId) {
-  return new Promise((resolve, reject) => {
-    if (!restaurantId) {
-      return reject(new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID'));
-    }
+async function deleteAllMenuItemsByRestaurant(restaurantId, tenantId) {
+  if (!restaurantId) {
+    throw new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID');
+  }
 
-    if (!tenantId) {
-      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
-    }
+  if (!tenantId) {
+    throw new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID');
+  }
 
-    try {
-      const result = run(
-        'DELETE FROM menu_items WHERE restaurantId = ? AND tenantId = ?',
-        [restaurantId, tenantId]
-      );
+  try {
+    const db = await getDb();
+    const result = _dbRun(
+      db,
+      'DELETE FROM menu_items WHERE restaurantId = ? AND tenantId = ?',
+      [restaurantId, tenantId]
+    );
 
-      resolve(result.changes || 0);
-    } catch (removeErr) {
-      reject(new AppError(
-        `Eroare la ștergerea itemelor de meniu: ${removeErr.message}`,
-        500,
-        'DB_DELETE_ERROR'
-      ));
-    }
-  });
+    return result.changes || 0;
+  } catch (removeErr) {
+    throw new AppError(
+      `Eroare la ștergerea itemelor de meniu: ${removeErr.message}`,
+      500,
+      'DB_DELETE_ERROR'
+    );
+  }
 }
 
 /**
@@ -1056,30 +1131,30 @@ function deleteAllMenuItemsByRestaurant(restaurantId, tenantId) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<number>}
  */
-function countMenuItemsByRestaurant(restaurantId, tenantId) {
-  return new Promise((resolve, reject) => {
-    if (!restaurantId) {
-      return resolve(0);
-    }
+async function countMenuItemsByRestaurant(restaurantId, tenantId) {
+  if (!restaurantId) {
+    return 0;
+  }
 
-    if (!tenantId) {
-      return resolve(0);
-    }
+  if (!tenantId) {
+    return 0;
+  }
 
-    try {
-      const row = get(
-        'SELECT COUNT(*) AS cnt FROM menu_items WHERE restaurantId = ? AND tenantId = ?',
-        [restaurantId, tenantId]
-      );
-      resolve(row ? row.cnt : 0);
-    } catch (err) {
-      reject(new AppError(
-        `Eroare la numărarea itemelor de meniu: ${err.message}`,
-        500,
-        'DB_COUNT_ERROR'
-      ));
-    }
-  });
+  try {
+    const db = await getDb();
+    const row = _dbGet(
+      db,
+      'SELECT COUNT(*) AS cnt FROM menu_items WHERE restaurantId = ? AND tenantId = ?',
+      [restaurantId, tenantId]
+    );
+    return row ? row.cnt : 0;
+  } catch (err) {
+    throw new AppError(
+      `Eroare la numărarea itemelor de meniu: ${err.message}`,
+      500,
+      'DB_COUNT_ERROR'
+    );
+  }
 }
 
 /**
@@ -1089,38 +1164,38 @@ function countMenuItemsByRestaurant(restaurantId, tenantId) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<number>}
  */
-function countMenuItemsByCategory(category, restaurantId, tenantId) {
-  return new Promise((resolve, reject) => {
-    if (!category || !isValidCategory(category)) {
-      return reject(new AppError(
-        `Categoria "${category}" nu este validă.`,
-        400,
-        'INVALID_CATEGORY'
-      ));
-    }
+async function countMenuItemsByCategory(category, restaurantId, tenantId) {
+  if (!category || !isValidCategory(category)) {
+    throw new AppError(
+      `Categoria "${category}" nu este validă.`,
+      400,
+      'INVALID_CATEGORY'
+    );
+  }
 
-    if (!restaurantId) {
-      return resolve(0);
-    }
+  if (!restaurantId) {
+    return 0;
+  }
 
-    if (!tenantId) {
-      return resolve(0);
-    }
+  if (!tenantId) {
+    return 0;
+  }
 
-    try {
-      const row = get(
-        'SELECT COUNT(*) AS cnt FROM menu_items WHERE restaurantId = ? AND tenantId = ? AND category = ?',
-        [restaurantId, tenantId, category]
-      );
-      resolve(row ? row.cnt : 0);
-    } catch (err) {
-      reject(new AppError(
-        `Eroare la numărarea itemelor pe categorie: ${err.message}`,
-        500,
-        'DB_COUNT_ERROR'
-      ));
-    }
-  });
+  try {
+    const db = await getDb();
+    const row = _dbGet(
+      db,
+      'SELECT COUNT(*) AS cnt FROM menu_items WHERE restaurantId = ? AND tenantId = ? AND category = ?',
+      [restaurantId, tenantId, category]
+    );
+    return row ? row.cnt : 0;
+  } catch (err) {
+    throw new AppError(
+      `Eroare la numărarea itemelor pe categorie: ${err.message}`,
+      500,
+      'DB_COUNT_ERROR'
+    );
+  }
 }
 
 /**
@@ -1130,41 +1205,41 @@ function countMenuItemsByCategory(category, restaurantId, tenantId) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Array>}
  */
-function searchMenuItemsByName(searchTerm, restaurantId, tenantId) {
-  return new Promise((resolve, reject) => {
-    if (!searchTerm || typeof searchTerm !== 'string' || searchTerm.trim().length === 0) {
-      return reject(new AppError(
-        'Termenul de căutare este invalid.',
-        400,
-        'INVALID_SEARCH_TERM'
-      ));
-    }
+async function searchMenuItemsByName(searchTerm, restaurantId, tenantId) {
+  if (!searchTerm || typeof searchTerm !== 'string' || searchTerm.trim().length === 0) {
+    throw new AppError(
+      'Termenul de căutare este invalid.',
+      400,
+      'INVALID_SEARCH_TERM'
+    );
+  }
 
-    if (!restaurantId) {
-      return reject(new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID'));
-    }
+  if (!restaurantId) {
+    throw new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID');
+  }
 
-    if (!tenantId) {
-      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
-    }
+  if (!tenantId) {
+    throw new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID');
+  }
 
-    try {
-      const rows = all(
-        `SELECT * FROM menu_items
-         WHERE restaurantId = ? AND tenantId = ? AND name LIKE ?
-         ORDER BY name ASC`,
-        [restaurantId, tenantId, `%${searchTerm.trim()}%`]
-      );
+  try {
+    const db = await getDb();
+    const rows = _dbAll(
+      db,
+      `SELECT * FROM menu_items
+       WHERE restaurantId = ? AND tenantId = ? AND name LIKE ?
+       ORDER BY name ASC`,
+      [restaurantId, tenantId, `%${searchTerm.trim()}%`]
+    );
 
-      resolve((rows || []).map(_rowToMenuItem));
-    } catch (err) {
-      reject(new AppError(
-        `Eroare la căutarea itemelor de meniu: ${err.message}`,
-        500,
-        'DB_QUERY_ERROR'
-      ));
-    }
-  });
+    return (rows || []).map(_rowToMenuItem);
+  } catch (err) {
+    throw new AppError(
+      `Eroare la căutarea itemelor de meniu: ${err.message}`,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 /**
@@ -1173,32 +1248,32 @@ function searchMenuItemsByName(searchTerm, restaurantId, tenantId) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Array>}
  */
-function getMenuCategories(restaurantId, tenantId) {
-  return new Promise((resolve, reject) => {
-    if (!restaurantId) {
-      return reject(new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID'));
-    }
+async function getMenuCategories(restaurantId, tenantId) {
+  if (!restaurantId) {
+    throw new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID');
+  }
 
-    if (!tenantId) {
-      return reject(new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID'));
-    }
+  if (!tenantId) {
+    throw new AppError('ID-ul tenant-ului este obligatoriu.', 400, 'MISSING_TENANT_ID');
+  }
 
-    try {
-      const rows = all(
-        'SELECT DISTINCT category FROM menu_items WHERE restaurantId = ? AND tenantId = ? ORDER BY category ASC',
-        [restaurantId, tenantId]
-      );
+  try {
+    const db = await getDb();
+    const rows = _dbAll(
+      db,
+      'SELECT DISTINCT category FROM menu_items WHERE restaurantId = ? AND tenantId = ? ORDER BY category ASC',
+      [restaurantId, tenantId]
+    );
 
-      const categories = (rows || []).map((r) => r.category).filter(Boolean);
-      resolve(categories);
-    } catch (err) {
-      reject(new AppError(
-        `Eroare la obținerea categoriilor: ${err.message}`,
-        500,
-        'DB_QUERY_ERROR'
-      ));
-    }
-  });
+    const categories = (rows || []).map((r) => r.category).filter(Boolean);
+    return categories;
+  } catch (err) {
+    throw new AppError(
+      `Eroare la obținerea categoriilor: ${err.message}`,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -7,7 +7,7 @@
 // Persistență: SQLite via sql.js (config/db)
 // ---------------------------------------------------------------------------
 
-const { getDb, run, get, all } = require('../config/db');
+const { getDb } = require('../config/db');
 
 // ---------------------------------------------------------------------------
 // Tipuri valide de camere
@@ -102,6 +102,76 @@ class RoomModel {
    */
   constructor() {
     // getDb() este apelat leneș în fiecare metodă, după initDb().
+  }
+
+  // -------------------------------------------------------------------------
+  // Helpers private – wrapper-e peste API-ul nativ sql.js
+  // -------------------------------------------------------------------------
+
+  /**
+   * Execută o interogare de tip INSERT/UPDATE/DELETE și returnează
+   * { changes, lastInsertRowid }.
+   * @param {import('sql.js').Database} db
+   * @param {string} sql
+   * @param {Array} [params=[]]
+   * @returns {{ changes: number, lastInsertRowid: number }}
+   */
+  _dbRun(db, sql, params = []) {
+    db.run(sql, params);
+
+    const changesResult = db.exec('SELECT changes() AS cnt');
+    const changes =
+      changesResult.length > 0 && changesResult[0].values.length > 0
+        ? changesResult[0].values[0][0]
+        : 0;
+
+    const lastIdResult = db.exec('SELECT last_insert_rowid() AS id');
+    const lastInsertRowid =
+      lastIdResult.length > 0 && lastIdResult[0].values.length > 0
+        ? lastIdResult[0].values[0][0]
+        : 0;
+
+    return { changes, lastInsertRowid };
+  }
+
+  /**
+   * Execută o interogare SELECT și returnează primul rând (obiect) sau undefined.
+   * @param {import('sql.js').Database} db
+   * @param {string} sql
+   * @param {Array} [params=[]]
+   * @returns {Object|undefined}
+   */
+  _dbGet(db, sql, params = []) {
+    const stmt = db.prepare(sql);
+    if (params.length > 0) {
+      stmt.bind(params);
+    }
+    let row;
+    if (stmt.step()) {
+      row = stmt.getAsObject();
+    }
+    stmt.free();
+    return row;
+  }
+
+  /**
+   * Execută o interogare SELECT și returnează toate rândurile ca array de obiecte.
+   * @param {import('sql.js').Database} db
+   * @param {string} sql
+   * @param {Array} [params=[]]
+   * @returns {Array<Object>}
+   */
+  _dbAll(db, sql, params = []) {
+    const stmt = db.prepare(sql);
+    if (params.length > 0) {
+      stmt.bind(params);
+    }
+    const rows = [];
+    while (stmt.step()) {
+      rows.push(stmt.getAsObject());
+    }
+    stmt.free();
+    return rows;
   }
 
   // -------------------------------------------------------------------------
@@ -207,8 +277,11 @@ class RoomModel {
       Array.isArray(data.prețuriSezoniere) ? data.prețuriSezoniere : []
     );
 
+    const db = await getDb();
+
     try {
-      const result = run(
+      const result = this._dbRun(
+        db,
         `INSERT INTO rooms (hotelId, tenantId, tip, numar, preturiSezoniere, status, createdAt, updatedAt)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -224,7 +297,7 @@ class RoomModel {
       );
 
       // Returnează documentul complet
-      const created = get('SELECT * FROM rooms WHERE id = ?', [result.lastInsertRowid]);
+      const created = this._dbGet(db, 'SELECT * FROM rooms WHERE id = ?', [result.lastInsertRowid]);
       return created;
     } catch (err) {
       // Verificăm dacă e o eroare de unicitate (SQLite constraint)
@@ -244,7 +317,8 @@ class RoomModel {
    * @returns {Promise<Object|null>}
    */
   async findById(id) {
-    const row = get('SELECT * FROM rooms WHERE id = ?', [id]);
+    const db = await getDb();
+    const row = this._dbGet(db, 'SELECT * FROM rooms WHERE id = ?', [id]);
     return row || null;
   }
 
@@ -254,7 +328,9 @@ class RoomModel {
    * @returns {Promise<Object[]>}
    */
   async findByHotel(hotelId) {
-    const rows = all(
+    const db = await getDb();
+    const rows = this._dbAll(
+      db,
       'SELECT * FROM rooms WHERE hotelId = ? ORDER BY numar ASC',
       [hotelId]
     );
@@ -277,7 +353,9 @@ class RoomModel {
       throw error;
     }
 
-    const rows = all(
+    const db = await getDb();
+    const rows = this._dbAll(
+      db,
       'SELECT * FROM rooms WHERE hotelId = ? AND status = ? ORDER BY numar ASC',
       [hotelId, status]
     );
@@ -300,7 +378,9 @@ class RoomModel {
       throw error;
     }
 
-    const rows = all(
+    const db = await getDb();
+    const rows = this._dbAll(
+      db,
       'SELECT * FROM rooms WHERE hotelId = ? AND tip = ? ORDER BY numar ASC',
       [hotelId, tip]
     );
@@ -313,7 +393,9 @@ class RoomModel {
    * @returns {Promise<Object[]>}
    */
   async findByTenant(tenantId) {
-    const rows = all(
+    const db = await getDb();
+    const rows = this._dbAll(
+      db,
       'SELECT * FROM rooms WHERE tenantId = ? ORDER BY hotelId ASC, numar ASC',
       [tenantId]
     );
@@ -418,8 +500,10 @@ class RoomModel {
 
     const sql = `UPDATE rooms SET ${setClauses.join(', ')} WHERE id = ?`;
 
+    const db = await getDb();
+
     try {
-      const result = run(sql, params);
+      const result = this._dbRun(db, sql, params);
       if (result.changes === 0) {
         const error = new Error('Camera nu a fost găsită.');
         error.statusCode = 404;
@@ -428,7 +512,7 @@ class RoomModel {
       }
 
       // Returnează documentul actualizat
-      const updated = get('SELECT * FROM rooms WHERE id = ?', [id]);
+      const updated = this._dbGet(db, 'SELECT * FROM rooms WHERE id = ?', [id]);
       return updated;
     } catch (err) {
       if (err.statusCode) throw err; // eroare deja formatată
@@ -461,7 +545,8 @@ class RoomModel {
    * @returns {Promise<boolean>}
    */
   async remove(id) {
-    const result = run('DELETE FROM rooms WHERE id = ?', [id]);
+    const db = await getDb();
+    const result = this._dbRun(db, 'DELETE FROM rooms WHERE id = ?', [id]);
     if (result.changes === 0) {
       const error = new Error('Camera nu a fost găsită.');
       error.statusCode = 404;
@@ -477,7 +562,8 @@ class RoomModel {
    * @returns {Promise<number>} Numărul de camere șterse
    */
   async removeByHotel(hotelId) {
-    const result = run('DELETE FROM rooms WHERE hotelId = ?', [hotelId]);
+    const db = await getDb();
+    const result = this._dbRun(db, 'DELETE FROM rooms WHERE hotelId = ?', [hotelId]);
     return result.changes || 0;
   }
 
@@ -487,7 +573,8 @@ class RoomModel {
    * @returns {Promise<number>}
    */
   async countByHotel(hotelId) {
-    const row = get('SELECT COUNT(*) AS cnt FROM rooms WHERE hotelId = ?', [hotelId]);
+    const db = await getDb();
+    const row = this._dbGet(db, 'SELECT COUNT(*) AS cnt FROM rooms WHERE hotelId = ?', [hotelId]);
     return row ? row.cnt : 0;
   }
 
@@ -507,7 +594,9 @@ class RoomModel {
       throw error;
     }
 
-    const row = get(
+    const db = await getDb();
+    const row = this._dbGet(
+      db,
       'SELECT COUNT(*) AS cnt FROM rooms WHERE hotelId = ? AND status = ?',
       [hotelId, status]
     );
@@ -524,9 +613,11 @@ class RoomModel {
    * @returns {Promise<Object[]>}
    */
   async find(query) {
+    const db = await getDb();
+
     if (!query || typeof query !== 'object' || Object.keys(query).length === 0) {
       // Fără criterii, returnează tot (cu limită de precauție)
-      const rows = all('SELECT * FROM rooms ORDER BY numar ASC LIMIT 1000');
+      const rows = this._dbAll(db, 'SELECT * FROM rooms ORDER BY numar ASC LIMIT 1000');
       return rows || [];
     }
 
@@ -552,12 +643,12 @@ class RoomModel {
     }
 
     if (clauses.length === 0) {
-      const rows = all('SELECT * FROM rooms ORDER BY numar ASC LIMIT 1000');
+      const rows = this._dbAll(db, 'SELECT * FROM rooms ORDER BY numar ASC LIMIT 1000');
       return rows || [];
     }
 
     const sql = `SELECT * FROM rooms WHERE ${clauses.join(' AND ')} ORDER BY numar ASC`;
-    const rows = all(sql, params);
+    const rows = this._dbAll(db, sql, params);
     return rows || [];
   }
 }

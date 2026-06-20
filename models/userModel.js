@@ -5,11 +5,11 @@
 // Definirea structurii, validărilor și operațiilor comune pentru un utilizator.
 // Câmpuri suportate: email, password (hash), role, tenantId, restaurante asociate
 //
-// Backend: exclusiv SQLite (prin getDb(), run(), get(), all() din config/db).
+// Backend: exclusiv SQLite (prin getDb() din config/db, folosind db.run() / db.exec()).
 // ---------------------------------------------------------------------------
 
 const bcrypt = require('bcryptjs');
-const { getDb, run, get, all } = require('../config/db');
+const { getDb } = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
 
 // ---------------------------------------------------------------------------
@@ -186,7 +186,7 @@ function createUser(userData) {
     // -----------------------------------------------------------------------
     // Hash parolă
     // -----------------------------------------------------------------------
-    bcrypt.hash(password, 10, function (hashErr, hashedPassword) {
+    bcrypt.hash(password, 10, async function (hashErr, hashedPassword) {
       if (hashErr) {
         return reject(new AppError('Eroare internă la hash-uirea parolei.', 500, 'HASH_ERROR'));
       }
@@ -198,8 +198,14 @@ function createUser(userData) {
       // SQLite
       // -------------------------------------------------------------------
       try {
+        var db = await getDb();
+
         // Verificare duplicat email
-        var existing = get('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+        var checkStmt = db.prepare('SELECT id FROM users WHERE email = ?');
+        checkStmt.bind([normalizedEmail]);
+        var existing = checkStmt.step() ? checkStmt.getAsObject() : undefined;
+        checkStmt.free();
+
         if (existing) {
           return reject(new AppError(
             'Există deja un cont cu această adresă de email.',
@@ -209,14 +215,20 @@ function createUser(userData) {
         }
 
         var restauranteJson = JSON.stringify(finalRestaurante);
-        var result = run(
+        db.run(
           'INSERT INTO users (email, password, role, tenantId, restaurante, createdAt, updatedAt) ' +
           'VALUES (?, ?, ?, ?, ?, ?, ?)',
           [normalizedEmail, hashedPassword, finalRole, finalTenantId, restauranteJson, now, now]
         );
 
-        var newId = result.lastInsertRowid;
-        var newRow = get('SELECT * FROM users WHERE id = ?', [newId]);
+        var metaResult = db.exec('SELECT last_insert_rowid() AS id');
+        var newId = metaResult[0].values[0][0];
+
+        var fetchStmt = db.prepare('SELECT * FROM users WHERE id = ?');
+        fetchStmt.bind([newId]);
+        var newRow = fetchStmt.step() ? fetchStmt.getAsObject() : undefined;
+        fetchStmt.free();
+
         var doc = _sqlRowToDoc(newRow);
         return resolve(_stripPassword(doc));
       } catch (sqlErr) {
@@ -246,7 +258,7 @@ function createUser(userData) {
  * @returns {Promise<Object|null>} Documentul utilizatorului (cu tot cu password hash) sau null
  */
 function findUserByEmail(email) {
-  return new Promise(function (resolve, reject) {
+  return new Promise(async function (resolve, reject) {
     if (!email || !isValidEmail(email)) {
       return reject(new AppError('Adresa de email este invalidă.', 400, 'INVALID_EMAIL'));
     }
@@ -254,7 +266,14 @@ function findUserByEmail(email) {
     var normalizedEmail = email.toLowerCase().trim();
 
     try {
-      var row = get('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
+      var db = await getDb();
+      var stmt = db.prepare('SELECT * FROM users WHERE email = ?');
+      stmt.bind([normalizedEmail]);
+      var row;
+      if (stmt.step()) {
+        row = stmt.getAsObject();
+      }
+      stmt.free();
       return resolve(row ? _sqlRowToDoc(row) : null);
     } catch (sqlErr) {
       return reject(new AppError(
@@ -274,19 +293,27 @@ function findUserByEmail(email) {
  * @returns {Promise<Object|null>} Documentul utilizatorului (cu tot cu password hash) sau null
  */
 function findUserById(id) {
-  return new Promise(function (resolve, reject) {
+  return new Promise(async function (resolve, reject) {
     if (!id) {
       return reject(new AppError('ID-ul utilizatorului este invalid.', 400, 'INVALID_USER_ID'));
     }
 
     try {
+      var db = await getDb();
       var numericId = parseInt(id, 10);
-      var row;
+      var stmt;
       if (isNaN(numericId)) {
-        row = get('SELECT * FROM users WHERE CAST(id AS TEXT) = ?', [String(id)]);
+        stmt = db.prepare('SELECT * FROM users WHERE CAST(id AS TEXT) = ?');
+        stmt.bind([String(id)]);
       } else {
-        row = get('SELECT * FROM users WHERE id = ?', [numericId]);
+        stmt = db.prepare('SELECT * FROM users WHERE id = ?');
+        stmt.bind([numericId]);
       }
+      var row;
+      if (stmt.step()) {
+        row = stmt.getAsObject();
+      }
+      stmt.free();
       return resolve(row ? _sqlRowToDoc(row) : null);
     } catch (sqlErr) {
       return reject(new AppError(
@@ -306,13 +333,20 @@ function findUserById(id) {
  * @returns {Promise<Array>} Lista de utilizatori (fără password hash)
  */
 function findUsersByTenant(tenantId) {
-  return new Promise(function (resolve, reject) {
+  return new Promise(async function (resolve, reject) {
     if (!tenantId) {
       return reject(new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID'));
     }
 
     try {
-      var rows = all('SELECT * FROM users WHERE tenantId = ?', [tenantId]);
+      var db = await getDb();
+      var stmt = db.prepare('SELECT * FROM users WHERE tenantId = ?');
+      stmt.bind([tenantId]);
+      var rows = [];
+      while (stmt.step()) {
+        rows.push(stmt.getAsObject());
+      }
+      stmt.free();
       var safeUsers = rows.map(function (r) {
         return _stripPassword(_sqlRowToDoc(r));
       });
@@ -335,13 +369,20 @@ function findUsersByTenant(tenantId) {
  * @returns {Promise<Array>} Lista de utilizatori (fără password hash)
  */
 function findUsersByRole(role) {
-  return new Promise(function (resolve, reject) {
+  return new Promise(async function (resolve, reject) {
     if (!role || !isValidRole(role)) {
       return reject(new AppError('Rolul "' + role + '" nu este valid.', 400, 'INVALID_ROLE'));
     }
 
     try {
-      var rows = all('SELECT * FROM users WHERE role = ?', [role]);
+      var db = await getDb();
+      var stmt = db.prepare('SELECT * FROM users WHERE role = ?');
+      stmt.bind([role]);
+      var rows = [];
+      while (stmt.step()) {
+        rows.push(stmt.getAsObject());
+      }
+      stmt.free();
       var safeUsers = rows.map(function (r) {
         return _stripPassword(_sqlRowToDoc(r));
       });
@@ -401,7 +442,7 @@ function updatePassword(userId, newPassword) {
       ));
     }
 
-    bcrypt.hash(newPassword, 10, function (hashErr, hashedPassword) {
+    bcrypt.hash(newPassword, 10, async function (hashErr, hashedPassword) {
       if (hashErr) {
         return reject(new AppError('Eroare internă la hash-uirea parolei.', 500, 'HASH_ERROR'));
       }
@@ -409,30 +450,42 @@ function updatePassword(userId, newPassword) {
       var now = new Date().toISOString();
 
       try {
+        var db = await getDb();
         var numericId = parseInt(userId, 10);
-        var result;
+
         if (!isNaN(numericId)) {
-          result = run(
+          db.run(
             'UPDATE users SET password = ?, updatedAt = ? WHERE id = ?',
             [hashedPassword, now, numericId]
           );
         } else {
-          result = run(
+          db.run(
             'UPDATE users SET password = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ?',
             [hashedPassword, now, String(userId)]
           );
         }
 
-        if (result.changes === 0) {
+        var changesResult = db.exec('SELECT changes() AS cnt');
+        var changes = changesResult[0].values[0][0];
+
+        if (changes === 0) {
           return reject(new AppError('Utilizatorul nu a fost găsit.', 404, 'USER_NOT_FOUND'));
         }
 
-        var updatedRow;
+        var fetchStmt;
         if (!isNaN(numericId)) {
-          updatedRow = get('SELECT * FROM users WHERE id = ?', [numericId]);
+          fetchStmt = db.prepare('SELECT * FROM users WHERE id = ?');
+          fetchStmt.bind([numericId]);
         } else {
-          updatedRow = get('SELECT * FROM users WHERE CAST(id AS TEXT) = ?', [String(userId)]);
+          fetchStmt = db.prepare('SELECT * FROM users WHERE CAST(id AS TEXT) = ?');
+          fetchStmt.bind([String(userId)]);
         }
+        var updatedRow;
+        if (fetchStmt.step()) {
+          updatedRow = fetchStmt.getAsObject();
+        }
+        fetchStmt.free();
+
         return resolve(_stripPassword(_sqlRowToDoc(updatedRow)));
       } catch (sqlErr) {
         return reject(new AppError(
@@ -454,7 +507,7 @@ function updatePassword(userId, newPassword) {
  * @returns {Promise<Object>} Utilizatorul actualizat (fără password hash)
  */
 function updateRole(userId, newRole) {
-  return new Promise(function (resolve, reject) {
+  return new Promise(async function (resolve, reject) {
     if (!userId) {
       return reject(new AppError('ID-ul utilizatorului este invalid.', 400, 'INVALID_USER_ID'));
     }
@@ -466,30 +519,42 @@ function updateRole(userId, newRole) {
     var now = new Date().toISOString();
 
     try {
+      var db = await getDb();
       var numericId = parseInt(userId, 10);
-      var result;
+
       if (!isNaN(numericId)) {
-        result = run(
+        db.run(
           'UPDATE users SET role = ?, updatedAt = ? WHERE id = ?',
           [newRole, now, numericId]
         );
       } else {
-        result = run(
+        db.run(
           'UPDATE users SET role = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ?',
           [newRole, now, String(userId)]
         );
       }
 
-      if (result.changes === 0) {
+      var changesResult = db.exec('SELECT changes() AS cnt');
+      var changes = changesResult[0].values[0][0];
+
+      if (changes === 0) {
         return reject(new AppError('Utilizatorul nu a fost găsit.', 404, 'USER_NOT_FOUND'));
       }
 
-      var updatedRow;
+      var fetchStmt;
       if (!isNaN(numericId)) {
-        updatedRow = get('SELECT * FROM users WHERE id = ?', [numericId]);
+        fetchStmt = db.prepare('SELECT * FROM users WHERE id = ?');
+        fetchStmt.bind([numericId]);
       } else {
-        updatedRow = get('SELECT * FROM users WHERE CAST(id AS TEXT) = ?', [String(userId)]);
+        fetchStmt = db.prepare('SELECT * FROM users WHERE CAST(id AS TEXT) = ?');
+        fetchStmt.bind([String(userId)]);
       }
+      var updatedRow;
+      if (fetchStmt.step()) {
+        updatedRow = fetchStmt.getAsObject();
+      }
+      fetchStmt.free();
+
       return resolve(_stripPassword(_sqlRowToDoc(updatedRow)));
     } catch (sqlErr) {
       return reject(new AppError(
@@ -510,7 +575,7 @@ function updateRole(userId, newRole) {
  * @returns {Promise<Object>} Utilizatorul actualizat (fără password hash)
  */
 function addRestaurante(userId, restaurantIds) {
-  return new Promise(function (resolve, reject) {
+  return new Promise(async function (resolve, reject) {
     if (!userId) {
       return reject(new AppError('ID-ul utilizatorului este invalid.', 400, 'INVALID_USER_ID'));
     }
@@ -526,14 +591,23 @@ function addRestaurante(userId, restaurantIds) {
     var now = new Date().toISOString();
 
     try {
+      var db = await getDb();
       var numericId = parseInt(userId, 10);
+
       // Obține lista curentă
-      var currentRow;
+      var fetchStmt;
       if (!isNaN(numericId)) {
-        currentRow = get('SELECT * FROM users WHERE id = ?', [numericId]);
+        fetchStmt = db.prepare('SELECT * FROM users WHERE id = ?');
+        fetchStmt.bind([numericId]);
       } else {
-        currentRow = get('SELECT * FROM users WHERE CAST(id AS TEXT) = ?', [String(userId)]);
+        fetchStmt = db.prepare('SELECT * FROM users WHERE CAST(id AS TEXT) = ?');
+        fetchStmt.bind([String(userId)]);
       }
+      var currentRow;
+      if (fetchStmt.step()) {
+        currentRow = fetchStmt.getAsObject();
+      }
+      fetchStmt.free();
 
       if (!currentRow) {
         return reject(new AppError('Utilizatorul nu a fost găsit.', 404, 'USER_NOT_FOUND'));
@@ -559,29 +633,40 @@ function addRestaurante(userId, restaurantIds) {
       }
 
       var restauranteJson = JSON.stringify(updatedRestaurante);
-      var result;
+
       if (!isNaN(numericId)) {
-        result = run(
+        db.run(
           'UPDATE users SET restaurante = ?, updatedAt = ? WHERE id = ?',
           [restauranteJson, now, numericId]
         );
       } else {
-        result = run(
+        db.run(
           'UPDATE users SET restaurante = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ?',
           [restauranteJson, now, String(userId)]
         );
       }
 
-      if (result.changes === 0) {
+      var changesResult = db.exec('SELECT changes() AS cnt');
+      var changes = changesResult[0].values[0][0];
+
+      if (changes === 0) {
         return reject(new AppError('Utilizatorul nu a fost găsit.', 404, 'USER_NOT_FOUND'));
       }
 
-      var updatedRow;
+      var fetchUpdatedStmt;
       if (!isNaN(numericId)) {
-        updatedRow = get('SELECT * FROM users WHERE id = ?', [numericId]);
+        fetchUpdatedStmt = db.prepare('SELECT * FROM users WHERE id = ?');
+        fetchUpdatedStmt.bind([numericId]);
       } else {
-        updatedRow = get('SELECT * FROM users WHERE CAST(id AS TEXT) = ?', [String(userId)]);
+        fetchUpdatedStmt = db.prepare('SELECT * FROM users WHERE CAST(id AS TEXT) = ?');
+        fetchUpdatedStmt.bind([String(userId)]);
       }
+      var updatedRow;
+      if (fetchUpdatedStmt.step()) {
+        updatedRow = fetchUpdatedStmt.getAsObject();
+      }
+      fetchUpdatedStmt.free();
+
       return resolve(_stripPassword(_sqlRowToDoc(updatedRow)));
     } catch (sqlErr) {
       return reject(new AppError(
@@ -601,21 +686,25 @@ function addRestaurante(userId, restaurantIds) {
  * @returns {Promise<boolean>} true dacă a fost șters
  */
 function deleteUser(userId) {
-  return new Promise(function (resolve, reject) {
+  return new Promise(async function (resolve, reject) {
     if (!userId) {
       return reject(new AppError('ID-ul utilizatorului este invalid.', 400, 'INVALID_USER_ID'));
     }
 
     try {
+      var db = await getDb();
       var numericId = parseInt(userId, 10);
-      var result;
+
       if (!isNaN(numericId)) {
-        result = run('DELETE FROM users WHERE id = ?', [numericId]);
+        db.run('DELETE FROM users WHERE id = ?', [numericId]);
       } else {
-        result = run('DELETE FROM users WHERE CAST(id AS TEXT) = ?', [String(userId)]);
+        db.run('DELETE FROM users WHERE CAST(id AS TEXT) = ?', [String(userId)]);
       }
 
-      if (result.changes === 0) {
+      var changesResult = db.exec('SELECT changes() AS cnt');
+      var changes = changesResult[0].values[0][0];
+
+      if (changes === 0) {
         return reject(new AppError('Utilizatorul nu a fost găsit.', 404, 'USER_NOT_FOUND'));
       }
 
@@ -638,13 +727,20 @@ function deleteUser(userId) {
  * @returns {Promise<number>}
  */
 function countUsersByTenant(tenantId) {
-  return new Promise(function (resolve, reject) {
+  return new Promise(async function (resolve, reject) {
     if (!tenantId) {
       return resolve(0);
     }
 
     try {
-      var row = get('SELECT COUNT(*) AS cnt FROM users WHERE tenantId = ?', [tenantId]);
+      var db = await getDb();
+      var stmt = db.prepare('SELECT COUNT(*) AS cnt FROM users WHERE tenantId = ?');
+      stmt.bind([tenantId]);
+      var row;
+      if (stmt.step()) {
+        row = stmt.getAsObject();
+      }
+      stmt.free();
       return resolve(row ? row.cnt : 0);
     } catch (sqlErr) {
       return reject(new AppError(

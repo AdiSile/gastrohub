@@ -6,12 +6,65 @@
 // Câmpuri suportate: name, contactPerson, phone, email, address, products,
 // paymentTerms, rating, status, tenantId
 //
-// Bază de date: SQLite via config/db.js (getDb, run, get, all)
+// Bază de date: SQLite via config/db.js (getDb → db.run / db.exec / db.prepare)
 // Tabele: suppliers, supplier_orders
 // ---------------------------------------------------------------------------
 
-const { getDb, run, get, all } = require('../config/db');
+const { getDb } = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
+
+// ---------------------------------------------------------------------------
+// Helpers pentru interogări directe pe instanța db (sql.js)
+// ---------------------------------------------------------------------------
+
+/**
+ * Execută INSERT/UPDATE/DELETE și returnează { changes, lastInsertRowid }.
+ * @param {import('sql.js').Database} db
+ * @param {string} sql
+ * @param {Array} [params=[]]
+ * @returns {{ changes: number, lastInsertRowid: number }}
+ */
+function dbRun(db, sql, params = []) {
+  db.run(sql, params);
+  const lastId = db.exec('SELECT last_insert_rowid() AS id');
+  const changes = db.exec('SELECT changes() AS cnt');
+  return {
+    changes: (changes.length > 0 && changes[0].values.length > 0) ? changes[0].values[0][0] : 0,
+    lastInsertRowid: (lastId.length > 0 && lastId[0].values.length > 0) ? lastId[0].values[0][0] : 0,
+  };
+}
+
+/**
+ * Execută SELECT și returnează primul rând (obiect) sau undefined.
+ * @param {import('sql.js').Database} db
+ * @param {string} sql
+ * @param {Array} [params=[]]
+ * @returns {Object|undefined}
+ */
+function dbGet(db, sql, params = []) {
+  const stmt = db.prepare(sql);
+  if (params.length > 0) stmt.bind(params);
+  let row;
+  if (stmt.step()) row = stmt.getAsObject();
+  stmt.free();
+  return row;
+}
+
+/**
+ * Execută SELECT și returnează toate rândurile.
+ * @param {import('sql.js').Database} db
+ * @param {string} sql
+ * @param {Array} [params=[]]
+ * @returns {Array<Object>}
+ */
+function dbAll(db, sql, params = []) {
+  const stmt = db.prepare(sql);
+  if (params.length > 0) stmt.bind(params);
+  const rows = [];
+  while (stmt.step()) rows.push(stmt.getAsObject());
+  stmt.free();
+  return rows;
+}
 
 // ---------------------------------------------------------------------------
 // Statusuri valide pentru un furnizor
@@ -255,142 +308,144 @@ function transformOrderRow(row) {
  * @returns {Promise<Object>} Documentul furnizorului creat
  * @throws {AppError} Dacă validarea eșuează
  */
-function createSupplier(supplierData) {
+async function createSupplier(supplierData) {
   // -----------------------------------------------------------------------
   // Validare date de bază
   // -----------------------------------------------------------------------
   if (!supplierData || typeof supplierData !== 'object') {
-    return Promise.reject(new AppError('Datele furnizorului sunt invalide.', 400, 'INVALID_SUPPLIER_DATA'));
+    throw new AppError('Datele furnizorului sunt invalide.', 400, 'INVALID_SUPPLIER_DATA');
   }
 
   const { name, contactPerson, phone, email, address, products, paymentTerms, rating, status, tenantId } = supplierData;
 
   // Validare nume
   if (!name || !isValidString(name, 1, 200)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Numele furnizorului trebuie să aibă între 1 și 200 de caractere.',
       400,
       'INVALID_SUPPLIER_NAME'
-    ));
+    );
   }
 
   // Validare tenantId
   if (!tenantId) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'ID-ul tenant-ului este obligatoriu.',
       400,
       'MISSING_TENANT_ID'
-    ));
+    );
   }
 
   // Validare contactPerson (opțional)
   const finalContactPerson = contactPerson !== undefined && contactPerson !== null ? String(contactPerson).trim() : '';
   if (finalContactPerson && finalContactPerson.length > 200) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Persoana de contact poate avea maximum 200 de caractere.',
       400,
       'INVALID_CONTACT_PERSON'
-    ));
+    );
   }
 
   // Validare phone (opțional)
   const finalPhone = phone !== undefined && phone !== null ? String(phone).trim() : '';
   if (finalPhone && finalPhone.length > 50) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Numărul de telefon poate avea maximum 50 de caractere.',
       400,
       'INVALID_PHONE'
-    ));
+    );
   }
 
   // Validare email (opțional)
   const finalEmail = email !== undefined && email !== null ? email : '';
   if (finalEmail && !isValidEmail(finalEmail)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Adresa de email a furnizorului este invalidă.',
       400,
       'INVALID_SUPPLIER_EMAIL'
-    ));
+    );
   }
 
   // Validare address (opțional)
   const finalAddress = address !== undefined && address !== null ? String(address).trim() : '';
   if (finalAddress && finalAddress.length > 500) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Adresa furnizorului poate avea maximum 500 de caractere.',
       400,
       'INVALID_ADDRESS'
-    ));
+    );
   }
 
   // Validare products (opțional)
   const finalProducts = Array.isArray(products) ? products.map(function (p) { return String(p).trim(); }).filter(function (p) { return p.length > 0; }) : [];
   if (products !== undefined && !Array.isArray(products)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Produsele trebuie să fie o listă.',
       400,
       'INVALID_PRODUCTS'
-    ));
+    );
   }
 
   // Validare paymentTerms (opțional)
   const finalPaymentTerms = paymentTerms || '30 zile';
   if (!isValidPaymentTerm(finalPaymentTerms)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Termenul de plată "' + finalPaymentTerms + '" nu este valid. ' +
       'Termeni permisi: ' + VALID_PAYMENT_TERMS.join(', ') + '.',
       400,
       'INVALID_PAYMENT_TERMS'
-    ));
+    );
   }
 
   // Validare rating (opțional)
   const finalRating = rating !== undefined && rating !== null ? rating : null;
   if (finalRating !== null && !isValidRating(finalRating)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Ratingul trebuie să fie un număr între 0 și 5.',
       400,
       'INVALID_RATING'
-    ));
+    );
   }
 
   // Validare status (opțional)
   const finalStatus = status || 'active';
   if (!isValidStatus(finalStatus)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Statusul "' + finalStatus + '" nu este valid. Statusuri permise: ' + VALID_STATUSES.join(', ') + '.',
       400,
       'INVALID_STATUS'
-    ));
+    );
   }
 
   // -----------------------------------------------------------------------
   // Creare înregistrare SQL
   // -----------------------------------------------------------------------
   try {
+    const db = await getDb();
     const now = new Date().toISOString();
     const categoriesJson = JSON.stringify(finalProducts);
     const notesJson = buildNotes({ text: '', rating: finalRating });
 
-    const result = run(
+    const result = dbRun(db,
       'INSERT INTO suppliers (name, contactPerson, phone, email, address, paymentTerms, categories, status, notes, tenantId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [name.trim(), finalContactPerson, finalPhone, finalEmail ? finalEmail.toLowerCase().trim() : '', finalAddress, finalPaymentTerms, categoriesJson, finalStatus, notesJson, tenantId, now, now]
     );
 
     const newId = result.lastInsertRowid;
 
-    const created = get(
+    const created = dbGet(db,
       'SELECT id, name, contactPerson, phone, email, address, taxId, paymentTerms, categories, status, notes, tenantId, createdAt, updatedAt FROM suppliers WHERE id = ?',
       [newId]
     );
 
-    return Promise.resolve(transformSupplierRow(created));
+    return transformSupplierRow(created);
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la crearea furnizorului: ' + err.message,
       500,
       'DB_INSERT_ERROR'
-    ));
+    );
   }
 }
 
@@ -399,24 +454,26 @@ function createSupplier(supplierData) {
  * @param {string|number} id - ID-ul furnizorului
  * @returns {Promise<Object|null>} Documentul furnizorului sau null
  */
-function findSupplierById(id) {
+async function findSupplierById(id) {
   if (!id) {
-    return Promise.reject(new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID'));
+    throw new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID');
   }
 
   try {
-    const row = get(
+    const db = await getDb();
+    const row = dbGet(db,
       'SELECT id, name, contactPerson, phone, email, address, taxId, paymentTerms, categories, status, notes, tenantId, createdAt, updatedAt FROM suppliers WHERE id = ?',
       [id]
     );
 
-    return Promise.resolve(transformSupplierRow(row));
+    return transformSupplierRow(row);
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la căutarea furnizorului: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -426,14 +483,15 @@ function findSupplierById(id) {
  * @param {Object} [options={}] - Opțiuni de căutare (sort, limit, skip)
  * @returns {Promise<Array>} Lista de furnizori
  */
-function findSuppliersByTenant(tenantId, options) {
+async function findSuppliersByTenant(tenantId, options) {
   if (!options) options = {};
 
   if (!tenantId) {
-    return Promise.reject(new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID'));
+    throw new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID');
   }
 
   try {
+    const db = await getDb();
     let sql = 'SELECT id, name, contactPerson, phone, email, address, taxId, paymentTerms, categories, status, notes, tenantId, createdAt, updatedAt FROM suppliers WHERE tenantId = ?';
     const params = [tenantId];
 
@@ -452,15 +510,16 @@ function findSuppliersByTenant(tenantId, options) {
       }
     }
 
-    const rows = all(sql, params);
+    const rows = dbAll(db, sql, params);
 
-    return Promise.resolve((rows || []).map(transformSupplierRow));
+    return (rows || []).map(transformSupplierRow);
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la căutarea furnizorilor: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -470,16 +529,17 @@ function findSuppliersByTenant(tenantId, options) {
  * @param {string} [tenantId] - Opțional, filtrează și după tenant
  * @returns {Promise<Array>} Lista de furnizori
  */
-function findSuppliersByStatus(status, tenantId) {
+async function findSuppliersByStatus(status, tenantId) {
   if (!status || !isValidStatus(status)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Statusul "' + status + '" nu este valid. Statusuri permise: ' + VALID_STATUSES.join(', ') + '.',
       400,
       'INVALID_STATUS'
-    ));
+    );
   }
 
   try {
+    const db = await getDb();
     let sql = 'SELECT id, name, contactPerson, phone, email, address, taxId, paymentTerms, categories, status, notes, tenantId, createdAt, updatedAt FROM suppliers WHERE status = ?';
     const params = [status];
 
@@ -490,15 +550,16 @@ function findSuppliersByStatus(status, tenantId) {
 
     sql += ' ORDER BY name ASC';
 
-    const rows = all(sql, params);
+    const rows = dbAll(db, sql, params);
 
-    return Promise.resolve((rows || []).map(transformSupplierRow));
+    return (rows || []).map(transformSupplierRow);
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la căutarea furnizorilor: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -508,16 +569,17 @@ function findSuppliersByStatus(status, tenantId) {
  * @param {string} [tenantId] - Opțional, filtrează și după tenant
  * @returns {Promise<Array>} Lista de furnizori
  */
-function findSuppliersByProduct(product, tenantId) {
+async function findSuppliersByProduct(product, tenantId) {
   if (!product || typeof product !== 'string' || product.trim().length === 0) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Produsul căutat este invalid.',
       400,
       'INVALID_PRODUCT'
-    ));
+    );
   }
 
   try {
+    const db = await getDb();
     // Căutare în coloana categories (JSON array) folosind LIKE
     const searchTerm = '%"' + product.trim() + '"%';
     let sql = 'SELECT id, name, contactPerson, phone, email, address, taxId, paymentTerms, categories, status, notes, tenantId, createdAt, updatedAt FROM suppliers WHERE categories LIKE ?';
@@ -530,15 +592,16 @@ function findSuppliersByProduct(product, tenantId) {
 
     sql += ' ORDER BY name ASC';
 
-    const rows = all(sql, params);
+    const rows = dbAll(db, sql, params);
 
-    return Promise.resolve((rows || []).map(transformSupplierRow));
+    return (rows || []).map(transformSupplierRow);
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la căutarea furnizorilor după produs: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -549,16 +612,17 @@ function findSuppliersByProduct(product, tenantId) {
  * @param {string} [tenantId] - Opțional, filtrează și după tenant
  * @returns {Promise<Array>} Lista de furnizori
  */
-function findSuppliersByMinRating(ratingMin, tenantId) {
+async function findSuppliersByMinRating(ratingMin, tenantId) {
   if (typeof ratingMin !== 'number' || ratingMin < 0 || ratingMin > 5) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Ratingul minim trebuie să fie un număr între 0 și 5.',
       400,
       'INVALID_RATING'
-    ));
+    );
   }
 
   try {
+    const db = await getDb();
     let sql = 'SELECT id, name, contactPerson, phone, email, address, taxId, paymentTerms, categories, status, notes, tenantId, createdAt, updatedAt FROM suppliers';
     const conditions = [];
     const params = [];
@@ -573,7 +637,7 @@ function findSuppliersByMinRating(ratingMin, tenantId) {
     }
     sql += ' ORDER BY name ASC';
 
-    const rows = all(sql, params);
+    const rows = dbAll(db, sql, params);
     const suppliers = (rows || []).map(transformSupplierRow);
 
     // Filtrare în JS după rating minim
@@ -587,13 +651,14 @@ function findSuppliersByMinRating(ratingMin, tenantId) {
       return (a.name || '').localeCompare(b.name || '');
     });
 
-    return Promise.resolve(filtered);
+    return filtered;
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la căutarea furnizorilor după rating: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -603,16 +668,17 @@ function findSuppliersByMinRating(ratingMin, tenantId) {
  * @param {string} [tenantId] - Opțional, filtrează și după tenant
  * @returns {Promise<Array>} Lista de furnizori
  */
-function findSuppliersByPaymentTerms(paymentTerms, tenantId) {
+async function findSuppliersByPaymentTerms(paymentTerms, tenantId) {
   if (!paymentTerms || !isValidPaymentTerm(paymentTerms)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Termenul de plată "' + paymentTerms + '" nu este valid. Termeni permisi: ' + VALID_PAYMENT_TERMS.join(', ') + '.',
       400,
       'INVALID_PAYMENT_TERMS'
-    ));
+    );
   }
 
   try {
+    const db = await getDb();
     let sql = 'SELECT id, name, contactPerson, phone, email, address, taxId, paymentTerms, categories, status, notes, tenantId, createdAt, updatedAt FROM suppliers WHERE paymentTerms = ?';
     const params = [paymentTerms];
 
@@ -623,15 +689,16 @@ function findSuppliersByPaymentTerms(paymentTerms, tenantId) {
 
     sql += ' ORDER BY name ASC';
 
-    const rows = all(sql, params);
+    const rows = dbAll(db, sql, params);
 
-    return Promise.resolve((rows || []).map(transformSupplierRow));
+    return (rows || []).map(transformSupplierRow);
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la căutarea furnizorilor după termeni de plată: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -641,17 +708,17 @@ function findSuppliersByPaymentTerms(paymentTerms, tenantId) {
  * @param {Object} updateData - Câmpurile de actualizat
  * @returns {Promise<Object>} Documentul actualizat
  */
-function updateSupplier(id, updateData) {
+async function updateSupplier(id, updateData) {
   if (!id) {
-    return Promise.reject(new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID'));
+    throw new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID');
   }
 
   if (!updateData || typeof updateData !== 'object' || Object.keys(updateData).length === 0) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Nu s-au furnizat date pentru actualizare.',
       400,
       'EMPTY_UPDATE_DATA'
-    ));
+    );
   }
 
   // -----------------------------------------------------------------------
@@ -765,13 +832,15 @@ function updateSupplier(id, updateData) {
   }
 
   if (errors.length > 0) {
-    return Promise.reject(new AppError(errors.join(' '), 400, 'VALIDATION_ERROR'));
+    throw new AppError(errors.join(' '), 400, 'VALIDATION_ERROR');
   }
 
   // Reconstruim notes dacă rating-ul s-a schimbat
+  const db = await getDb();
+
   if (newRating !== undefined) {
     try {
-      const existing = get('SELECT notes FROM suppliers WHERE id = ?', [id]);
+      const existing = dbGet(db, 'SELECT notes FROM suppliers WHERE id = ?', [id]);
       if (existing) {
         const existingNotes = parseNotes(existing.notes);
         const updatedNotes = buildNotes({ text: existingNotes.text, rating: newRating });
@@ -790,11 +859,11 @@ function updateSupplier(id, updateData) {
   }
 
   if (setClauses.length === 0) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Nu s-au furnizat câmpuri valide pentru actualizare.',
       400,
       'NO_VALID_FIELDS'
-    ));
+    );
   }
 
   // Adăugăm updatedAt
@@ -806,27 +875,28 @@ function updateSupplier(id, updateData) {
   params.push(id);
 
   try {
-    const result = run(
+    const result = dbRun(db,
       'UPDATE suppliers SET ' + setClauses.join(', ') + ' WHERE id = ?',
       params
     );
 
     if (result.changes === 0) {
-      return Promise.reject(new AppError('Furnizorul nu a fost găsit.', 404, 'SUPPLIER_NOT_FOUND'));
+      throw new AppError('Furnizorul nu a fost găsit.', 404, 'SUPPLIER_NOT_FOUND');
     }
 
-    const updated = get(
+    const updated = dbGet(db,
       'SELECT id, name, contactPerson, phone, email, address, taxId, paymentTerms, categories, status, notes, tenantId, createdAt, updatedAt FROM suppliers WHERE id = ?',
       [id]
     );
 
-    return Promise.resolve(transformSupplierRow(updated));
+    return transformSupplierRow(updated);
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la actualizarea furnizorului: ' + err.message,
       500,
       'DB_UPDATE_ERROR'
-    ));
+    );
   }
 }
 
@@ -836,52 +906,54 @@ function updateSupplier(id, updateData) {
  * @param {number} rating - Noul rating (0-5)
  * @returns {Promise<Object>} Documentul actualizat
  */
-function updateSupplierRating(id, rating) {
+async function updateSupplierRating(id, rating) {
   if (!id) {
-    return Promise.reject(new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID'));
+    throw new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID');
   }
 
   if (rating === undefined || rating === null || !isValidRating(rating)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Ratingul trebuie să fie un număr între 0 și 5.',
       400,
       'INVALID_RATING'
-    ));
+    );
   }
 
   try {
+    const db = await getDb();
+
     // Obținem notes curent
-    const existing = get('SELECT notes FROM suppliers WHERE id = ?', [id]);
+    const existing = dbGet(db, 'SELECT notes FROM suppliers WHERE id = ?', [id]);
     if (!existing) {
-      return Promise.reject(new AppError('Furnizorul nu a fost găsit.', 404, 'SUPPLIER_NOT_FOUND'));
+      throw new AppError('Furnizorul nu a fost găsit.', 404, 'SUPPLIER_NOT_FOUND');
     }
 
     const existingNotes = parseNotes(existing.notes);
     const updatedNotes = buildNotes({ text: existingNotes.text, rating: rating });
     const now = new Date().toISOString();
 
-    const result = run(
+    const result = dbRun(db,
       'UPDATE suppliers SET notes = ?, updatedAt = ? WHERE id = ?',
       [updatedNotes, now, id]
     );
 
     if (result.changes === 0) {
-      return Promise.reject(new AppError('Furnizorul nu a fost găsit.', 404, 'SUPPLIER_NOT_FOUND'));
+      throw new AppError('Furnizorul nu a fost găsit.', 404, 'SUPPLIER_NOT_FOUND');
     }
 
-    const updated = get(
+    const updated = dbGet(db,
       'SELECT id, name, contactPerson, phone, email, address, taxId, paymentTerms, categories, status, notes, tenantId, createdAt, updatedAt FROM suppliers WHERE id = ?',
       [id]
     );
 
-    return Promise.resolve(transformSupplierRow(updated));
+    return transformSupplierRow(updated);
   } catch (err) {
-    if (err instanceof AppError) return Promise.reject(err);
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la actualizarea ratingului: ' + err.message,
       500,
       'DB_UPDATE_ERROR'
-    ));
+    );
   }
 }
 
@@ -891,43 +963,45 @@ function updateSupplierRating(id, rating) {
  * @param {string} status - Noul status
  * @returns {Promise<Object>} Documentul actualizat
  */
-function updateSupplierStatus(id, status) {
+async function updateSupplierStatus(id, status) {
   if (!id) {
-    return Promise.reject(new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID'));
+    throw new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID');
   }
 
   if (!status || !isValidStatus(status)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Statusul "' + status + '" nu este valid. Statusuri permise: ' + VALID_STATUSES.join(', ') + '.',
       400,
       'INVALID_STATUS'
-    ));
+    );
   }
 
   try {
+    const db = await getDb();
     const now = new Date().toISOString();
 
-    const result = run(
+    const result = dbRun(db,
       'UPDATE suppliers SET status = ?, updatedAt = ? WHERE id = ?',
       [status, now, id]
     );
 
     if (result.changes === 0) {
-      return Promise.reject(new AppError('Furnizorul nu a fost găsit.', 404, 'SUPPLIER_NOT_FOUND'));
+      throw new AppError('Furnizorul nu a fost găsit.', 404, 'SUPPLIER_NOT_FOUND');
     }
 
-    const updated = get(
+    const updated = dbGet(db,
       'SELECT id, name, contactPerson, phone, email, address, taxId, paymentTerms, categories, status, notes, tenantId, createdAt, updatedAt FROM suppliers WHERE id = ?',
       [id]
     );
 
-    return Promise.resolve(transformSupplierRow(updated));
+    return transformSupplierRow(updated);
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la actualizarea statusului: ' + err.message,
       500,
       'DB_UPDATE_ERROR'
-    ));
+    );
   }
 }
 
@@ -937,23 +1011,24 @@ function updateSupplierStatus(id, status) {
  * @param {string} product - Produsul de adăugat
  * @returns {Promise<Object>} Documentul actualizat
  */
-function addSupplierProduct(id, product) {
+async function addSupplierProduct(id, product) {
   if (!id) {
-    return Promise.reject(new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID'));
+    throw new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID');
   }
 
   if (!product || typeof product !== 'string' || product.trim().length === 0) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Produsul de adăugat este invalid.',
       400,
       'INVALID_PRODUCT'
-    ));
+    );
   }
 
   try {
-    const existing = get('SELECT categories FROM suppliers WHERE id = ?', [id]);
+    const db = await getDb();
+    const existing = dbGet(db, 'SELECT categories FROM suppliers WHERE id = ?', [id]);
     if (!existing) {
-      return Promise.reject(new AppError('Furnizorul nu a fost găsit.', 404, 'SUPPLIER_NOT_FOUND'));
+      throw new AppError('Furnizorul nu a fost găsit.', 404, 'SUPPLIER_NOT_FOUND');
     }
 
     const products = parseJsonArray(existing.categories);
@@ -966,28 +1041,28 @@ function addSupplierProduct(id, product) {
     const now = new Date().toISOString();
     const categoriesJson = JSON.stringify(products);
 
-    const result = run(
+    const result = dbRun(db,
       'UPDATE suppliers SET categories = ?, updatedAt = ? WHERE id = ?',
       [categoriesJson, now, id]
     );
 
     if (result.changes === 0) {
-      return Promise.reject(new AppError('Furnizorul nu a fost găsit.', 404, 'SUPPLIER_NOT_FOUND'));
+      throw new AppError('Furnizorul nu a fost găsit.', 404, 'SUPPLIER_NOT_FOUND');
     }
 
-    const updated = get(
+    const updated = dbGet(db,
       'SELECT id, name, contactPerson, phone, email, address, taxId, paymentTerms, categories, status, notes, tenantId, createdAt, updatedAt FROM suppliers WHERE id = ?',
       [id]
     );
 
-    return Promise.resolve(transformSupplierRow(updated));
+    return transformSupplierRow(updated);
   } catch (err) {
-    if (err instanceof AppError) return Promise.reject(err);
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la adăugarea produsului: ' + err.message,
       500,
       'DB_UPDATE_ERROR'
-    ));
+    );
   }
 }
 
@@ -997,23 +1072,24 @@ function addSupplierProduct(id, product) {
  * @param {string} product - Produsul de eliminat
  * @returns {Promise<Object>} Documentul actualizat
  */
-function removeSupplierProduct(id, product) {
+async function removeSupplierProduct(id, product) {
   if (!id) {
-    return Promise.reject(new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID'));
+    throw new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID');
   }
 
   if (!product || typeof product !== 'string' || product.trim().length === 0) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Produsul de eliminat este invalid.',
       400,
       'INVALID_PRODUCT'
-    ));
+    );
   }
 
   try {
-    const existing = get('SELECT categories FROM suppliers WHERE id = ?', [id]);
+    const db = await getDb();
+    const existing = dbGet(db, 'SELECT categories FROM suppliers WHERE id = ?', [id]);
     if (!existing) {
-      return Promise.reject(new AppError('Furnizorul nu a fost găsit.', 404, 'SUPPLIER_NOT_FOUND'));
+      throw new AppError('Furnizorul nu a fost găsit.', 404, 'SUPPLIER_NOT_FOUND');
     }
 
     const products = parseJsonArray(existing.categories);
@@ -1023,28 +1099,28 @@ function removeSupplierProduct(id, product) {
     const now = new Date().toISOString();
     const categoriesJson = JSON.stringify(filtered);
 
-    const result = run(
+    const result = dbRun(db,
       'UPDATE suppliers SET categories = ?, updatedAt = ? WHERE id = ?',
       [categoriesJson, now, id]
     );
 
     if (result.changes === 0) {
-      return Promise.reject(new AppError('Furnizorul nu a fost găsit.', 404, 'SUPPLIER_NOT_FOUND'));
+      throw new AppError('Furnizorul nu a fost găsit.', 404, 'SUPPLIER_NOT_FOUND');
     }
 
-    const updated = get(
+    const updated = dbGet(db,
       'SELECT id, name, contactPerson, phone, email, address, taxId, paymentTerms, categories, status, notes, tenantId, createdAt, updatedAt FROM suppliers WHERE id = ?',
       [id]
     );
 
-    return Promise.resolve(transformSupplierRow(updated));
+    return transformSupplierRow(updated);
   } catch (err) {
-    if (err instanceof AppError) return Promise.reject(err);
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la eliminarea produsului: ' + err.message,
       500,
       'DB_UPDATE_ERROR'
-    ));
+    );
   }
 }
 
@@ -1053,28 +1129,30 @@ function removeSupplierProduct(id, product) {
  * @param {string|number} id - ID-ul furnizorului
  * @returns {Promise<boolean>} true dacă a fost șters
  */
-function deleteSupplier(id) {
+async function deleteSupplier(id) {
   if (!id) {
-    return Promise.reject(new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID'));
+    throw new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID');
   }
 
   try {
-    const result = run(
+    const db = await getDb();
+    const result = dbRun(db,
       'DELETE FROM suppliers WHERE id = ?',
       [id]
     );
 
     if (result.changes === 0) {
-      return Promise.reject(new AppError('Furnizorul nu a fost găsit.', 404, 'SUPPLIER_NOT_FOUND'));
+      throw new AppError('Furnizorul nu a fost găsit.', 404, 'SUPPLIER_NOT_FOUND');
     }
 
-    return Promise.resolve(true);
+    return true;
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la ștergerea furnizorului: ' + err.message,
       500,
       'DB_DELETE_ERROR'
-    ));
+    );
   }
 }
 
@@ -1083,24 +1161,25 @@ function deleteSupplier(id) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<number>}
  */
-function countSuppliersByTenant(tenantId) {
+async function countSuppliersByTenant(tenantId) {
   if (!tenantId) {
-    return Promise.resolve(0);
+    return 0;
   }
 
   try {
-    const row = get(
+    const db = await getDb();
+    const row = dbGet(db,
       'SELECT COUNT(*) AS cnt FROM suppliers WHERE tenantId = ?',
       [tenantId]
     );
 
-    return Promise.resolve(row ? row.cnt : 0);
+    return row ? row.cnt : 0;
   } catch (err) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Eroare la numărarea furnizorilor: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -1110,16 +1189,17 @@ function countSuppliersByTenant(tenantId) {
  * @param {string} [tenantId] - Opțional, filtrează și după tenant
  * @returns {Promise<number>}
  */
-function countSuppliersByStatus(status, tenantId) {
+async function countSuppliersByStatus(status, tenantId) {
   if (!status || !isValidStatus(status)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Statusul "' + status + '" nu este valid. Statusuri permise: ' + VALID_STATUSES.join(', ') + '.',
       400,
       'INVALID_STATUS'
-    ));
+    );
   }
 
   try {
+    const db = await getDb();
     let sql = 'SELECT COUNT(*) AS cnt FROM suppliers WHERE status = ?';
     const params = [status];
 
@@ -1128,15 +1208,16 @@ function countSuppliersByStatus(status, tenantId) {
       params.push(tenantId);
     }
 
-    const row = get(sql, params);
+    const row = dbGet(db, sql, params);
 
-    return Promise.resolve(row ? row.cnt : 0);
+    return row ? row.cnt : 0;
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la numărarea furnizorilor după status: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -1147,18 +1228,19 @@ function countSuppliersByStatus(status, tenantId) {
  * @param {Object} [options={}] - Opțiuni suplimentare (sort, limit, skip)
  * @returns {Promise<Array>} Lista de furnizori găsiți
  */
-function searchSuppliersByName(query, tenantId, options) {
+async function searchSuppliersByName(query, tenantId, options) {
   if (!options) options = {};
 
   if (!query || typeof query !== 'string' || query.trim().length < 1) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Termenul de căutare trebuie să aibă cel puțin un caracter.',
       400,
       'INVALID_SEARCH_QUERY'
-    ));
+    );
   }
 
   try {
+    const db = await getDb();
     const searchPattern = '%' + query.trim() + '%';
     let sql = 'SELECT id, name, contactPerson, phone, email, address, taxId, paymentTerms, categories, status, notes, tenantId, createdAt, updatedAt FROM suppliers WHERE name LIKE ?';
     const params = [searchPattern];
@@ -1183,15 +1265,16 @@ function searchSuppliersByName(query, tenantId, options) {
       }
     }
 
-    const rows = all(sql, params);
+    const rows = dbAll(db, sql, params);
 
-    return Promise.resolve((rows || []).map(transformSupplierRow));
+    return (rows || []).map(transformSupplierRow);
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la căutarea furnizorilor după nume: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -1226,84 +1309,86 @@ function isValidOrderStatus(status) {
  * @param {string} [orderData.deliveryDate=null] - Data estimată de livrare
  * @returns {Promise<Object>} Documentul comenzii create
  */
-function createSupplierOrder(orderData) {
+async function createSupplierOrder(orderData) {
   if (!orderData || typeof orderData !== 'object') {
-    return Promise.reject(new AppError('Datele comenzii sunt invalide.', 400, 'INVALID_ORDER_DATA'));
+    throw new AppError('Datele comenzii sunt invalide.', 400, 'INVALID_ORDER_DATA');
   }
 
   const { supplierId, tenantId, orderNumber, items, status, notes, deliveryDate } = orderData;
 
   // Validare supplierId
   if (!supplierId || typeof supplierId !== 'string') {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'ID-ul furnizorului este obligatoriu.',
       400,
       'MISSING_SUPPLIER_ID'
-    ));
+    );
   }
 
   // Validare tenantId
   if (!tenantId) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'ID-ul tenant-ului este obligatoriu.',
       400,
       'MISSING_TENANT_ID'
-    ));
+    );
   }
 
   // Validare orderNumber
   if (!orderNumber || typeof orderNumber !== 'string' || orderNumber.trim().length === 0) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Numărul comenzii este obligatoriu.',
       400,
       'MISSING_ORDER_NUMBER'
-    ));
+    );
   }
 
   // Validare items
   const finalItems = Array.isArray(items) ? items : [];
   if (items !== undefined && !Array.isArray(items)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Articolele comenzii trebuie să fie o listă.',
       400,
       'INVALID_ORDER_ITEMS'
-    ));
+    );
   }
 
   // Validare status
   const finalStatus = status || 'draft';
   if (!isValidOrderStatus(finalStatus)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Statusul comenzii "' + finalStatus + '" nu este valid. Statusuri permise: ' + VALID_ORDER_STATUSES.join(', ') + '.',
       400,
       'INVALID_ORDER_STATUS'
-    ));
+    );
   }
 
   // Validare deliveryDate (opțional)
   const finalDeliveryDate = deliveryDate || null;
   if (finalDeliveryDate && isNaN(Date.parse(finalDeliveryDate))) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Data de livrare este invalidă.',
       400,
       'INVALID_DELIVERY_DATE'
-    ));
+    );
   }
 
   // Verificare duplicat orderNumber
+  const db = await getDb();
   try {
-    const existing = get(
+    const existing = dbGet(db,
       'SELECT id FROM supplier_orders WHERE notes LIKE ? AND tenantId = ?',
       ['%"orderNumber":"' + orderNumber.trim() + '"%', tenantId]
     );
     if (existing) {
-      return Promise.reject(new AppError(
+      throw new AppError(
         'Numărul comenzii "' + orderNumber + '" există deja.',
         409,
         'DUPLICATE_ORDER_NUMBER'
-      ));
+      );
     }
-  } catch (_e) {
+  } catch (err) {
+    if (err instanceof AppError) throw err;
     // Continuăm – eroarea la verificare nu e critică
   }
 
@@ -1312,25 +1397,26 @@ function createSupplierOrder(orderData) {
     const itemsJson = JSON.stringify(finalItems);
     const notesJson = buildNotes({ text: notes || '', orderNumber: orderNumber.trim() });
 
-    const result = run(
+    const result = dbRun(db,
       'INSERT INTO supplier_orders (supplierId, tenantId, orderDate, expectedDate, status, items, notes, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [supplierId, tenantId, now, finalDeliveryDate, finalStatus, itemsJson, notesJson, now, now]
     );
 
     const newId = result.lastInsertRowid;
 
-    const created = get(
+    const created = dbGet(db,
       'SELECT id, supplierId, tenantId, orderDate, expectedDate, receivedDate, status, items, subtotal, tax, total, currency, notes, createdAt, updatedAt FROM supplier_orders WHERE id = ?',
       [newId]
     );
 
-    return Promise.resolve(transformOrderRow(created));
+    return transformOrderRow(created);
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la crearea comenzii: ' + err.message,
       500,
       'DB_INSERT_ERROR'
-    ));
+    );
   }
 }
 
@@ -1349,60 +1435,59 @@ function createSupplierOrder(orderData) {
  * @param {string} [orderData.deliveryDate=null] - Data estimată de livrare
  * @returns {Promise<Object>} Documentul comenzii create
  */
-function placeSupplierOrder(orderData) {
+async function placeSupplierOrder(orderData) {
   if (!orderData || typeof orderData !== 'object') {
-    return Promise.reject(new AppError('Datele comenzii sunt invalide.', 400, 'INVALID_ORDER_DATA'));
+    throw new AppError('Datele comenzii sunt invalide.', 400, 'INVALID_ORDER_DATA');
   }
 
   const { supplierId, tenantId } = orderData;
 
   if (!supplierId || typeof supplierId !== 'string') {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'ID-ul furnizorului este obligatoriu.',
       400,
       'MISSING_SUPPLIER_ID'
-    ));
+    );
   }
 
   if (!tenantId) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'ID-ul tenant-ului este obligatoriu.',
       400,
       'MISSING_TENANT_ID'
-    ));
+    );
   }
 
   // Verificăm existența furnizorului
-  return findSupplierById(supplierId).then(function (supplier) {
-    if (!supplier) {
-      return Promise.reject(new AppError(
-        'Furnizorul nu a fost găsit.',
-        404,
-        'SUPPLIER_NOT_FOUND'
-      ));
-    }
+  const supplier = await findSupplierById(supplierId);
+  if (!supplier) {
+    throw new AppError(
+      'Furnizorul nu a fost găsit.',
+      404,
+      'SUPPLIER_NOT_FOUND'
+    );
+  }
 
-    // Verificăm că tenantId-ul furnizorului corespunde
-    if (String(supplier.tenantId) !== String(tenantId)) {
-      return Promise.reject(new AppError(
-        'Furnizorul nu aparține acestui tenant.',
-        403,
-        'TENANT_MISMATCH'
-      ));
-    }
+  // Verificăm că tenantId-ul furnizorului corespunde
+  if (String(supplier.tenantId) !== String(tenantId)) {
+    throw new AppError(
+      'Furnizorul nu aparține acestui tenant.',
+      403,
+      'TENANT_MISMATCH'
+    );
+  }
 
-    // Verificăm că furnizorul nu este blacklisted
-    if (supplier.status === 'blacklisted') {
-      return Promise.reject(new AppError(
-        'Nu se pot plasa comenzi la un furnizor blacklisted.',
-        400,
-        'SUPPLIER_BLACKLISTED'
-      ));
-    }
+  // Verificăm că furnizorul nu este blacklisted
+  if (supplier.status === 'blacklisted') {
+    throw new AppError(
+      'Nu se pot plasa comenzi la un furnizor blacklisted.',
+      400,
+      'SUPPLIER_BLACKLISTED'
+    );
+  }
 
-    // Creăm comanda efectivă
-    return createSupplierOrder(orderData);
-  });
+  // Creăm comanda efectivă
+  return createSupplierOrder(orderData);
 }
 
 /**
@@ -1410,24 +1495,26 @@ function placeSupplierOrder(orderData) {
  * @param {string|number} id - ID-ul comenzii
  * @returns {Promise<Object|null>}
  */
-function findSupplierOrderById(id) {
+async function findSupplierOrderById(id) {
   if (!id) {
-    return Promise.reject(new AppError('ID-ul comenzii este invalid.', 400, 'INVALID_ORDER_ID'));
+    throw new AppError('ID-ul comenzii este invalid.', 400, 'INVALID_ORDER_ID');
   }
 
   try {
-    const row = get(
+    const db = await getDb();
+    const row = dbGet(db,
       'SELECT id, supplierId, tenantId, orderDate, expectedDate, receivedDate, status, items, subtotal, tax, total, currency, notes, createdAt, updatedAt FROM supplier_orders WHERE id = ?',
       [id]
     );
 
-    return Promise.resolve(transformOrderRow(row));
+    return transformOrderRow(row);
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la căutarea comenzii: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -1437,12 +1524,13 @@ function findSupplierOrderById(id) {
  * @param {string} [tenantId] - Opțional, filtrează și după tenant
  * @returns {Promise<Array>} Lista de comenzi
  */
-function findOrdersBySupplier(supplierId, tenantId) {
+async function findOrdersBySupplier(supplierId, tenantId) {
   if (!supplierId) {
-    return Promise.reject(new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID'));
+    throw new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID');
   }
 
   try {
+    const db = await getDb();
     let sql = 'SELECT id, supplierId, tenantId, orderDate, expectedDate, receivedDate, status, items, subtotal, tax, total, currency, notes, createdAt, updatedAt FROM supplier_orders WHERE supplierId = ?';
     const params = [supplierId];
 
@@ -1453,15 +1541,16 @@ function findOrdersBySupplier(supplierId, tenantId) {
 
     sql += ' ORDER BY createdAt DESC';
 
-    const rows = all(sql, params);
+    const rows = dbAll(db, sql, params);
 
-    return Promise.resolve((rows || []).map(transformOrderRow));
+    return (rows || []).map(transformOrderRow);
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la căutarea comenzilor: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -1471,14 +1560,15 @@ function findOrdersBySupplier(supplierId, tenantId) {
  * @param {Object} [options={}] - Opțiuni (sort, limit, skip)
  * @returns {Promise<Array>}
  */
-function findOrdersByTenant(tenantId, options) {
+async function findOrdersByTenant(tenantId, options) {
   if (!options) options = {};
 
   if (!tenantId) {
-    return Promise.reject(new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID'));
+    throw new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID');
   }
 
   try {
+    const db = await getDb();
     let sql = 'SELECT id, supplierId, tenantId, orderDate, expectedDate, receivedDate, status, items, subtotal, tax, total, currency, notes, createdAt, updatedAt FROM supplier_orders WHERE tenantId = ?';
     const params = [tenantId];
 
@@ -1497,15 +1587,16 @@ function findOrdersByTenant(tenantId, options) {
       }
     }
 
-    const rows = all(sql, params);
+    const rows = dbAll(db, sql, params);
 
-    return Promise.resolve((rows || []).map(transformOrderRow));
+    return (rows || []).map(transformOrderRow);
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la căutarea comenzilor: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -1519,7 +1610,7 @@ function findOrdersByTenant(tenantId, options) {
  * @param {Object} [maybeOptions] - Opțiuni (doar când primul argument e supplierId)
  * @returns {Promise<Array>} Lista de comenzi găsite
  */
-function findSupplierOrders(filtersOrSupplierId, maybeOptions) {
+async function findSupplierOrders(filtersOrSupplierId, maybeOptions) {
   // Detectare formă de apel
   let filters;
   if (typeof filtersOrSupplierId === 'string') {
@@ -1543,6 +1634,7 @@ function findSupplierOrders(filtersOrSupplierId, maybeOptions) {
   }
 
   try {
+    const db = await getDb();
     let sql = 'SELECT id, supplierId, tenantId, orderDate, expectedDate, receivedDate, status, items, subtotal, tax, total, currency, notes, createdAt, updatedAt FROM supplier_orders';
     const conditions = [];
     const params = [];
@@ -1562,11 +1654,11 @@ function findSupplierOrders(filtersOrSupplierId, maybeOptions) {
     // Filtru după status
     if (filters.status) {
       if (!isValidOrderStatus(filters.status)) {
-        return Promise.reject(new AppError(
+        throw new AppError(
           'Statusul "' + filters.status + '" nu este valid. Statusuri permise: ' + VALID_ORDER_STATUSES.join(', ') + '.',
           400,
           'INVALID_ORDER_STATUS'
-        ));
+        );
       }
       conditions.push('status = ?');
       params.push(filters.status);
@@ -1582,11 +1674,11 @@ function findSupplierOrders(filtersOrSupplierId, maybeOptions) {
     if (filters.dateFrom) {
       const fromDate = new Date(filters.dateFrom);
       if (isNaN(fromDate.getTime())) {
-        return Promise.reject(new AppError(
+        throw new AppError(
           'Data de început (dateFrom) este invalidă.',
           400,
           'INVALID_DATE_FROM'
-        ));
+        );
       }
       conditions.push('createdAt >= ?');
       params.push(fromDate.toISOString());
@@ -1595,11 +1687,11 @@ function findSupplierOrders(filtersOrSupplierId, maybeOptions) {
     if (filters.dateTo) {
       const toDate = new Date(filters.dateTo);
       if (isNaN(toDate.getTime())) {
-        return Promise.reject(new AppError(
+        throw new AppError(
           'Data de sfârșit (dateTo) este invalidă.',
           400,
           'INVALID_DATE_TO'
-        ));
+        );
       }
       conditions.push('createdAt <= ?');
       params.push(toDate.toISOString());
@@ -1625,16 +1717,16 @@ function findSupplierOrders(filtersOrSupplierId, maybeOptions) {
       }
     }
 
-    const rows = all(sql, params);
+    const rows = dbAll(db, sql, params);
 
-    return Promise.resolve((rows || []).map(transformOrderRow));
+    return (rows || []).map(transformOrderRow);
   } catch (err) {
-    if (err instanceof AppError) return Promise.reject(err);
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la căutarea comenzilor: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -1644,23 +1736,25 @@ function findSupplierOrders(filtersOrSupplierId, maybeOptions) {
  * @param {Object} updateData - Câmpurile de actualizat
  * @returns {Promise<Object>} Documentul actualizat
  */
-function updateSupplierOrder(id, updateData) {
+async function updateSupplierOrder(id, updateData) {
   if (!id) {
-    return Promise.reject(new AppError('ID-ul comenzii este invalid.', 400, 'INVALID_ORDER_ID'));
+    throw new AppError('ID-ul comenzii este invalid.', 400, 'INVALID_ORDER_ID');
   }
 
   if (!updateData || typeof updateData !== 'object' || Object.keys(updateData).length === 0) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Nu s-au furnizat date pentru actualizare.',
       400,
       'EMPTY_UPDATE_DATA'
-    ));
+    );
   }
 
   const allowedFields = ['items', 'status', 'notes', 'deliveryDate'];
   const setClauses = [];
   const params = [];
   const errors = [];
+
+  const db = await getDb();
 
   for (const key of Object.keys(updateData)) {
     const value = updateData[key];
@@ -1690,7 +1784,7 @@ function updateSupplierOrder(id, updateData) {
       case 'notes':
         // Actualizăm doar textul din notes, păstrând orderNumber
         try {
-          const existing = get('SELECT notes FROM supplier_orders WHERE id = ?', [id]);
+          const existing = dbGet(db, 'SELECT notes FROM supplier_orders WHERE id = ?', [id]);
           if (existing) {
             const existingNotes = parseNotes(existing.notes);
             const updatedNotes = buildNotes({ text: value || '', orderNumber: existingNotes.orderNumber });
@@ -1718,15 +1812,15 @@ function updateSupplierOrder(id, updateData) {
   }
 
   if (errors.length > 0) {
-    return Promise.reject(new AppError(errors.join(' '), 400, 'VALIDATION_ERROR'));
+    throw new AppError(errors.join(' '), 400, 'VALIDATION_ERROR');
   }
 
   if (setClauses.length === 0) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Nu s-au furnizat câmpuri valide pentru actualizare.',
       400,
       'NO_VALID_FIELDS'
-    ));
+    );
   }
 
   const now = new Date().toISOString();
@@ -1736,27 +1830,28 @@ function updateSupplierOrder(id, updateData) {
   params.push(id);
 
   try {
-    const result = run(
+    const result = dbRun(db,
       'UPDATE supplier_orders SET ' + setClauses.join(', ') + ' WHERE id = ?',
       params
     );
 
     if (result.changes === 0) {
-      return Promise.reject(new AppError('Comanda nu a fost găsită.', 404, 'ORDER_NOT_FOUND'));
+      throw new AppError('Comanda nu a fost găsită.', 404, 'ORDER_NOT_FOUND');
     }
 
-    const updated = get(
+    const updated = dbGet(db,
       'SELECT id, supplierId, tenantId, orderDate, expectedDate, receivedDate, status, items, subtotal, tax, total, currency, notes, createdAt, updatedAt FROM supplier_orders WHERE id = ?',
       [id]
     );
 
-    return Promise.resolve(transformOrderRow(updated));
+    return transformOrderRow(updated);
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la actualizarea comenzii: ' + err.message,
       500,
       'DB_UPDATE_ERROR'
-    ));
+    );
   }
 }
 
@@ -1766,43 +1861,45 @@ function updateSupplierOrder(id, updateData) {
  * @param {string} status - Noul status
  * @returns {Promise<Object>} Documentul actualizat
  */
-function updateOrderStatus(id, status) {
+async function updateOrderStatus(id, status) {
   if (!id) {
-    return Promise.reject(new AppError('ID-ul comenzii este invalid.', 400, 'INVALID_ORDER_ID'));
+    throw new AppError('ID-ul comenzii este invalid.', 400, 'INVALID_ORDER_ID');
   }
 
   if (!status || !isValidOrderStatus(status)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Statusul "' + status + '" nu este valid. Statusuri permise: ' + VALID_ORDER_STATUSES.join(', ') + '.',
       400,
       'INVALID_ORDER_STATUS'
-    ));
+    );
   }
 
   try {
+    const db = await getDb();
     const now = new Date().toISOString();
 
-    const result = run(
+    const result = dbRun(db,
       'UPDATE supplier_orders SET status = ?, updatedAt = ? WHERE id = ?',
       [status, now, id]
     );
 
     if (result.changes === 0) {
-      return Promise.reject(new AppError('Comanda nu a fost găsită.', 404, 'ORDER_NOT_FOUND'));
+      throw new AppError('Comanda nu a fost găsită.', 404, 'ORDER_NOT_FOUND');
     }
 
-    const updated = get(
+    const updated = dbGet(db,
       'SELECT id, supplierId, tenantId, orderDate, expectedDate, receivedDate, status, items, subtotal, tax, total, currency, notes, createdAt, updatedAt FROM supplier_orders WHERE id = ?',
       [id]
     );
 
-    return Promise.resolve(transformOrderRow(updated));
+    return transformOrderRow(updated);
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la actualizarea statusului comenzii: ' + err.message,
       500,
       'DB_UPDATE_ERROR'
-    ));
+    );
   }
 }
 
@@ -1811,28 +1908,30 @@ function updateOrderStatus(id, status) {
  * @param {string|number} id - ID-ul comenzii
  * @returns {Promise<boolean>} true dacă a fost ștearsă
  */
-function deleteSupplierOrder(id) {
+async function deleteSupplierOrder(id) {
   if (!id) {
-    return Promise.reject(new AppError('ID-ul comenzii este invalid.', 400, 'INVALID_ORDER_ID'));
+    throw new AppError('ID-ul comenzii este invalid.', 400, 'INVALID_ORDER_ID');
   }
 
   try {
-    const result = run(
+    const db = await getDb();
+    const result = dbRun(db,
       'DELETE FROM supplier_orders WHERE id = ?',
       [id]
     );
 
     if (result.changes === 0) {
-      return Promise.reject(new AppError('Comanda nu a fost găsită.', 404, 'ORDER_NOT_FOUND'));
+      throw new AppError('Comanda nu a fost găsită.', 404, 'ORDER_NOT_FOUND');
     }
 
-    return Promise.resolve(true);
+    return true;
   } catch (err) {
-    return Promise.reject(new AppError(
+    if (err instanceof AppError) throw err;
+    throw new AppError(
       'Eroare la ștergerea comenzii: ' + err.message,
       500,
       'DB_DELETE_ERROR'
-    ));
+    );
   }
 }
 
@@ -1841,24 +1940,25 @@ function deleteSupplierOrder(id) {
  * @param {string} supplierId - ID-ul furnizorului
  * @returns {Promise<number>}
  */
-function countOrdersBySupplier(supplierId) {
+async function countOrdersBySupplier(supplierId) {
   if (!supplierId) {
-    return Promise.resolve(0);
+    return 0;
   }
 
   try {
-    const row = get(
+    const db = await getDb();
+    const row = dbGet(db,
       'SELECT COUNT(*) AS cnt FROM supplier_orders WHERE supplierId = ?',
       [supplierId]
     );
 
-    return Promise.resolve(row ? row.cnt : 0);
+    return row ? row.cnt : 0;
   } catch (err) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Eroare la numărarea comenzilor: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -1872,7 +1972,7 @@ function countOrdersBySupplier(supplierId) {
  * @param {string} [maybeStatus] - Status (doar când primul argument e supplierId)
  * @returns {Promise<number>} Numărul de comenzi
  */
-function countSupplierOrders(filtersOrSupplierId, maybeStatus) {
+async function countSupplierOrders(filtersOrSupplierId, maybeStatus) {
   // Detectare formă de apel
   let filters;
   if (typeof filtersOrSupplierId === 'string') {
@@ -1885,6 +1985,7 @@ function countSupplierOrders(filtersOrSupplierId, maybeStatus) {
   }
 
   try {
+    const db = await getDb();
     let sql = 'SELECT COUNT(*) AS cnt FROM supplier_orders';
     const conditions = [];
     const params = [];
@@ -1908,15 +2009,15 @@ function countSupplierOrders(filtersOrSupplierId, maybeStatus) {
       sql += ' WHERE ' + conditions.join(' AND ');
     }
 
-    const row = get(sql, params);
+    const row = dbGet(db, sql, params);
 
-    return Promise.resolve(row ? row.cnt : 0);
+    return row ? row.cnt : 0;
   } catch (err) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Eroare la numărarea comenzilor: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 

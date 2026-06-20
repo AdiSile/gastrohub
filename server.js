@@ -131,78 +131,75 @@ app.use(errorHandler);
 // ---------------------------------------------------------------------------
 
 /**
- * Funcție robustă de inițializare a bazei de date.
+ * Funcție robustă de inițializare a bazei de date (async).
  *
  * Responsabilități:
  *  1. Verifică existența directorului `data/` și îl creează dacă nu există.
- *  2. Încarcă modulul `config/db` (trigger pentru SQLite).
+ *  2. Încarcă modulul `config/db` și așteaptă `getDb()` async.
  *  3. Verifică disponibilitatea bazei de date SQLite.
  *  4. Înregistrează handler-e pentru SIGINT / SIGTERM care salvează baza
- *     de date SQLite în `data/gastrohub.db` folosind `db.export()`.
+ *     de date SQLite în `data/gastrohub.db` folosind `saveToDisk()`.
  *  5. Loghează erorile fără a opri serverul – promisiunea se resolve întotdeauna.
  *
  * @returns {Promise<void>} Promisiune care se rezolvă după verificarea bazei de date.
  */
-function initDb() {
-  return new Promise((resolve) => {
-    // ------------------------------------------------------------------
-    // 1. Verifică / creează directorul data/
-    // ------------------------------------------------------------------
-    const dataDir = path.resolve(process.env.DB_PATH || path.join(__dirname, 'data'));
+async function initDb() {
+  // ------------------------------------------------------------------
+  // 1. Verifică / creează directorul data/
+  // ------------------------------------------------------------------
+  const dataDir = path.resolve(process.env.DB_PATH || path.join(__dirname, 'data'));
 
-    try {
-      if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-        console.log(`[GastroHub] Directorul ${dataDir} a fost creat.`);
-      } else {
-        console.log(`[GastroHub] Directorul ${dataDir} există deja.`);
-      }
-    } catch (err) {
-      console.error(
-        `[GastroHub] Eroare la verificarea/crearea directorului ${dataDir}:`,
-        err.message
-      );
-      console.warn('[GastroHub] Se continuă fără garanția că directorul de date există.');
+  try {
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+      console.log(`[GastroHub] Directorul ${dataDir} a fost creat.`);
+    } else {
+      console.log(`[GastroHub] Directorul ${dataDir} există deja.`);
     }
+  } catch (err) {
+    console.error(
+      `[GastroHub] Eroare la verificarea/crearea directorului ${dataDir}:`,
+      err.message
+    );
+    console.warn('[GastroHub] Se continuă fără garanția că directorul de date există.');
+  }
 
-    // ------------------------------------------------------------------
-    // 2. Încarcă modulul de bază de date (trigger pentru inițializarea
-    //    colecțiilor NeDB + SQLite la primul require)
-    // ------------------------------------------------------------------
-    try {
-      dbModule = require('./config/db');
-      console.log('[GastroHub] Modulul config/db a fost încărcat.');
-    } catch (err) {
-      console.error('[GastroHub] Eroare la încărcarea config/db:', err.message);
-      console.warn('[GastroHub] Se continuă fără bază de date.');
-      return resolve();
-    }
+  // ------------------------------------------------------------------
+  // 2. Încarcă modulul de bază de date și așteaptă inițializarea async
+  //    (getDb() pornește sql.js WebAssembly + creează tabelele)
+  // ------------------------------------------------------------------
+  try {
+    dbModule = require('./config/db');
+    console.log('[GastroHub] Modulul config/db a fost încărcat.');
+  } catch (err) {
+    console.error('[GastroHub] Eroare la încărcarea config/db:', err.message);
+    console.warn('[GastroHub] Se continuă fără bază de date.');
+    return;
+  }
 
-    // ------------------------------------------------------------------
-    // 3. Verifică disponibilitatea bazei de date SQLite
-    // ------------------------------------------------------------------
-    try {
-      const testRow = dbModule.get('SELECT 1 AS ok');
-      if (testRow && testRow.ok === 1) {
-        console.log('[GastroHub] Baza de date SQLite este operațională.');
-      } else {
-        console.warn('[GastroHub] Verificarea bazei de date SQLite a returnat un rezultat neașteptat.');
-      }
-    } catch (err) {
-      console.error('[GastroHub] Eroare la verificarea bazei de date SQLite:', err.message);
-    }
+  // ------------------------------------------------------------------
+  // 3. Așteaptă inițializarea async a bazei de date SQLite
+  // ------------------------------------------------------------------
+  try {
+    await dbModule.getDb();
+    console.log('[GastroHub] Baza de date SQLite este operațională.');
+  } catch (err) {
+    console.error('[GastroHub] Eroare la inițializarea async a bazei de date SQLite:', err.message);
+    console.warn('[GastroHub] Se continuă fără bază de date.');
+    return;
+  }
 
-    // Verifică existența tabelei tenants (sanity check)
-    try {
-      const tenantCount = dbModule.get('SELECT COUNT(*) AS cnt FROM tenants');
-      console.log(`[GastroHub] Tabela tenants conține ${tenantCount ? tenantCount.cnt : 0} înregistrări.`);
-    } catch (err) {
-      console.warn('[GastroHub] Nu s-a putut verifica tabela tenants:', err.message);
-    }
+  // ------------------------------------------------------------------
+  // 4. Verifică existența tabelei tenants (sanity check)
+  // ------------------------------------------------------------------
+  try {
+    const tenantCount = await dbModule.get('SELECT COUNT(*) AS cnt FROM tenants');
+    console.log(`[GastroHub] Tabela tenants conține ${tenantCount ? tenantCount.cnt : 0} înregistrări.`);
+  } catch (err) {
+    console.warn('[GastroHub] Nu s-a putut verifica tabela tenants:', err.message);
+  }
 
-    console.log('[GastroHub] Verificarea bazei de date s-a încheiat.');
-    resolve();
-  });
+  console.log('[GastroHub] Verificarea bazei de date s-a încheiat.');
 }
 
 // ------------------------------------------------------------------
@@ -212,8 +209,8 @@ function initDb() {
 /**
  * Salvează baza de date SQLite pe disc în `data/gastrohub.db`.
  *
- * Folosește `db.export()` de la sql.js pentru a obține un ArrayBuffer
- * cu întreaga bază de date, apoi îl scrie atomic pe disc cu `fs.writeFileSync`.
+ * Folosește funcția `saveToDisk()` exportată de `config/db`,
+ * care scrie atomic conținutul bazei de date pe disc.
  */
 function shutdownSaveDb() {
   if (!dbModule) {
@@ -221,34 +218,14 @@ function shutdownSaveDb() {
     return;
   }
 
-  /** @type {Object|null} */
-  let dbInstance;
-  try {
-    dbInstance = dbModule.getDb();
-  } catch (_err) {
-    console.log('[GastroHub] Instanța SQLite nu este disponibilă – shutdown fără salvare.');
+  if (typeof dbModule.saveToDisk !== 'function') {
+    console.log('[GastroHub] Funcția saveToDisk nu este disponibilă – shutdown fără salvare.');
     return;
   }
 
-  if (!dbInstance || typeof dbInstance.export !== 'function') {
-    console.log('[GastroHub] Instanța SQLite nu are metoda export – shutdown fără salvare.');
-    return;
-  }
-
-  const DB_PATH = path.join(__dirname, 'data', 'gastrohub.db');
-
   try {
-    // Asigură directorul data/ înainte de scriere
-    const dataDir = path.dirname(DB_PATH);
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
-
-    // Exportă baza de date ca ArrayBuffer și scrie pe disc
-    const data = dbInstance.export();
-    const buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-    fs.writeFileSync(DB_PATH, buffer);
-    console.log(`[GastroHub] Baza de date salvată cu succes în ${DB_PATH}`);
+    dbModule.saveToDisk();
+    console.log('[GastroHub] Baza de date salvată cu succes.');
   } catch (err) {
     console.error('[GastroHub] Eroare la salvarea bazei de date în shutdown:', err.message);
   }

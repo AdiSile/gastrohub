@@ -7,7 +7,56 @@
 // Persistență: SQLite via sql.js (config/db) – tabelele loyalty_accounts și loyalty_coupons
 // ---------------------------------------------------------------------------
 
-const { getDb, run, get, all } = require('../config/db');
+const { getDb } = require('../config/db');
+
+// ---------------------------------------------------------------------------
+// Helpers interne pentru interogări sql.js
+// ---------------------------------------------------------------------------
+
+/**
+ * Execută o interogare și returnează primul rând ca obiect, sau undefined.
+ * @param {import('sql.js').Database} db
+ * @param {string} sql
+ * @param {Array} [params=[]]
+ * @returns {Object|undefined}
+ */
+function _queryOne(db, sql, params = []) {
+  const stmt = db.prepare(sql);
+  if (params.length) stmt.bind(params);
+  const row = stmt.step() ? stmt.getAsObject() : undefined;
+  stmt.free();
+  return row;
+}
+
+/**
+ * Execută o interogare și returnează toate rândurile ca array de obiecte.
+ * @param {import('sql.js').Database} db
+ * @param {string} sql
+ * @param {Array} [params=[]]
+ * @returns {Array<Object>}
+ */
+function _queryAll(db, sql, params = []) {
+  const stmt = db.prepare(sql);
+  if (params.length) stmt.bind(params);
+  const rows = [];
+  while (stmt.step()) rows.push(stmt.getAsObject());
+  stmt.free();
+  return rows;
+}
+
+/**
+ * Execută o interogare de tip INSERT/UPDATE/DELETE și returnează numărul de changes.
+ * @param {import('sql.js').Database} db
+ * @param {string} sql
+ * @param {Array} [params=[]]
+ * @returns {{ changes: number }}
+ */
+function _execute(db, sql, params = []) {
+  db.run(sql, params);
+  const changesRes = db.exec('SELECT changes() AS cnt');
+  const changes = (changesRes.length && changesRes[0].values.length) ? changesRes[0].values[0][0] : 0;
+  return { changes };
+}
 
 // ---------------------------------------------------------------------------
 // Asigură existența tabelelor (idempotent)
@@ -15,10 +64,14 @@ const { getDb, run, get, all } = require('../config/db');
 
 let _tablesEnsured = false;
 
-function ensureTables() {
+/**
+ * Asigură existența tabelelor loyalty_accounts și loyalty_coupons.
+ * @param {import('sql.js').Database} db
+ */
+function ensureTables(db) {
   if (_tablesEnsured) return;
-  // Tabela nu există încă în config/db, o creăm aici idempotent
-  run(`
+  // Tabelele pot exista deja din config/db, dar le creăm idempotent
+  db.exec(`
     CREATE TABLE IF NOT EXISTS loyalty_accounts (
       userId         TEXT    PRIMARY KEY,
       totalPoints    INTEGER NOT NULL DEFAULT 0,
@@ -27,8 +80,6 @@ function ensureTables() {
       createdAt      TEXT    DEFAULT (datetime('now')),
       updatedAt      TEXT    DEFAULT (datetime('now'))
     );
-  `);
-  run(`
     CREATE TABLE IF NOT EXISTS loyalty_coupons (
       id              TEXT    PRIMARY KEY,
       code            TEXT    NOT NULL UNIQUE,
@@ -41,10 +92,10 @@ function ensureTables() {
       usedAt          TEXT,
       usedOnOrder     TEXT
     );
+    CREATE INDEX IF NOT EXISTS idx_loyalty_coupons_userId ON loyalty_coupons(userId);
+    CREATE INDEX IF NOT EXISTS idx_loyalty_coupons_code ON loyalty_coupons(code);
+    CREATE INDEX IF NOT EXISTS idx_loyalty_coupons_status ON loyalty_coupons(status);
   `);
-  run('CREATE INDEX IF NOT EXISTS idx_loyalty_coupons_userId ON loyalty_coupons(userId);');
-  run('CREATE INDEX IF NOT EXISTS idx_loyalty_coupons_code ON loyalty_coupons(code);');
-  run('CREATE INDEX IF NOT EXISTS idx_loyalty_coupons_status ON loyalty_coupons(status);');
   _tablesEnsured = true;
 }
 
@@ -158,32 +209,27 @@ function isCouponCancelled(cupon) {
  * @returns {Promise<Object>} Contul de loialitate creat
  * @throws {Error} Dacă userId este invalid sau contul există deja
  */
-function createLoyaltyAccount(userId) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!isValidUserId(userId)) {
-        return reject(new Error('ID-ul utilizatorului este invalid.'));
-      }
+async function createLoyaltyAccount(userId) {
+  if (!isValidUserId(userId)) {
+    throw new Error('ID-ul utilizatorului este invalid.');
+  }
 
-      ensureTables();
+  const db = await getDb();
+  ensureTables(db);
 
-      const existing = get('SELECT userId FROM loyalty_accounts WHERE userId = ?', [userId]);
-      if (existing) {
-        return reject(new Error('Contul de loialitate există deja pentru acest utilizator.'));
-      }
+  const existing = _queryOne(db, 'SELECT userId FROM loyalty_accounts WHERE userId = ?', [userId]);
+  if (existing) {
+    throw new Error('Contul de loialitate există deja pentru acest utilizator.');
+  }
 
-      const now = new Date().toISOString();
-      run(
-        'INSERT INTO loyalty_accounts (userId, totalPoints, lifetimePoints, activeCoupons, createdAt, updatedAt) VALUES (?, 0, 0, 0, ?, ?)',
-        [userId, now, now]
-      );
+  const now = new Date().toISOString();
+  _execute(db,
+    'INSERT INTO loyalty_accounts (userId, totalPoints, lifetimePoints, activeCoupons, createdAt, updatedAt) VALUES (?, 0, 0, 0, ?, ?)',
+    [userId, now, now]
+  );
 
-      const account = get('SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
-      resolve(account);
-    } catch (err) {
-      reject(err);
-    }
-  });
+  const account = _queryOne(db, 'SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
+  return account;
 }
 
 /**
@@ -192,25 +238,20 @@ function createLoyaltyAccount(userId) {
  * @returns {Promise<Object>} Contul de loialitate
  * @throws {Error} Dacă userId este invalid sau contul nu există
  */
-function getLoyaltyAccount(userId) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!isValidUserId(userId)) {
-        return reject(new Error('ID-ul utilizatorului este invalid.'));
-      }
+async function getLoyaltyAccount(userId) {
+  if (!isValidUserId(userId)) {
+    throw new Error('ID-ul utilizatorului este invalid.');
+  }
 
-      ensureTables();
+  const db = await getDb();
+  ensureTables(db);
 
-      const account = get('SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
-      if (!account) {
-        return reject(new Error('Contul de loialitate nu a fost găsit.'));
-      }
+  const account = _queryOne(db, 'SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
+  if (!account) {
+    throw new Error('Contul de loialitate nu a fost găsit.');
+  }
 
-      resolve(account);
-    } catch (err) {
-      reject(err);
-    }
-  });
+  return account;
 }
 
 /**
@@ -220,41 +261,36 @@ function getLoyaltyAccount(userId) {
  * @returns {Promise<Object>} Contul actualizat
  * @throws {Error} Dacă validarea eșuează
  */
-function addPoints(userId, spentAmount) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!isValidUserId(userId)) {
-        return reject(new Error('ID-ul utilizatorului este invalid.'));
-      }
+async function addPoints(userId, spentAmount) {
+  if (!isValidUserId(userId)) {
+    throw new Error('ID-ul utilizatorului este invalid.');
+  }
 
-      if (!isValidPositiveNumber(spentAmount)) {
-        return reject(new Error('Valoarea cheltuită trebuie să fie un număr pozitiv.'));
-      }
+  if (!isValidPositiveNumber(spentAmount)) {
+    throw new Error('Valoarea cheltuită trebuie să fie un număr pozitiv.');
+  }
 
-      ensureTables();
+  const db = await getDb();
+  ensureTables(db);
 
-      const account = get('SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
-      if (!account) {
-        return reject(new Error('Contul de loialitate nu a fost găsit. Creați mai întâi un cont.'));
-      }
+  const account = _queryOne(db, 'SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
+  if (!account) {
+    throw new Error('Contul de loialitate nu a fost găsit. Creați mai întâi un cont.');
+  }
 
-      const pointsEarned = Math.floor(spentAmount / LOYALTY_CONFIG.PUNCTE_PER_VALOARE);
-      if (pointsEarned < 1) {
-        return reject(new Error('Valoarea cheltuită este prea mică pentru a acumula puncte.'));
-      }
+  const pointsEarned = Math.floor(spentAmount / LOYALTY_CONFIG.PUNCTE_PER_VALOARE);
+  if (pointsEarned < 1) {
+    throw new Error('Valoarea cheltuită este prea mică pentru a acumula puncte.');
+  }
 
-      const now = new Date().toISOString();
-      run(
-        'UPDATE loyalty_accounts SET totalPoints = totalPoints + ?, lifetimePoints = lifetimePoints + ?, updatedAt = ? WHERE userId = ?',
-        [pointsEarned, pointsEarned, now, userId]
-      );
+  const now = new Date().toISOString();
+  _execute(db,
+    'UPDATE loyalty_accounts SET totalPoints = totalPoints + ?, lifetimePoints = lifetimePoints + ?, updatedAt = ? WHERE userId = ?',
+    [pointsEarned, pointsEarned, now, userId]
+  );
 
-      const updated = get('SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
-      resolve({ ...updated, pointsEarned });
-    } catch (err) {
-      reject(err);
-    }
-  });
+  const updated = _queryOne(db, 'SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
+  return { ...updated, pointsEarned };
 }
 
 /**
@@ -264,40 +300,35 @@ function addPoints(userId, spentAmount) {
  * @returns {Promise<Object>} Contul actualizat
  * @throws {Error} Dacă punctele sunt insuficiente
  */
-function deductPoints(userId, pointsToDeduct) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!isValidUserId(userId)) {
-        return reject(new Error('ID-ul utilizatorului este invalid.'));
-      }
+async function deductPoints(userId, pointsToDeduct) {
+  if (!isValidUserId(userId)) {
+    throw new Error('ID-ul utilizatorului este invalid.');
+  }
 
-      if (!isValidPositiveNumber(pointsToDeduct)) {
-        return reject(new Error('Numărul de puncte de scăzut trebuie să fie un număr pozitiv.'));
-      }
+  if (!isValidPositiveNumber(pointsToDeduct)) {
+    throw new Error('Numărul de puncte de scăzut trebuie să fie un număr pozitiv.');
+  }
 
-      ensureTables();
+  const db = await getDb();
+  ensureTables(db);
 
-      const account = get('SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
-      if (!account) {
-        return reject(new Error('Contul de loialitate nu a fost găsit.'));
-      }
+  const account = _queryOne(db, 'SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
+  if (!account) {
+    throw new Error('Contul de loialitate nu a fost găsit.');
+  }
 
-      if (account.totalPoints < pointsToDeduct) {
-        return reject(new Error(`Puncte insuficiente. Disponibile: ${account.totalPoints}, Necesare: ${pointsToDeduct}`));
-      }
+  if (account.totalPoints < pointsToDeduct) {
+    throw new Error(`Puncte insuficiente. Disponibile: ${account.totalPoints}, Necesare: ${pointsToDeduct}`);
+  }
 
-      const now = new Date().toISOString();
-      run(
-        'UPDATE loyalty_accounts SET totalPoints = totalPoints - ?, updatedAt = ? WHERE userId = ?',
-        [pointsToDeduct, now, userId]
-      );
+  const now = new Date().toISOString();
+  _execute(db,
+    'UPDATE loyalty_accounts SET totalPoints = totalPoints - ?, updatedAt = ? WHERE userId = ?',
+    [pointsToDeduct, now, userId]
+  );
 
-      const updated = get('SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
-      resolve({ ...updated, pointsDeducted: pointsToDeduct });
-    } catch (err) {
-      reject(err);
-    }
-  });
+  const updated = _queryOne(db, 'SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
+  return { ...updated, pointsDeducted: pointsToDeduct };
 }
 
 /**
@@ -305,25 +336,20 @@ function deductPoints(userId, pointsToDeduct) {
  * @param {string} userId
  * @returns {Promise<number>}
  */
-function getLifetimePoints(userId) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!isValidUserId(userId)) {
-        return reject(new Error('ID-ul utilizatorului este invalid.'));
-      }
+async function getLifetimePoints(userId) {
+  if (!isValidUserId(userId)) {
+    throw new Error('ID-ul utilizatorului este invalid.');
+  }
 
-      ensureTables();
+  const db = await getDb();
+  ensureTables(db);
 
-      const account = get('SELECT lifetimePoints FROM loyalty_accounts WHERE userId = ?', [userId]);
-      if (!account) {
-        return resolve(0);
-      }
+  const account = _queryOne(db, 'SELECT lifetimePoints FROM loyalty_accounts WHERE userId = ?', [userId]);
+  if (!account) {
+    return 0;
+  }
 
-      resolve(account.lifetimePoints);
-    } catch (err) {
-      reject(err);
-    }
-  });
+  return account.lifetimePoints;
 }
 
 // ---------------------------------------------------------------------------
@@ -359,57 +385,52 @@ function generateCouponCode() {
  * @returns {Promise<Object>} Cuponul creat
  * @throws {Error} Dacă validarea eșuează
  */
-function createCoupon(userId, options = {}) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!isValidUserId(userId)) {
-        return reject(new Error('ID-ul utilizatorului este invalid.'));
-      }
+async function createCoupon(userId, options = {}) {
+  if (!isValidUserId(userId)) {
+    throw new Error('ID-ul utilizatorului este invalid.');
+  }
 
-      const discountPercent = options.discountPercent || LOYALTY_CONFIG.DISCOUNT_PERCENT_DEFAULT;
-      if (!isValidDiscountPercent(discountPercent)) {
-        return reject(new Error('Procentajul de discount trebuie să fie între 1 și 100.'));
-      }
+  const discountPercent = options.discountPercent || LOYALTY_CONFIG.DISCOUNT_PERCENT_DEFAULT;
+  if (!isValidDiscountPercent(discountPercent)) {
+    throw new Error('Procentajul de discount trebuie să fie între 1 și 100.');
+  }
 
-      ensureTables();
+  const db = await getDb();
+  ensureTables(db);
 
-      const account = get('SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
-      if (!account) {
-        return reject(new Error('Contul de loialitate nu a fost găsit. Creați mai întâi un cont.'));
-      }
+  const account = _queryOne(db, 'SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
+  if (!account) {
+    throw new Error('Contul de loialitate nu a fost găsit. Creați mai întâi un cont.');
+  }
 
-      if (account.activeCoupons >= LOYALTY_CONFIG.MAX_CUPOANE_ACTIVE) {
-        return reject(new Error(`Ai atins numărul maxim de cupoane active (${LOYALTY_CONFIG.MAX_CUPOANE_ACTIVE}). Folosește sau anulează un cupon existent.`));
-      }
+  if (account.activeCoupons >= LOYALTY_CONFIG.MAX_CUPOANE_ACTIVE) {
+    throw new Error(`Ai atins numărul maxim de cupoane active (${LOYALTY_CONFIG.MAX_CUPOANE_ACTIVE}). Folosește sau anulează un cupon existent.`);
+  }
 
-      const pointsCost = options.pointsCost || LOYALTY_CONFIG.PUNCTE_MINIME_FOR_CUPON;
-      if (account.totalPoints < pointsCost) {
-        return reject(new Error(`Puncte insuficiente pentru a genera cupon. Ai nevoie de ${pointsCost} puncte, ai doar ${account.totalPoints}.`));
-      }
+  const pointsCost = options.pointsCost || LOYALTY_CONFIG.PUNCTE_MINIME_FOR_CUPON;
+  if (account.totalPoints < pointsCost) {
+    throw new Error(`Puncte insuficiente pentru a genera cupon. Ai nevoie de ${pointsCost} puncte, ai doar ${account.totalPoints}.`);
+  }
 
-      const couponId = generateId();
-      const couponCode = generateCouponCode();
-      const now = new Date().toISOString();
-      const expiresAt = calculateExpiryDate();
+  const couponId = generateId();
+  const couponCode = generateCouponCode();
+  const now = new Date().toISOString();
+  const expiresAt = calculateExpiryDate();
 
-      // Scădem punctele și actualizăm contorul
-      run(
-        'UPDATE loyalty_accounts SET totalPoints = totalPoints - ?, activeCoupons = activeCoupons + 1, updatedAt = ? WHERE userId = ?',
-        [pointsCost, now, userId]
-      );
+  // Scădem punctele și actualizăm contorul
+  _execute(db,
+    'UPDATE loyalty_accounts SET totalPoints = totalPoints - ?, activeCoupons = activeCoupons + 1, updatedAt = ? WHERE userId = ?',
+    [pointsCost, now, userId]
+  );
 
-      // Inserăm cuponul
-      run(
-        'INSERT INTO loyalty_coupons (id, code, userId, discountPercent, pointsCost, status, createdAt, expiresAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [couponId, couponCode, userId, discountPercent, pointsCost, 'active', now, expiresAt]
-      );
+  // Inserăm cuponul
+  _execute(db,
+    'INSERT INTO loyalty_coupons (id, code, userId, discountPercent, pointsCost, status, createdAt, expiresAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [couponId, couponCode, userId, discountPercent, pointsCost, 'active', now, expiresAt]
+  );
 
-      const coupon = get('SELECT * FROM loyalty_coupons WHERE id = ?', [couponId]);
-      resolve(coupon);
-    } catch (err) {
-      reject(err);
-    }
-  });
+  const coupon = _queryOne(db, 'SELECT * FROM loyalty_coupons WHERE id = ?', [couponId]);
+  return coupon;
 }
 
 /**
@@ -418,25 +439,20 @@ function createCoupon(userId, options = {}) {
  * @returns {Promise<Object>}
  * @throws {Error} Dacă cuponul nu există
  */
-function getCouponById(couponId) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!couponId || typeof couponId !== 'string') {
-        return reject(new Error('ID-ul cuponului este invalid.'));
-      }
+async function getCouponById(couponId) {
+  if (!couponId || typeof couponId !== 'string') {
+    throw new Error('ID-ul cuponului este invalid.');
+  }
 
-      ensureTables();
+  const db = await getDb();
+  ensureTables(db);
 
-      const cupon = get('SELECT * FROM loyalty_coupons WHERE id = ?', [couponId]);
-      if (!cupon) {
-        return reject(new Error('Cuponul nu a fost găsit.'));
-      }
+  const cupon = _queryOne(db, 'SELECT * FROM loyalty_coupons WHERE id = ?', [couponId]);
+  if (!cupon) {
+    throw new Error('Cuponul nu a fost găsit.');
+  }
 
-      resolve(cupon);
-    } catch (err) {
-      reject(err);
-    }
-  });
+  return cupon;
 }
 
 /**
@@ -445,27 +461,22 @@ function getCouponById(couponId) {
  * @returns {Promise<Object>}
  * @throws {Error} Dacă codul este invalid sau cuponul nu există
  */
-function getCouponByCode(code) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!isValidCouponCode(code)) {
-        return reject(new Error('Codul cuponului este invalid (minim 4 caractere, maxim 30).'));
-      }
+async function getCouponByCode(code) {
+  if (!isValidCouponCode(code)) {
+    throw new Error('Codul cuponului este invalid (minim 4 caractere, maxim 30).');
+  }
 
-      ensureTables();
+  const db = await getDb();
+  ensureTables(db);
 
-      const normalizedCode = code.trim().toUpperCase();
-      const cupon = get('SELECT * FROM loyalty_coupons WHERE UPPER(code) = ?', [normalizedCode]);
+  const normalizedCode = code.trim().toUpperCase();
+  const cupon = _queryOne(db, 'SELECT * FROM loyalty_coupons WHERE UPPER(code) = ?', [normalizedCode]);
 
-      if (!cupon) {
-        return reject(new Error('Cuponul nu a fost găsit.'));
-      }
+  if (!cupon) {
+    throw new Error('Cuponul nu a fost găsit.');
+  }
 
-      resolve(cupon);
-    } catch (err) {
-      reject(err);
-    }
-  });
+  return cupon;
 }
 
 /**
@@ -475,47 +486,42 @@ function getCouponByCode(code) {
  * @returns {Promise<Object>} Cuponul validat
  * @throws {Error} Dacă cuponul nu este valid
  */
-function validateCoupon(code, userId) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!isValidCouponCode(code)) {
-        return reject(new Error('Codul cuponului este invalid.'));
-      }
+async function validateCoupon(code, userId) {
+  if (!isValidCouponCode(code)) {
+    throw new Error('Codul cuponului este invalid.');
+  }
 
-      if (!isValidUserId(userId)) {
-        return reject(new Error('ID-ul utilizatorului este invalid.'));
-      }
+  if (!isValidUserId(userId)) {
+    throw new Error('ID-ul utilizatorului este invalid.');
+  }
 
-      ensureTables();
+  const db = await getDb();
+  ensureTables(db);
 
-      const normalizedCode = code.trim().toUpperCase();
-      const cupon = get('SELECT * FROM loyalty_coupons WHERE UPPER(code) = ?', [normalizedCode]);
+  const normalizedCode = code.trim().toUpperCase();
+  const cupon = _queryOne(db, 'SELECT * FROM loyalty_coupons WHERE UPPER(code) = ?', [normalizedCode]);
 
-      if (!cupon) {
-        return reject(new Error('Cuponul nu există.'));
-      }
+  if (!cupon) {
+    throw new Error('Cuponul nu există.');
+  }
 
-      if (cupon.userId !== userId) {
-        return reject(new Error('Acest cupon nu aparține utilizatorului curent.'));
-      }
+  if (cupon.userId !== userId) {
+    throw new Error('Acest cupon nu aparține utilizatorului curent.');
+  }
 
-      if (isCouponExpired(cupon)) {
-        return reject(new Error('Cuponul a expirat.'));
-      }
+  if (isCouponExpired(cupon)) {
+    throw new Error('Cuponul a expirat.');
+  }
 
-      if (isCouponUsed(cupon)) {
-        return reject(new Error('Cuponul a fost deja folosit.'));
-      }
+  if (isCouponUsed(cupon)) {
+    throw new Error('Cuponul a fost deja folosit.');
+  }
 
-      if (isCouponCancelled(cupon)) {
-        return reject(new Error('Cuponul a fost anulat.'));
-      }
+  if (isCouponCancelled(cupon)) {
+    throw new Error('Cuponul a fost anulat.');
+  }
 
-      resolve(cupon);
-    } catch (err) {
-      reject(err);
-    }
-  });
+  return cupon;
 }
 
 /**
@@ -526,66 +532,61 @@ function validateCoupon(code, userId) {
  * @returns {Promise<Object>} Cuponul actualizat
  * @throws {Error} Dacă cuponul nu poate fi folosit
  */
-function useCoupon(code, userId, orderDetails = {}) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!isValidCouponCode(code)) {
-        return reject(new Error('Codul cuponului este invalid.'));
-      }
+async function useCoupon(code, userId, orderDetails = {}) {
+  if (!isValidCouponCode(code)) {
+    throw new Error('Codul cuponului este invalid.');
+  }
 
-      if (!isValidUserId(userId)) {
-        return reject(new Error('ID-ul utilizatorului este invalid.'));
-      }
+  if (!isValidUserId(userId)) {
+    throw new Error('ID-ul utilizatorului este invalid.');
+  }
 
-      ensureTables();
+  const db = await getDb();
+  ensureTables(db);
 
-      const normalizedCode = code.trim().toUpperCase();
-      const cupon = get('SELECT * FROM loyalty_coupons WHERE UPPER(code) = ?', [normalizedCode]);
+  const normalizedCode = code.trim().toUpperCase();
+  const cupon = _queryOne(db, 'SELECT * FROM loyalty_coupons WHERE UPPER(code) = ?', [normalizedCode]);
 
-      if (!cupon) {
-        return reject(new Error('Cuponul nu există.'));
-      }
+  if (!cupon) {
+    throw new Error('Cuponul nu există.');
+  }
 
-      if (cupon.userId !== userId) {
-        return reject(new Error('Acest cupon nu aparține utilizatorului curent.'));
-      }
+  if (cupon.userId !== userId) {
+    throw new Error('Acest cupon nu aparține utilizatorului curent.');
+  }
 
-      if (isCouponExpired(cupon)) {
-        return reject(new Error('Cuponul a expirat.'));
-      }
+  if (isCouponExpired(cupon)) {
+    throw new Error('Cuponul a expirat.');
+  }
 
-      if (isCouponUsed(cupon)) {
-        return reject(new Error('Cuponul a fost deja folosit.'));
-      }
+  if (isCouponUsed(cupon)) {
+    throw new Error('Cuponul a fost deja folosit.');
+  }
 
-      if (isCouponCancelled(cupon)) {
-        return reject(new Error('Cuponul a fost anulat.'));
-      }
+  if (isCouponCancelled(cupon)) {
+    throw new Error('Cuponul a fost anulat.');
+  }
 
-      // Marcăm ca folosit
-      const now = new Date().toISOString();
-      const usedOnOrder = orderDetails.orderId || null;
+  // Marcăm ca folosit
+  const now = new Date().toISOString();
+  const usedOnOrder = orderDetails.orderId || null;
 
-      run(
-        'UPDATE loyalty_coupons SET status = ?, usedAt = ?, usedOnOrder = ? WHERE id = ?',
-        ['used', now, usedOnOrder, cupon.id]
-      );
+  _execute(db,
+    'UPDATE loyalty_coupons SET status = ?, usedAt = ?, usedOnOrder = ? WHERE id = ?',
+    ['used', now, usedOnOrder, cupon.id]
+  );
 
-      // Actualizăm contorul în cont
-      const account = get('SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
-      if (account) {
-        run(
-          'UPDATE loyalty_accounts SET activeCoupons = MAX(0, activeCoupons - 1), updatedAt = ? WHERE userId = ?',
-          [now, userId]
-        );
-      }
+  // Actualizăm contorul în cont
+  const account = _queryOne(db, 'SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
+  if (account) {
+    _execute(db,
+      'UPDATE loyalty_accounts SET activeCoupons = MAX(0, activeCoupons - 1), updatedAt = ? WHERE userId = ?',
+      [now, userId]
+    );
+  }
 
-      const updated = get('SELECT * FROM loyalty_coupons WHERE id = ?', [cupon.id]);
-      resolve(updated);
-    } catch (err) {
-      reject(err);
-    }
-  });
+  const updated = _queryOne(db, 'SELECT * FROM loyalty_coupons WHERE id = ?', [cupon.id]);
+  return updated;
 }
 
 /**
@@ -595,60 +596,55 @@ function useCoupon(code, userId, orderDetails = {}) {
  * @returns {Promise<Object>} Cuponul actualizat
  * @throws {Error} Dacă cuponul nu poate fi anulat
  */
-function cancelCoupon(code, userId) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!isValidCouponCode(code)) {
-        return reject(new Error('Codul cuponului este invalid.'));
-      }
+async function cancelCoupon(code, userId) {
+  if (!isValidCouponCode(code)) {
+    throw new Error('Codul cuponului este invalid.');
+  }
 
-      if (!isValidUserId(userId)) {
-        return reject(new Error('ID-ul utilizatorului este invalid.'));
-      }
+  if (!isValidUserId(userId)) {
+    throw new Error('ID-ul utilizatorului este invalid.');
+  }
 
-      ensureTables();
+  const db = await getDb();
+  ensureTables(db);
 
-      const normalizedCode = code.trim().toUpperCase();
-      const cupon = get('SELECT * FROM loyalty_coupons WHERE UPPER(code) = ?', [normalizedCode]);
+  const normalizedCode = code.trim().toUpperCase();
+  const cupon = _queryOne(db, 'SELECT * FROM loyalty_coupons WHERE UPPER(code) = ?', [normalizedCode]);
 
-      if (!cupon) {
-        return reject(new Error('Cuponul nu există.'));
-      }
+  if (!cupon) {
+    throw new Error('Cuponul nu există.');
+  }
 
-      if (cupon.userId !== userId) {
-        return reject(new Error('Acest cupon nu aparține utilizatorului curent.'));
-      }
+  if (cupon.userId !== userId) {
+    throw new Error('Acest cupon nu aparține utilizatorului curent.');
+  }
 
-      if (cupon.status !== 'active') {
-        return reject(new Error('Doar cupoanele active pot fi anulate.'));
-      }
+  if (cupon.status !== 'active') {
+    throw new Error('Doar cupoanele active pot fi anulate.');
+  }
 
-      if (isCouponExpired(cupon)) {
-        return reject(new Error('Cuponul a expirat deja și nu mai poate fi anulat.'));
-      }
+  if (isCouponExpired(cupon)) {
+    throw new Error('Cuponul a expirat deja și nu mai poate fi anulat.');
+  }
 
-      // Anulăm cuponul
-      run(
-        'UPDATE loyalty_coupons SET status = ? WHERE id = ?',
-        ['cancelled', cupon.id]
-      );
+  // Anulăm cuponul
+  _execute(db,
+    'UPDATE loyalty_coupons SET status = ? WHERE id = ?',
+    ['cancelled', cupon.id]
+  );
 
-      // Restituim punctele
-      const account = get('SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
-      if (account) {
-        const now = new Date().toISOString();
-        run(
-          'UPDATE loyalty_accounts SET totalPoints = totalPoints + ?, activeCoupons = MAX(0, activeCoupons - 1), updatedAt = ? WHERE userId = ?',
-          [cupon.pointsCost, now, userId]
-        );
-      }
+  // Restituim punctele
+  const account = _queryOne(db, 'SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
+  if (account) {
+    const now = new Date().toISOString();
+    _execute(db,
+      'UPDATE loyalty_accounts SET totalPoints = totalPoints + ?, activeCoupons = MAX(0, activeCoupons - 1), updatedAt = ? WHERE userId = ?',
+      [cupon.pointsCost, now, userId]
+    );
+  }
 
-      const updated = get('SELECT * FROM loyalty_coupons WHERE id = ?', [cupon.id]);
-      resolve({ ...updated, pointsRefunded: cupon.pointsCost });
-    } catch (err) {
-      reject(err);
-    }
-  });
+  const updated = _queryOne(db, 'SELECT * FROM loyalty_coupons WHERE id = ?', [cupon.id]);
+  return { ...updated, pointsRefunded: cupon.pointsCost };
 }
 
 /**
@@ -656,26 +652,21 @@ function cancelCoupon(code, userId) {
  * @param {string} userId
  * @returns {Promise<Array>} Lista cupoanelor active
  */
-function getActiveCoupons(userId) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!isValidUserId(userId)) {
-        return reject(new Error('ID-ul utilizatorului este invalid.'));
-      }
+async function getActiveCoupons(userId) {
+  if (!isValidUserId(userId)) {
+    throw new Error('ID-ul utilizatorului este invalid.');
+  }
 
-      ensureTables();
+  const db = await getDb();
+  ensureTables(db);
 
-      const now = new Date().toISOString();
-      const rows = all(
-        'SELECT * FROM loyalty_coupons WHERE userId = ? AND status = ? AND expiresAt > ?',
-        [userId, 'active', now]
-      );
+  const now = new Date().toISOString();
+  const rows = _queryAll(db,
+    'SELECT * FROM loyalty_coupons WHERE userId = ? AND status = ? AND expiresAt > ?',
+    [userId, 'active', now]
+  );
 
-      resolve(rows);
-    } catch (err) {
-      reject(err);
-    }
-  });
+  return rows;
 }
 
 /**

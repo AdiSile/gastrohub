@@ -6,11 +6,11 @@
 // Câmpuri: employeeId, type (checkIn/checkOut), timestamp, locationId,
 //          locationType, note, userId, tenantId, salaryData, createdAt
 //
-// Backend: SQLite (prin run, get, all din config/db).
+// Backend: SQLite (prin db.run() / db.prepare() direct pe instanța din getDb()).
 // Tabele: hr_attendance, hr_salaries
 // ---------------------------------------------------------------------------
 
-const { getDb, run, get, all } = require('../config/db');
+const { getDb } = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
 
 // ---------------------------------------------------------------------------
@@ -47,15 +47,81 @@ function generateId() {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: obține numărul de changes după un db.run()
+// ---------------------------------------------------------------------------
+
+/**
+ * Returnează valoarea changes() după o operație de INSERT/UPDATE/DELETE.
+ * @param {import('sql.js').Database} db
+ * @returns {number}
+ */
+function getChanges(db) {
+  const result = db.exec('SELECT changes() AS cnt');
+  return (result.length > 0 && result[0].values.length > 0) ? result[0].values[0][0] : 0;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: execută un SELECT și returnează primul rând ca obiect
+// ---------------------------------------------------------------------------
+
+/**
+ * Execută o interogare SELECT și returnează primul rând sau null.
+ * @param {import('sql.js').Database} db
+ * @param {string} sql
+ * @param {Array} [params=[]]
+ * @returns {Object|null}
+ */
+function dbGet(db, sql, params = []) {
+  const stmt = db.prepare(sql);
+  if (params.length > 0) {
+    stmt.bind(params);
+  }
+  let row = null;
+  if (stmt.step()) {
+    row = stmt.getAsObject();
+  }
+  stmt.free();
+  return row || null;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: execută un SELECT și returnează toate rândurile
+// ---------------------------------------------------------------------------
+
+/**
+ * Execută o interogare SELECT și returnează toate rândurile ca array.
+ * @param {import('sql.js').Database} db
+ * @param {string} sql
+ * @param {Array} [params=[]]
+ * @returns {Array<Object>}
+ */
+function dbAll(db, sql, params = []) {
+  const stmt = db.prepare(sql);
+  if (params.length > 0) {
+    stmt.bind(params);
+  }
+  const rows = [];
+  while (stmt.step()) {
+    rows.push(stmt.getAsObject());
+  }
+  stmt.free();
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
 // Asigură existența tabelelor (idempotent)
 // ---------------------------------------------------------------------------
 
 let _tablesEnsured = false;
 
-function ensureTables() {
+/**
+ * Creează tabelele hr_attendance și hr_salaries dacă nu există deja.
+ * @param {import('sql.js').Database} db
+ */
+function ensureTables(db) {
   if (_tablesEnsured) return;
 
-  run(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS hr_attendance (
       id           TEXT PRIMARY KEY,
       employeeId   TEXT NOT NULL,
@@ -69,11 +135,11 @@ function ensureTables() {
       createdAt    TEXT DEFAULT (datetime('now'))
     );
   `);
-  run('CREATE INDEX IF NOT EXISTS idx_hr_attendance_employeeId ON hr_attendance(employeeId);');
-  run('CREATE INDEX IF NOT EXISTS idx_hr_attendance_tenantId ON hr_attendance(tenantId);');
-  run('CREATE INDEX IF NOT EXISTS idx_hr_attendance_timestamp ON hr_attendance(timestamp);');
+  db.run('CREATE INDEX IF NOT EXISTS idx_hr_attendance_employeeId ON hr_attendance(employeeId);');
+  db.run('CREATE INDEX IF NOT EXISTS idx_hr_attendance_tenantId ON hr_attendance(tenantId);');
+  db.run('CREATE INDEX IF NOT EXISTS idx_hr_attendance_timestamp ON hr_attendance(timestamp);');
 
-  run(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS hr_salaries (
       id               TEXT PRIMARY KEY,
       employeeId       TEXT NOT NULL,
@@ -92,10 +158,10 @@ function ensureTables() {
       updatedAt        TEXT DEFAULT (datetime('now'))
     );
   `);
-  run('CREATE INDEX IF NOT EXISTS idx_hr_salaries_employeeId ON hr_salaries(employeeId);');
-  run('CREATE INDEX IF NOT EXISTS idx_hr_salaries_tenantId ON hr_salaries(tenantId);');
-  run('CREATE INDEX IF NOT EXISTS idx_hr_salaries_period ON hr_salaries(period);');
-  run('CREATE INDEX IF NOT EXISTS idx_hr_salaries_status ON hr_salaries(status);');
+  db.run('CREATE INDEX IF NOT EXISTS idx_hr_salaries_employeeId ON hr_salaries(employeeId);');
+  db.run('CREATE INDEX IF NOT EXISTS idx_hr_salaries_tenantId ON hr_salaries(tenantId);');
+  db.run('CREATE INDEX IF NOT EXISTS idx_hr_salaries_period ON hr_salaries(period);');
+  db.run('CREATE INDEX IF NOT EXISTS idx_hr_salaries_status ON hr_salaries(status);');
 
   _tablesEnsured = true;
 }
@@ -352,58 +418,57 @@ function validateSalaryData(data) {
  * @returns {Promise<Object>} Documentul de pontaj creat
  * @throws {AppError} Dacă validarea eșuează
  */
-function createAttendanceRecord(attendanceData) {
-  return new Promise((resolve, reject) => {
-    const validationError = validateAttendanceData(attendanceData);
-    if (validationError) {
-      return reject(new AppError(validationError, 400, 'INVALID_ATTENDANCE_DATA'));
-    }
+async function createAttendanceRecord(attendanceData) {
+  const validationError = validateAttendanceData(attendanceData);
+  if (validationError) {
+    throw new AppError(validationError, 400, 'INVALID_ATTENDANCE_DATA');
+  }
 
-    try {
-      ensureTables();
+  try {
+    const db = await getDb();
+    ensureTables(db);
 
-      const {
-        employeeId,
+    const {
+      employeeId,
+      type,
+      timestamp,
+      locationId,
+      locationType,
+      note,
+      userId,
+      tenantId,
+    } = attendanceData;
+
+    const id = generateId();
+    const now = new Date().toISOString();
+
+    db.run(
+      `INSERT INTO hr_attendance
+         (id, employeeId, type, timestamp, locationId, locationType, note, userId, tenantId, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        employeeId.trim(),
         type,
         timestamp,
-        locationId,
-        locationType,
-        note,
-        userId,
-        tenantId,
-      } = attendanceData;
+        locationId ? locationId.trim() : null,
+        locationType || null,
+        note !== undefined ? String(note).trim() : '',
+        userId.trim(),
+        tenantId.trim(),
+        now,
+      ]
+    );
 
-      const id = generateId();
-      const now = new Date().toISOString();
-
-      run(
-        `INSERT INTO hr_attendance
-           (id, employeeId, type, timestamp, locationId, locationType, note, userId, tenantId, createdAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          id,
-          employeeId.trim(),
-          type,
-          timestamp,
-          locationId ? locationId.trim() : null,
-          locationType || null,
-          note !== undefined ? String(note).trim() : '',
-          userId.trim(),
-          tenantId.trim(),
-          now,
-        ]
-      );
-
-      const created = get('SELECT * FROM hr_attendance WHERE id = ?', [id]);
-      resolve(rowToAttendance(created));
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la înregistrarea pontajului: ${err.message}`,
-        500,
-        'DB_INSERT_ERROR'
-      ));
-    }
-  });
+    const created = dbGet(db, 'SELECT * FROM hr_attendance WHERE id = ?', [id]);
+    return rowToAttendance(created);
+  } catch (err) {
+    throw new AppError(
+      `Eroare la înregistrarea pontajului: ${err.message}`,
+      500,
+      'DB_INSERT_ERROR'
+    );
+  }
 }
 
 /**
@@ -411,25 +476,24 @@ function createAttendanceRecord(attendanceData) {
  * @param {string} id - ID-ul SQLite
  * @returns {Promise<Object|null>}
  */
-function findAttendanceById(id) {
-  return new Promise((resolve, reject) => {
-    if (!id || !isValidId(id)) {
-      return reject(new AppError('ID-ul evenimentului de pontaj este invalid.', 400, 'INVALID_ATTENDANCE_ID'));
-    }
+async function findAttendanceById(id) {
+  if (!id || !isValidId(id)) {
+    throw new AppError('ID-ul evenimentului de pontaj este invalid.', 400, 'INVALID_ATTENDANCE_ID');
+  }
 
-    try {
-      ensureTables();
+  try {
+    const db = await getDb();
+    ensureTables(db);
 
-      const row = get('SELECT * FROM hr_attendance WHERE id = ?', [id]);
-      resolve(rowToAttendance(row));
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la căutarea pontajului: ${err.message}`,
-        500,
-        'DB_QUERY_ERROR'
-      ));
-    }
-  });
+    const row = dbGet(db, 'SELECT * FROM hr_attendance WHERE id = ?', [id]);
+    return rowToAttendance(row);
+  } catch (err) {
+    throw new AppError(
+      `Eroare la căutarea pontajului: ${err.message}`,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 /**
@@ -445,62 +509,61 @@ function findAttendanceById(id) {
  * @param {number} [options.skip] - Număr de rezultate de sărit
  * @returns {Promise<Array>}
  */
-function findAttendanceByEmployee(employeeId, options = {}) {
-  return new Promise((resolve, reject) => {
-    if (!employeeId || !isValidId(employeeId)) {
-      return reject(new AppError('ID-ul angajatului este invalid.', 400, 'INVALID_EMPLOYEE_ID'));
+async function findAttendanceByEmployee(employeeId, options = {}) {
+  if (!employeeId || !isValidId(employeeId)) {
+    throw new AppError('ID-ul angajatului este invalid.', 400, 'INVALID_EMPLOYEE_ID');
+  }
+
+  try {
+    const db = await getDb();
+    ensureTables(db);
+
+    const conditions = ['employeeId = ?'];
+    const params = [employeeId.trim()];
+
+    if (options.type && isValidAttendanceType(options.type)) {
+      conditions.push('type = ?');
+      params.push(options.type);
     }
 
-    try {
-      ensureTables();
-
-      const conditions = ['employeeId = ?'];
-      const params = [employeeId.trim()];
-
-      if (options.type && isValidAttendanceType(options.type)) {
-        conditions.push('type = ?');
-        params.push(options.type);
-      }
-
-      if (options.startDate) {
-        conditions.push('timestamp >= ?');
-        params.push(options.startDate);
-      }
-
-      if (options.endDate) {
-        conditions.push('timestamp <= ?');
-        params.push(options.endDate);
-      }
-
-      const whereClause = conditions.join(' AND ');
-
-      const sortField = options.sortBy || 'timestamp';
-      const allowedSortFields = ['timestamp', 'createdAt', 'type', 'employeeId'];
-      const safeSortField = allowedSortFields.includes(sortField) ? sortField : 'timestamp';
-      const sortDir = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
-
-      let sql = `SELECT * FROM hr_attendance WHERE ${whereClause} ORDER BY ${safeSortField} ${sortDir}`;
-
-      if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
-        sql += ' LIMIT ?';
-        params.push(options.limit);
-
-        if (options.skip && Number.isInteger(options.skip) && options.skip >= 0) {
-          sql += ' OFFSET ?';
-          params.push(options.skip);
-        }
-      }
-
-      const rows = all(sql, params);
-      resolve((rows || []).map(rowToAttendance));
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la căutarea pontajelor: ${err.message}`,
-        500,
-        'DB_QUERY_ERROR'
-      ));
+    if (options.startDate) {
+      conditions.push('timestamp >= ?');
+      params.push(options.startDate);
     }
-  });
+
+    if (options.endDate) {
+      conditions.push('timestamp <= ?');
+      params.push(options.endDate);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    const sortField = options.sortBy || 'timestamp';
+    const allowedSortFields = ['timestamp', 'createdAt', 'type', 'employeeId'];
+    const safeSortField = allowedSortFields.includes(sortField) ? sortField : 'timestamp';
+    const sortDir = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
+
+    let sql = `SELECT * FROM hr_attendance WHERE ${whereClause} ORDER BY ${safeSortField} ${sortDir}`;
+
+    if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
+      sql += ' LIMIT ?';
+      params.push(options.limit);
+
+      if (options.skip && Number.isInteger(options.skip) && options.skip >= 0) {
+        sql += ' OFFSET ?';
+        params.push(options.skip);
+      }
+    }
+
+    const rows = dbAll(db, sql, params);
+    return (rows || []).map(rowToAttendance);
+  } catch (err) {
+    throw new AppError(
+      `Eroare la căutarea pontajelor: ${err.message}`,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 /**
@@ -518,72 +581,71 @@ function findAttendanceByEmployee(employeeId, options = {}) {
  * @param {number} [options.skip] - Număr de rezultate de sărit
  * @returns {Promise<Array>}
  */
-function findAttendanceByTenant(tenantId, options = {}) {
-  return new Promise((resolve, reject) => {
-    if (!tenantId || !isValidId(tenantId)) {
-      return reject(new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID'));
+async function findAttendanceByTenant(tenantId, options = {}) {
+  if (!tenantId || !isValidId(tenantId)) {
+    throw new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID');
+  }
+
+  try {
+    const db = await getDb();
+    ensureTables(db);
+
+    const conditions = ['tenantId = ?'];
+    const params = [tenantId.trim()];
+
+    if (options.employeeId && isValidId(options.employeeId)) {
+      conditions.push('employeeId = ?');
+      params.push(options.employeeId.trim());
     }
 
-    try {
-      ensureTables();
-
-      const conditions = ['tenantId = ?'];
-      const params = [tenantId.trim()];
-
-      if (options.employeeId && isValidId(options.employeeId)) {
-        conditions.push('employeeId = ?');
-        params.push(options.employeeId.trim());
-      }
-
-      if (options.type && isValidAttendanceType(options.type)) {
-        conditions.push('type = ?');
-        params.push(options.type);
-      }
-
-      if (options.locationId && isValidId(options.locationId)) {
-        conditions.push('locationId = ?');
-        params.push(options.locationId.trim());
-      }
-
-      if (options.startDate) {
-        conditions.push('timestamp >= ?');
-        params.push(options.startDate);
-      }
-
-      if (options.endDate) {
-        conditions.push('timestamp <= ?');
-        params.push(options.endDate);
-      }
-
-      const whereClause = conditions.join(' AND ');
-
-      const sortField = options.sortBy || 'timestamp';
-      const allowedSortFields = ['timestamp', 'createdAt', 'type', 'employeeId'];
-      const safeSortField = allowedSortFields.includes(sortField) ? sortField : 'timestamp';
-      const sortDir = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
-
-      let sql = `SELECT * FROM hr_attendance WHERE ${whereClause} ORDER BY ${safeSortField} ${sortDir}`;
-
-      if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
-        sql += ' LIMIT ?';
-        params.push(options.limit);
-
-        if (options.skip && Number.isInteger(options.skip) && options.skip >= 0) {
-          sql += ' OFFSET ?';
-          params.push(options.skip);
-        }
-      }
-
-      const rows = all(sql, params);
-      resolve((rows || []).map(rowToAttendance));
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la căutarea pontajelor: ${err.message}`,
-        500,
-        'DB_QUERY_ERROR'
-      ));
+    if (options.type && isValidAttendanceType(options.type)) {
+      conditions.push('type = ?');
+      params.push(options.type);
     }
-  });
+
+    if (options.locationId && isValidId(options.locationId)) {
+      conditions.push('locationId = ?');
+      params.push(options.locationId.trim());
+    }
+
+    if (options.startDate) {
+      conditions.push('timestamp >= ?');
+      params.push(options.startDate);
+    }
+
+    if (options.endDate) {
+      conditions.push('timestamp <= ?');
+      params.push(options.endDate);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    const sortField = options.sortBy || 'timestamp';
+    const allowedSortFields = ['timestamp', 'createdAt', 'type', 'employeeId'];
+    const safeSortField = allowedSortFields.includes(sortField) ? sortField : 'timestamp';
+    const sortDir = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
+
+    let sql = `SELECT * FROM hr_attendance WHERE ${whereClause} ORDER BY ${safeSortField} ${sortDir}`;
+
+    if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
+      sql += ' LIMIT ?';
+      params.push(options.limit);
+
+      if (options.skip && Number.isInteger(options.skip) && options.skip >= 0) {
+        sql += ' OFFSET ?';
+        params.push(options.skip);
+      }
+    }
+
+    const rows = dbAll(db, sql, params);
+    return (rows || []).map(rowToAttendance);
+  } catch (err) {
+    throw new AppError(
+      `Eroare la căutarea pontajelor: ${err.message}`,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 /**
@@ -592,29 +654,29 @@ function findAttendanceByTenant(tenantId, options = {}) {
  * @param {string} employeeId - ID-ul angajatului
  * @returns {Promise<Object|null>} Ultimul eveniment de pontaj sau null
  */
-function findLastAttendanceEvent(employeeId) {
-  return new Promise((resolve, reject) => {
-    if (!employeeId || !isValidId(employeeId)) {
-      return reject(new AppError('ID-ul angajatului este invalid.', 400, 'INVALID_EMPLOYEE_ID'));
-    }
+async function findLastAttendanceEvent(employeeId) {
+  if (!employeeId || !isValidId(employeeId)) {
+    throw new AppError('ID-ul angajatului este invalid.', 400, 'INVALID_EMPLOYEE_ID');
+  }
 
-    try {
-      ensureTables();
+  try {
+    const db = await getDb();
+    ensureTables(db);
 
-      const rows = all(
-        'SELECT * FROM hr_attendance WHERE employeeId = ? ORDER BY timestamp DESC LIMIT 1',
-        [employeeId.trim()]
-      );
+    const rows = dbAll(
+      db,
+      'SELECT * FROM hr_attendance WHERE employeeId = ? ORDER BY timestamp DESC LIMIT 1',
+      [employeeId.trim()]
+    );
 
-      resolve(rows && rows.length > 0 ? rowToAttendance(rows[0]) : null);
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la căutarea ultimului pontaj: ${err.message}`,
-        500,
-        'DB_QUERY_ERROR'
-      ));
-    }
-  });
+    return rows && rows.length > 0 ? rowToAttendance(rows[0]) : null;
+  } catch (err) {
+    throw new AppError(
+      `Eroare la căutarea ultimului pontaj: ${err.message}`,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 /**
@@ -627,54 +689,54 @@ function findLastAttendanceEvent(employeeId) {
  * @param {string} [options.endDate] - Dată de sfârșit
  * @returns {Promise<number>}
  */
-function countAttendance(tenantId, options = {}) {
-  return new Promise((resolve, reject) => {
-    if (!tenantId || !isValidId(tenantId)) {
-      return resolve(0);
+async function countAttendance(tenantId, options = {}) {
+  if (!tenantId || !isValidId(tenantId)) {
+    return 0;
+  }
+
+  try {
+    const db = await getDb();
+    ensureTables(db);
+
+    const conditions = ['tenantId = ?'];
+    const params = [tenantId.trim()];
+
+    if (options.employeeId && isValidId(options.employeeId)) {
+      conditions.push('employeeId = ?');
+      params.push(options.employeeId.trim());
     }
 
-    try {
-      ensureTables();
-
-      const conditions = ['tenantId = ?'];
-      const params = [tenantId.trim()];
-
-      if (options.employeeId && isValidId(options.employeeId)) {
-        conditions.push('employeeId = ?');
-        params.push(options.employeeId.trim());
-      }
-
-      if (options.type && isValidAttendanceType(options.type)) {
-        conditions.push('type = ?');
-        params.push(options.type);
-      }
-
-      if (options.startDate) {
-        conditions.push('timestamp >= ?');
-        params.push(options.startDate);
-      }
-
-      if (options.endDate) {
-        conditions.push('timestamp <= ?');
-        params.push(options.endDate);
-      }
-
-      const whereClause = conditions.join(' AND ');
-
-      const row = get(
-        `SELECT COUNT(*) AS cnt FROM hr_attendance WHERE ${whereClause}`,
-        params
-      );
-
-      resolve(row ? row.cnt : 0);
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la numărarea pontajelor: ${err.message}`,
-        500,
-        'DB_COUNT_ERROR'
-      ));
+    if (options.type && isValidAttendanceType(options.type)) {
+      conditions.push('type = ?');
+      params.push(options.type);
     }
-  });
+
+    if (options.startDate) {
+      conditions.push('timestamp >= ?');
+      params.push(options.startDate);
+    }
+
+    if (options.endDate) {
+      conditions.push('timestamp <= ?');
+      params.push(options.endDate);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    const row = dbGet(
+      db,
+      `SELECT COUNT(*) AS cnt FROM hr_attendance WHERE ${whereClause}`,
+      params
+    );
+
+    return row ? row.cnt : 0;
+  } catch (err) {
+    throw new AppError(
+      `Eroare la numărarea pontajelor: ${err.message}`,
+      500,
+      'DB_COUNT_ERROR'
+    );
+  }
 }
 
 /**
@@ -685,78 +747,78 @@ function countAttendance(tenantId, options = {}) {
  * @param {string} endDate - Dată de sfârșit (ISO string)
  * @returns {Promise<Object>} { totalHours, totalMinutes, totalSeconds, checkIns, checkOuts, pairs }
  */
-function calculateWorkHours(employeeId, startDate, endDate) {
-  return new Promise((resolve, reject) => {
-    if (!employeeId || !isValidId(employeeId)) {
-      return reject(new AppError('ID-ul angajatului este invalid.', 400, 'INVALID_EMPLOYEE_ID'));
-    }
+async function calculateWorkHours(employeeId, startDate, endDate) {
+  if (!employeeId || !isValidId(employeeId)) {
+    throw new AppError('ID-ul angajatului este invalid.', 400, 'INVALID_EMPLOYEE_ID');
+  }
 
-    if (!startDate || !isValidTimestamp(startDate)) {
-      return reject(new AppError('Data de început este invalidă.', 400, 'INVALID_START_DATE'));
-    }
+  if (!startDate || !isValidTimestamp(startDate)) {
+    throw new AppError('Data de început este invalidă.', 400, 'INVALID_START_DATE');
+  }
 
-    if (!endDate || !isValidTimestamp(endDate)) {
-      return reject(new AppError('Data de sfârșit este invalidă.', 400, 'INVALID_END_DATE'));
-    }
+  if (!endDate || !isValidTimestamp(endDate)) {
+    throw new AppError('Data de sfârșit este invalidă.', 400, 'INVALID_END_DATE');
+  }
 
-    try {
-      ensureTables();
+  try {
+    const db = await getDb();
+    ensureTables(db);
 
-      const rows = all(
-        'SELECT * FROM hr_attendance WHERE employeeId = ? AND timestamp >= ? AND timestamp <= ? ORDER BY timestamp ASC',
-        [employeeId.trim(), startDate, endDate]
-      );
+    const rows = dbAll(
+      db,
+      'SELECT * FROM hr_attendance WHERE employeeId = ? AND timestamp >= ? AND timestamp <= ? ORDER BY timestamp ASC',
+      [employeeId.trim(), startDate, endDate]
+    );
 
-      const allRecords = rows || [];
-      const checkIns = allRecords.filter((r) => r.type === 'checkIn');
-      const checkOuts = allRecords.filter((r) => r.type === 'checkOut');
+    const allRecords = rows || [];
+    const checkIns = allRecords.filter((r) => r.type === 'checkIn');
+    const checkOuts = allRecords.filter((r) => r.type === 'checkOut');
 
-      // Formăm perechi check-in -> check-out
-      let totalMilliseconds = 0;
-      const pairs = [];
-      let currentCheckIn = null;
+    // Formăm perechi check-in -> check-out
+    let totalMilliseconds = 0;
+    const pairs = [];
+    let currentCheckIn = null;
 
-      for (const record of allRecords) {
-        if (record.type === 'checkIn' && !currentCheckIn) {
-          currentCheckIn = record;
-        } else if (record.type === 'checkOut' && currentCheckIn) {
-          const checkInTime = new Date(currentCheckIn.timestamp).getTime();
-          const checkOutTime = new Date(record.timestamp).getTime();
-          const duration = checkOutTime - checkInTime;
+    for (const record of allRecords) {
+      if (record.type === 'checkIn' && !currentCheckIn) {
+        currentCheckIn = record;
+      } else if (record.type === 'checkOut' && currentCheckIn) {
+        const checkInTime = new Date(currentCheckIn.timestamp).getTime();
+        const checkOutTime = new Date(record.timestamp).getTime();
+        const duration = checkOutTime - checkInTime;
 
-          if (duration > 0) {
-            totalMilliseconds += duration;
-            pairs.push({
-              checkIn: currentCheckIn.timestamp,
-              checkOut: record.timestamp,
-              durationMs: duration,
-            });
-          }
-
-          currentCheckIn = null;
+        if (duration > 0) {
+          totalMilliseconds += duration;
+          pairs.push({
+            checkIn: currentCheckIn.timestamp,
+            checkOut: record.timestamp,
+            durationMs: duration,
+          });
         }
+
+        currentCheckIn = null;
       }
-
-      const totalSeconds = Math.floor(totalMilliseconds / 1000);
-      const totalMinutes = Math.floor(totalSeconds / 60);
-      const totalHours = Math.round((totalMinutes / 60) * 100) / 100;
-
-      resolve({
-        totalHours,
-        totalMinutes,
-        totalSeconds,
-        checkIns: checkIns.length,
-        checkOuts: checkOuts.length,
-        pairs: pairs.length,
-      });
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la calcularea orelor lucrate: ${err.message}`,
-        500,
-        'DB_QUERY_ERROR'
-      ));
     }
-  });
+
+    const totalSeconds = Math.floor(totalMilliseconds / 1000);
+    const totalMinutes = Math.floor(totalSeconds / 60);
+    const totalHours = Math.round((totalMinutes / 60) * 100) / 100;
+
+    return {
+      totalHours,
+      totalMinutes,
+      totalSeconds,
+      checkIns: checkIns.length,
+      checkOuts: checkOuts.length,
+      pairs: pairs.length,
+    };
+  } catch (err) {
+    throw new AppError(
+      `Eroare la calcularea orelor lucrate: ${err.message}`,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 /**
@@ -764,30 +826,31 @@ function calculateWorkHours(employeeId, startDate, endDate) {
  * @param {string} id - ID-ul evenimentului
  * @returns {Promise<boolean>} true dacă a fost șters
  */
-function deleteAttendanceRecord(id) {
-  return new Promise((resolve, reject) => {
-    if (!id || !isValidId(id)) {
-      return reject(new AppError('ID-ul evenimentului de pontaj este invalid.', 400, 'INVALID_ATTENDANCE_ID'));
+async function deleteAttendanceRecord(id) {
+  if (!id || !isValidId(id)) {
+    throw new AppError('ID-ul evenimentului de pontaj este invalid.', 400, 'INVALID_ATTENDANCE_ID');
+  }
+
+  try {
+    const db = await getDb();
+    ensureTables(db);
+
+    db.run('DELETE FROM hr_attendance WHERE id = ?', [id]);
+    const changes = getChanges(db);
+
+    if (changes === 0) {
+      throw new AppError('Evenimentul de pontaj nu a fost găsit.', 404, 'ATTENDANCE_NOT_FOUND');
     }
 
-    try {
-      ensureTables();
-
-      const result = run('DELETE FROM hr_attendance WHERE id = ?', [id]);
-
-      if (result.changes === 0) {
-        return reject(new AppError('Evenimentul de pontaj nu a fost găsit.', 404, 'ATTENDANCE_NOT_FOUND'));
-      }
-
-      resolve(true);
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la ștergerea pontajului: ${err.message}`,
-        500,
-        'DB_DELETE_ERROR'
-      ));
-    }
-  });
+    return true;
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    throw new AppError(
+      `Eroare la ștergerea pontajului: ${err.message}`,
+      500,
+      'DB_DELETE_ERROR'
+    );
+  }
 }
 
 /**
@@ -795,25 +858,24 @@ function deleteAttendanceRecord(id) {
  * @param {string} employeeId - ID-ul angajatului
  * @returns {Promise<number>} Numărul de înregistrări șterse
  */
-function deleteAttendanceByEmployee(employeeId) {
-  return new Promise((resolve, reject) => {
-    if (!employeeId || !isValidId(employeeId)) {
-      return reject(new AppError('ID-ul angajatului este invalid.', 400, 'INVALID_EMPLOYEE_ID'));
-    }
+async function deleteAttendanceByEmployee(employeeId) {
+  if (!employeeId || !isValidId(employeeId)) {
+    throw new AppError('ID-ul angajatului este invalid.', 400, 'INVALID_EMPLOYEE_ID');
+  }
 
-    try {
-      ensureTables();
+  try {
+    const db = await getDb();
+    ensureTables(db);
 
-      const result = run('DELETE FROM hr_attendance WHERE employeeId = ?', [employeeId.trim()]);
-      resolve(result.changes || 0);
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la ștergerea pontajelor: ${err.message}`,
-        500,
-        'DB_DELETE_ERROR'
-      ));
-    }
-  });
+    db.run('DELETE FROM hr_attendance WHERE employeeId = ?', [employeeId.trim()]);
+    return getChanges(db);
+  } catch (err) {
+    throw new AppError(
+      `Eroare la ștergerea pontajelor: ${err.message}`,
+      500,
+      'DB_DELETE_ERROR'
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -836,68 +898,67 @@ function deleteAttendanceByEmployee(employeeId) {
  * @returns {Promise<Object>} Documentul salarial creat
  * @throws {AppError} Dacă validarea eșuează
  */
-function createSalaryRecord(salaryData) {
-  return new Promise((resolve, reject) => {
-    const validationError = validateSalaryData(salaryData);
-    if (validationError) {
-      return reject(new AppError(validationError, 400, 'INVALID_SALARY_DATA'));
-    }
+async function createSalaryRecord(salaryData) {
+  const validationError = validateSalaryData(salaryData);
+  if (validationError) {
+    throw new AppError(validationError, 400, 'INVALID_SALARY_DATA');
+  }
 
-    try {
-      ensureTables();
+  try {
+    const db = await getDb();
+    ensureTables(db);
 
-      const {
-        employeeId,
-        grossAmount,
-        currency,
-        period,
-        paymentFrequency,
-        status,
-        deductions,
-        bonuses,
-        netAmount,
-        note,
-        userId,
-        tenantId,
-      } = salaryData;
+    const {
+      employeeId,
+      grossAmount,
+      currency,
+      period,
+      paymentFrequency,
+      status,
+      deductions,
+      bonuses,
+      netAmount,
+      note,
+      userId,
+      tenantId,
+    } = salaryData;
 
-      const id = generateId();
-      const now = new Date().toISOString();
+    const id = generateId();
+    const now = new Date().toISOString();
 
-      run(
-        `INSERT INTO hr_salaries
-           (id, employeeId, grossAmount, currency, period, paymentFrequency, status,
-            deductions, bonuses, netAmount, note, userId, tenantId, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          id,
-          employeeId.trim(),
-          grossAmount !== undefined ? grossAmount : null,
-          currency || 'RON',
-          period || null,
-          paymentFrequency || 'lunar',
-          (status && isValidSalaryStatus(status)) ? status : 'necalculat',
-          isPositiveNumber(deductions) ? deductions : 0,
-          isPositiveNumber(bonuses) ? bonuses : 0,
-          isNonNegativeNumber(netAmount) ? netAmount : null,
-          note !== undefined ? String(note).trim() : '',
-          userId ? userId.trim() : null,
-          tenantId.trim(),
-          now,
-          now,
-        ]
-      );
+    db.run(
+      `INSERT INTO hr_salaries
+         (id, employeeId, grossAmount, currency, period, paymentFrequency, status,
+          deductions, bonuses, netAmount, note, userId, tenantId, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        employeeId.trim(),
+        grossAmount !== undefined ? grossAmount : null,
+        currency || 'RON',
+        period || null,
+        paymentFrequency || 'lunar',
+        (status && isValidSalaryStatus(status)) ? status : 'necalculat',
+        isPositiveNumber(deductions) ? deductions : 0,
+        isPositiveNumber(bonuses) ? bonuses : 0,
+        isNonNegativeNumber(netAmount) ? netAmount : null,
+        note !== undefined ? String(note).trim() : '',
+        userId ? userId.trim() : null,
+        tenantId.trim(),
+        now,
+        now,
+      ]
+    );
 
-      const created = get('SELECT * FROM hr_salaries WHERE id = ?', [id]);
-      resolve(rowToSalary(created));
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la crearea înregistrării salariale: ${err.message}`,
-        500,
-        'DB_INSERT_ERROR'
-      ));
-    }
-  });
+    const created = dbGet(db, 'SELECT * FROM hr_salaries WHERE id = ?', [id]);
+    return rowToSalary(created);
+  } catch (err) {
+    throw new AppError(
+      `Eroare la crearea înregistrării salariale: ${err.message}`,
+      500,
+      'DB_INSERT_ERROR'
+    );
+  }
 }
 
 /**
@@ -905,25 +966,24 @@ function createSalaryRecord(salaryData) {
  * @param {string} id - ID-ul SQLite
  * @returns {Promise<Object|null>}
  */
-function findSalaryById(id) {
-  return new Promise((resolve, reject) => {
-    if (!id || !isValidId(id)) {
-      return reject(new AppError('ID-ul înregistrării salariale este invalid.', 400, 'INVALID_SALARY_ID'));
-    }
+async function findSalaryById(id) {
+  if (!id || !isValidId(id)) {
+    throw new AppError('ID-ul înregistrării salariale este invalid.', 400, 'INVALID_SALARY_ID');
+  }
 
-    try {
-      ensureTables();
+  try {
+    const db = await getDb();
+    ensureTables(db);
 
-      const row = get('SELECT * FROM hr_salaries WHERE id = ?', [id]);
-      resolve(rowToSalary(row));
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la căutarea salariului: ${err.message}`,
-        500,
-        'DB_QUERY_ERROR'
-      ));
-    }
-  });
+    const row = dbGet(db, 'SELECT * FROM hr_salaries WHERE id = ?', [id]);
+    return rowToSalary(row);
+  } catch (err) {
+    throw new AppError(
+      `Eroare la căutarea salariului: ${err.message}`,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 /**
@@ -937,52 +997,51 @@ function findSalaryById(id) {
  * @param {number} [options.limit] - Număr maxim de rezultate
  * @returns {Promise<Array>}
  */
-function findSalariesByEmployee(employeeId, options = {}) {
-  return new Promise((resolve, reject) => {
-    if (!employeeId || !isValidId(employeeId)) {
-      return reject(new AppError('ID-ul angajatului este invalid.', 400, 'INVALID_EMPLOYEE_ID'));
+async function findSalariesByEmployee(employeeId, options = {}) {
+  if (!employeeId || !isValidId(employeeId)) {
+    throw new AppError('ID-ul angajatului este invalid.', 400, 'INVALID_EMPLOYEE_ID');
+  }
+
+  try {
+    const db = await getDb();
+    ensureTables(db);
+
+    const conditions = ['employeeId = ?'];
+    const params = [employeeId.trim()];
+
+    if (options.period) {
+      conditions.push('period = ?');
+      params.push(options.period);
     }
 
-    try {
-      ensureTables();
-
-      const conditions = ['employeeId = ?'];
-      const params = [employeeId.trim()];
-
-      if (options.period) {
-        conditions.push('period = ?');
-        params.push(options.period);
-      }
-
-      if (options.status && isValidSalaryStatus(options.status)) {
-        conditions.push('status = ?');
-        params.push(options.status);
-      }
-
-      const whereClause = conditions.join(' AND ');
-
-      const sortField = options.sortBy || 'createdAt';
-      const allowedSortFields = ['createdAt', 'updatedAt', 'period', 'grossAmount', 'status'];
-      const safeSortField = allowedSortFields.includes(sortField) ? sortField : 'createdAt';
-      const sortDir = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
-
-      let sql = `SELECT * FROM hr_salaries WHERE ${whereClause} ORDER BY ${safeSortField} ${sortDir}`;
-
-      if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
-        sql += ' LIMIT ?';
-        params.push(options.limit);
-      }
-
-      const rows = all(sql, params);
-      resolve((rows || []).map(rowToSalary));
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la căutarea salariilor: ${err.message}`,
-        500,
-        'DB_QUERY_ERROR'
-      ));
+    if (options.status && isValidSalaryStatus(options.status)) {
+      conditions.push('status = ?');
+      params.push(options.status);
     }
-  });
+
+    const whereClause = conditions.join(' AND ');
+
+    const sortField = options.sortBy || 'createdAt';
+    const allowedSortFields = ['createdAt', 'updatedAt', 'period', 'grossAmount', 'status'];
+    const safeSortField = allowedSortFields.includes(sortField) ? sortField : 'createdAt';
+    const sortDir = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
+
+    let sql = `SELECT * FROM hr_salaries WHERE ${whereClause} ORDER BY ${safeSortField} ${sortDir}`;
+
+    if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
+      sql += ' LIMIT ?';
+      params.push(options.limit);
+    }
+
+    const rows = dbAll(db, sql, params);
+    return (rows || []).map(rowToSalary);
+  } catch (err) {
+    throw new AppError(
+      `Eroare la căutarea salariilor: ${err.message}`,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 /**
@@ -998,62 +1057,61 @@ function findSalariesByEmployee(employeeId, options = {}) {
  * @param {number} [options.skip] - Număr de rezultate de sărit
  * @returns {Promise<Array>}
  */
-function findSalariesByTenant(tenantId, options = {}) {
-  return new Promise((resolve, reject) => {
-    if (!tenantId || !isValidId(tenantId)) {
-      return reject(new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID'));
+async function findSalariesByTenant(tenantId, options = {}) {
+  if (!tenantId || !isValidId(tenantId)) {
+    throw new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID');
+  }
+
+  try {
+    const db = await getDb();
+    ensureTables(db);
+
+    const conditions = ['tenantId = ?'];
+    const params = [tenantId.trim()];
+
+    if (options.employeeId && isValidId(options.employeeId)) {
+      conditions.push('employeeId = ?');
+      params.push(options.employeeId.trim());
     }
 
-    try {
-      ensureTables();
-
-      const conditions = ['tenantId = ?'];
-      const params = [tenantId.trim()];
-
-      if (options.employeeId && isValidId(options.employeeId)) {
-        conditions.push('employeeId = ?');
-        params.push(options.employeeId.trim());
-      }
-
-      if (options.period) {
-        conditions.push('period = ?');
-        params.push(options.period);
-      }
-
-      if (options.status && isValidSalaryStatus(options.status)) {
-        conditions.push('status = ?');
-        params.push(options.status);
-      }
-
-      const whereClause = conditions.join(' AND ');
-
-      const sortField = options.sortBy || 'createdAt';
-      const allowedSortFields = ['createdAt', 'updatedAt', 'period', 'grossAmount', 'status'];
-      const safeSortField = allowedSortFields.includes(sortField) ? sortField : 'createdAt';
-      const sortDir = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
-
-      let sql = `SELECT * FROM hr_salaries WHERE ${whereClause} ORDER BY ${safeSortField} ${sortDir}`;
-
-      if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
-        sql += ' LIMIT ?';
-        params.push(options.limit);
-
-        if (options.skip && Number.isInteger(options.skip) && options.skip >= 0) {
-          sql += ' OFFSET ?';
-          params.push(options.skip);
-        }
-      }
-
-      const rows = all(sql, params);
-      resolve((rows || []).map(rowToSalary));
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la căutarea salariilor: ${err.message}`,
-        500,
-        'DB_QUERY_ERROR'
-      ));
+    if (options.period) {
+      conditions.push('period = ?');
+      params.push(options.period);
     }
-  });
+
+    if (options.status && isValidSalaryStatus(options.status)) {
+      conditions.push('status = ?');
+      params.push(options.status);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    const sortField = options.sortBy || 'createdAt';
+    const allowedSortFields = ['createdAt', 'updatedAt', 'period', 'grossAmount', 'status'];
+    const safeSortField = allowedSortFields.includes(sortField) ? sortField : 'createdAt';
+    const sortDir = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
+
+    let sql = `SELECT * FROM hr_salaries WHERE ${whereClause} ORDER BY ${safeSortField} ${sortDir}`;
+
+    if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
+      sql += ' LIMIT ?';
+      params.push(options.limit);
+
+      if (options.skip && Number.isInteger(options.skip) && options.skip >= 0) {
+        sql += ' OFFSET ?';
+        params.push(options.skip);
+      }
+    }
+
+    const rows = dbAll(db, sql, params);
+    return (rows || []).map(rowToSalary);
+  } catch (err) {
+    throw new AppError(
+      `Eroare la căutarea salariilor: ${err.message}`,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 /**
@@ -1062,159 +1120,161 @@ function findSalariesByTenant(tenantId, options = {}) {
  * @param {Object} updateData - Câmpurile de actualizat
  * @returns {Promise<Object>} Documentul actualizat
  */
-function updateSalaryRecord(id, updateData) {
-  return new Promise((resolve, reject) => {
-    if (!id || !isValidId(id)) {
-      return reject(new AppError('ID-ul înregistrării salariale este invalid.', 400, 'INVALID_SALARY_ID'));
+async function updateSalaryRecord(id, updateData) {
+  if (!id || !isValidId(id)) {
+    throw new AppError('ID-ul înregistrării salariale este invalid.', 400, 'INVALID_SALARY_ID');
+  }
+
+  if (!updateData || typeof updateData !== 'object' || Object.keys(updateData).length === 0) {
+    throw new AppError('Nu există date de actualizat.', 400, 'NO_UPDATE_DATA');
+  }
+
+  // Câmpuri permise pentru actualizare
+  const allowedFields = [
+    'grossAmount',
+    'currency',
+    'period',
+    'paymentFrequency',
+    'status',
+    'deductions',
+    'bonuses',
+    'netAmount',
+    'note',
+  ];
+
+  const setClauses = [];
+  const params = [];
+  const errors = [];
+
+  for (const [field, value] of Object.entries(updateData)) {
+    if (!allowedFields.includes(field)) {
+      continue;
     }
 
-    if (!updateData || typeof updateData !== 'object' || Object.keys(updateData).length === 0) {
-      return reject(new AppError('Nu există date de actualizat.', 400, 'NO_UPDATE_DATA'));
+    switch (field) {
+      case 'grossAmount':
+        if (value !== null && !isPositiveNumber(value)) {
+          errors.push('Salariul brut trebuie să fie un număr mai mare decât 0.');
+        } else {
+          setClauses.push('grossAmount = ?');
+          params.push(value);
+        }
+        break;
+
+      case 'currency':
+        if (!isValidCurrency(value)) {
+          errors.push(`Moneda "${value}" nu este validă. Monede acceptate: ${VALID_CURRENCIES.join(', ')}.`);
+        } else {
+          setClauses.push('currency = ?');
+          params.push(value);
+        }
+        break;
+
+      case 'period':
+        if (typeof value !== 'string' || value.trim().length === 0) {
+          errors.push('Perioada salarială trebuie să fie un șir nevid.');
+        } else {
+          setClauses.push('period = ?');
+          params.push(value.trim());
+        }
+        break;
+
+      case 'paymentFrequency':
+        if (!isValidPaymentFrequency(value)) {
+          errors.push(`Frecvența de plată "${value}" nu este validă.`);
+        } else {
+          setClauses.push('paymentFrequency = ?');
+          params.push(value);
+        }
+        break;
+
+      case 'status':
+        if (!isValidSalaryStatus(value)) {
+          errors.push(`Statusul "${value}" nu este valid. Statusuri acceptate: ${VALID_SALARY_STATUS.join(', ')}.`);
+        } else {
+          setClauses.push('status = ?');
+          params.push(value);
+        }
+        break;
+
+      case 'deductions':
+        if (!isNonNegativeNumber(value)) {
+          errors.push('Deducerile trebuie să fie un număr nenegativ.');
+        } else {
+          setClauses.push('deductions = ?');
+          params.push(value);
+        }
+        break;
+
+      case 'bonuses':
+        if (!isNonNegativeNumber(value)) {
+          errors.push('Bonusurile trebuie să fie un număr nenegativ.');
+        } else {
+          setClauses.push('bonuses = ?');
+          params.push(value);
+        }
+        break;
+
+      case 'netAmount':
+        if (value !== null && !isNonNegativeNumber(value)) {
+          errors.push('Salariul net trebuie să fie un număr nenegativ.');
+        } else {
+          setClauses.push('netAmount = ?');
+          params.push(value);
+        }
+        break;
+
+      case 'note':
+        setClauses.push('note = ?');
+        params.push(typeof value === 'string' ? value.trim() : String(value).trim());
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new AppError(errors.join(' '), 400, 'VALIDATION_ERROR');
+  }
+
+  if (setClauses.length === 0) {
+    throw new AppError('Niciun câmp valid de actualizat.', 400, 'NO_VALID_FIELDS');
+  }
+
+  // Adăugăm updatedAt
+  const now = new Date().toISOString();
+  setClauses.push('updatedAt = ?');
+  params.push(now);
+
+  // Adăugăm id-ul la final
+  params.push(id);
+
+  try {
+    const db = await getDb();
+    ensureTables(db);
+
+    db.run(
+      `UPDATE hr_salaries SET ${setClauses.join(', ')} WHERE id = ?`,
+      params
+    );
+
+    const changes = getChanges(db);
+
+    if (changes === 0) {
+      throw new AppError('Înregistrarea salarială nu a fost găsită.', 404, 'SALARY_NOT_FOUND');
     }
 
-    // Câmpuri permise pentru actualizare
-    const allowedFields = [
-      'grossAmount',
-      'currency',
-      'period',
-      'paymentFrequency',
-      'status',
-      'deductions',
-      'bonuses',
-      'netAmount',
-      'note',
-    ];
-
-    const setClauses = [];
-    const params = [];
-    const errors = [];
-
-    for (const [field, value] of Object.entries(updateData)) {
-      if (!allowedFields.includes(field)) {
-        continue;
-      }
-
-      switch (field) {
-        case 'grossAmount':
-          if (value !== null && !isPositiveNumber(value)) {
-            errors.push('Salariul brut trebuie să fie un număr mai mare decât 0.');
-          } else {
-            setClauses.push('grossAmount = ?');
-            params.push(value);
-          }
-          break;
-
-        case 'currency':
-          if (!isValidCurrency(value)) {
-            errors.push(`Moneda "${value}" nu este validă. Monede acceptate: ${VALID_CURRENCIES.join(', ')}.`);
-          } else {
-            setClauses.push('currency = ?');
-            params.push(value);
-          }
-          break;
-
-        case 'period':
-          if (typeof value !== 'string' || value.trim().length === 0) {
-            errors.push('Perioada salarială trebuie să fie un șir nevid.');
-          } else {
-            setClauses.push('period = ?');
-            params.push(value.trim());
-          }
-          break;
-
-        case 'paymentFrequency':
-          if (!isValidPaymentFrequency(value)) {
-            errors.push(`Frecvența de plată "${value}" nu este validă.`);
-          } else {
-            setClauses.push('paymentFrequency = ?');
-            params.push(value);
-          }
-          break;
-
-        case 'status':
-          if (!isValidSalaryStatus(value)) {
-            errors.push(`Statusul "${value}" nu este valid. Statusuri acceptate: ${VALID_SALARY_STATUS.join(', ')}.`);
-          } else {
-            setClauses.push('status = ?');
-            params.push(value);
-          }
-          break;
-
-        case 'deductions':
-          if (!isNonNegativeNumber(value)) {
-            errors.push('Deducerile trebuie să fie un număr nenegativ.');
-          } else {
-            setClauses.push('deductions = ?');
-            params.push(value);
-          }
-          break;
-
-        case 'bonuses':
-          if (!isNonNegativeNumber(value)) {
-            errors.push('Bonusurile trebuie să fie un număr nenegativ.');
-          } else {
-            setClauses.push('bonuses = ?');
-            params.push(value);
-          }
-          break;
-
-        case 'netAmount':
-          if (value !== null && !isNonNegativeNumber(value)) {
-            errors.push('Salariul net trebuie să fie un număr nenegativ.');
-          } else {
-            setClauses.push('netAmount = ?');
-            params.push(value);
-          }
-          break;
-
-        case 'note':
-          setClauses.push('note = ?');
-          params.push(typeof value === 'string' ? value.trim() : String(value).trim());
-          break;
-
-        default:
-          break;
-      }
-    }
-
-    if (errors.length > 0) {
-      return reject(new AppError(errors.join(' '), 400, 'VALIDATION_ERROR'));
-    }
-
-    if (setClauses.length === 0) {
-      return reject(new AppError('Niciun câmp valid de actualizat.', 400, 'NO_VALID_FIELDS'));
-    }
-
-    // Adăugăm updatedAt
-    const now = new Date().toISOString();
-    setClauses.push('updatedAt = ?');
-    params.push(now);
-
-    // Adăugăm id-ul la final
-    params.push(id);
-
-    try {
-      ensureTables();
-
-      const result = run(
-        `UPDATE hr_salaries SET ${setClauses.join(', ')} WHERE id = ?`,
-        params
-      );
-
-      if (result.changes === 0) {
-        return reject(new AppError('Înregistrarea salarială nu a fost găsită.', 404, 'SALARY_NOT_FOUND'));
-      }
-
-      const updated = get('SELECT * FROM hr_salaries WHERE id = ?', [id]);
-      resolve(rowToSalary(updated));
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la actualizarea salariului: ${err.message}`,
-        500,
-        'DB_UPDATE_ERROR'
-      ));
-    }
-  });
+    const updated = dbGet(db, 'SELECT * FROM hr_salaries WHERE id = ?', [id]);
+    return rowToSalary(updated);
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    throw new AppError(
+      `Eroare la actualizarea salariului: ${err.message}`,
+      500,
+      'DB_UPDATE_ERROR'
+    );
+  }
 }
 
 /**
@@ -1222,30 +1282,31 @@ function updateSalaryRecord(id, updateData) {
  * @param {string} id - ID-ul înregistrării
  * @returns {Promise<boolean>} true dacă a fost șters
  */
-function deleteSalaryRecord(id) {
-  return new Promise((resolve, reject) => {
-    if (!id || !isValidId(id)) {
-      return reject(new AppError('ID-ul înregistrării salariale este invalid.', 400, 'INVALID_SALARY_ID'));
+async function deleteSalaryRecord(id) {
+  if (!id || !isValidId(id)) {
+    throw new AppError('ID-ul înregistrării salariale este invalid.', 400, 'INVALID_SALARY_ID');
+  }
+
+  try {
+    const db = await getDb();
+    ensureTables(db);
+
+    db.run('DELETE FROM hr_salaries WHERE id = ?', [id]);
+    const changes = getChanges(db);
+
+    if (changes === 0) {
+      throw new AppError('Înregistrarea salarială nu a fost găsită.', 404, 'SALARY_NOT_FOUND');
     }
 
-    try {
-      ensureTables();
-
-      const result = run('DELETE FROM hr_salaries WHERE id = ?', [id]);
-
-      if (result.changes === 0) {
-        return reject(new AppError('Înregistrarea salarială nu a fost găsită.', 404, 'SALARY_NOT_FOUND'));
-      }
-
-      resolve(true);
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la ștergerea salariului: ${err.message}`,
-        500,
-        'DB_DELETE_ERROR'
-      ));
-    }
-  });
+    return true;
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    throw new AppError(
+      `Eroare la ștergerea salariului: ${err.message}`,
+      500,
+      'DB_DELETE_ERROR'
+    );
+  }
 }
 
 /**
@@ -1257,49 +1318,49 @@ function deleteSalaryRecord(id) {
  * @param {string} [options.status] - Filtrare după status
  * @returns {Promise<number>}
  */
-function countSalaries(tenantId, options = {}) {
-  return new Promise((resolve, reject) => {
-    if (!tenantId || !isValidId(tenantId)) {
-      return resolve(0);
+async function countSalaries(tenantId, options = {}) {
+  if (!tenantId || !isValidId(tenantId)) {
+    return 0;
+  }
+
+  try {
+    const db = await getDb();
+    ensureTables(db);
+
+    const conditions = ['tenantId = ?'];
+    const params = [tenantId.trim()];
+
+    if (options.employeeId && isValidId(options.employeeId)) {
+      conditions.push('employeeId = ?');
+      params.push(options.employeeId.trim());
     }
 
-    try {
-      ensureTables();
-
-      const conditions = ['tenantId = ?'];
-      const params = [tenantId.trim()];
-
-      if (options.employeeId && isValidId(options.employeeId)) {
-        conditions.push('employeeId = ?');
-        params.push(options.employeeId.trim());
-      }
-
-      if (options.period) {
-        conditions.push('period = ?');
-        params.push(options.period);
-      }
-
-      if (options.status && isValidSalaryStatus(options.status)) {
-        conditions.push('status = ?');
-        params.push(options.status);
-      }
-
-      const whereClause = conditions.join(' AND ');
-
-      const row = get(
-        `SELECT COUNT(*) AS cnt FROM hr_salaries WHERE ${whereClause}`,
-        params
-      );
-
-      resolve(row ? row.cnt : 0);
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la numărarea salariilor: ${err.message}`,
-        500,
-        'DB_COUNT_ERROR'
-      ));
+    if (options.period) {
+      conditions.push('period = ?');
+      params.push(options.period);
     }
-  });
+
+    if (options.status && isValidSalaryStatus(options.status)) {
+      conditions.push('status = ?');
+      params.push(options.status);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    const row = dbGet(
+      db,
+      `SELECT COUNT(*) AS cnt FROM hr_salaries WHERE ${whereClause}`,
+      params
+    );
+
+    return row ? row.cnt : 0;
+  } catch (err) {
+    throw new AppError(
+      `Eroare la numărarea salariilor: ${err.message}`,
+      500,
+      'DB_COUNT_ERROR'
+    );
+  }
 }
 
 /**

@@ -7,7 +7,7 @@
 // Tabela: inventory_items
 // ---------------------------------------------------------------------------
 
-const { getDb, get, all, run } = require('../config/db');
+const { getDb } = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
 
 // ---------------------------------------------------------------------------
@@ -303,7 +303,7 @@ function createInventoryItem(itemData) {
     const db = getDb();
 
     // Verificare duplicat: același nume + tenantId + location
-    const existing = get(
+    const existing = db.get(
       'SELECT id FROM inventory_items WHERE name = ? AND tenantId = ? AND location = ?',
       [trimmedName, tenantId, locationValue]
     );
@@ -319,7 +319,7 @@ function createInventoryItem(itemData) {
     // Creare înregistrare
     const now = new Date().toISOString();
 
-    const result = run(
+    const result = db.run(
       'INSERT INTO inventory_items (name, category, quantity, unit, minQuantity, location, supplierId, tenantId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [trimmedName, category, quantity, unit, finalThreshold, locationValue, finalSupplierId, tenantId, now, now]
     );
@@ -327,7 +327,7 @@ function createInventoryItem(itemData) {
     const newId = result.lastInsertRowid;
 
     // Returnăm obiectul creat
-    const created = get(
+    const created = db.get(
       'SELECT id AS _id, name, category, quantity, unit, minQuantity AS minThreshold, location, supplierId, tenantId, createdAt, updatedAt FROM inventory_items WHERE id = ?',
       [newId]
     );
@@ -355,7 +355,7 @@ function findInventoryItemById(id) {
   try {
     const db = getDb();
 
-    const row = get(
+    const row = db.get(
       'SELECT id AS _id, name, category, quantity, unit, minQuantity AS minThreshold, location, supplierId, tenantId, createdAt, updatedAt FROM inventory_items WHERE id = ?',
       [id]
     );
@@ -438,7 +438,7 @@ function findInventoryItemsByTenant(tenantId, options) {
 
     const whereClause = conditions.join(' AND ');
 
-    const rows = all(
+    const rows = db.all(
       'SELECT id AS _id, name, category, quantity, unit, minQuantity AS minThreshold, location, supplierId, tenantId, createdAt, updatedAt FROM inventory_items WHERE ' + whereClause + ' ORDER BY ' + sortColumn + ' ' + sortDir,
       params
     );
@@ -477,7 +477,7 @@ function findInventoryItemsByLocation(locationId, locationType) {
 
     const locationValue = buildLocationValue(locationType, locationId);
 
-    const rows = all(
+    const rows = db.all(
       'SELECT id AS _id, name, category, quantity, unit, minQuantity AS minThreshold, location, supplierId, tenantId, createdAt, updatedAt FROM inventory_items WHERE location = ? ORDER BY name ASC',
       [locationValue]
     );
@@ -505,7 +505,7 @@ function findLowStockItems(tenantId) {
   try {
     const db = getDb();
 
-    const rows = all(
+    const rows = db.all(
       'SELECT id AS _id, name, category, quantity, unit, minQuantity AS minThreshold, location, supplierId, tenantId, createdAt, updatedAt FROM inventory_items WHERE tenantId = ? AND quantity < minQuantity ORDER BY name ASC',
       [tenantId]
     );
@@ -543,7 +543,7 @@ function updateQuantity(id, newQuantity) {
     const db = getDb();
     const now = new Date().toISOString();
 
-    const result = run(
+    const result = db.run(
       'UPDATE inventory_items SET quantity = ?, updatedAt = ? WHERE id = ?',
       [newQuantity, now, id]
     );
@@ -552,7 +552,7 @@ function updateQuantity(id, newQuantity) {
       return Promise.reject(new AppError('Itemul de inventar nu a fost găsit.', 404, 'ITEM_NOT_FOUND'));
     }
 
-    const updated = get(
+    const updated = db.get(
       'SELECT id AS _id, name, category, quantity, unit, minQuantity AS minThreshold, location, supplierId, tenantId, createdAt, updatedAt FROM inventory_items WHERE id = ?',
       [id]
     );
@@ -590,7 +590,7 @@ function adjustQuantity(id, delta) {
     const db = getDb();
 
     // Căutăm itemul existent
-    const item = get(
+    const item = db.get(
       'SELECT id, quantity FROM inventory_items WHERE id = ?',
       [id]
     );
@@ -611,7 +611,7 @@ function adjustQuantity(id, delta) {
 
     const now = new Date().toISOString();
 
-    const result = run(
+    const result = db.run(
       'UPDATE inventory_items SET quantity = ?, updatedAt = ? WHERE id = ?',
       [newQuantity, now, id]
     );
@@ -620,7 +620,7 @@ function adjustQuantity(id, delta) {
       return Promise.reject(new AppError('Itemul de inventar nu a fost găsit.', 404, 'ITEM_NOT_FOUND'));
     }
 
-    const updated = get(
+    const updated = db.get(
       'SELECT id AS _id, name, category, quantity, unit, minQuantity AS minThreshold, location, supplierId, tenantId, createdAt, updatedAt FROM inventory_items WHERE id = ?',
       [id]
     );
@@ -737,7 +737,7 @@ function updateInventoryItem(id, updateData) {
   try {
     const db = getDb();
 
-    const result = run(
+    const result = db.run(
       'UPDATE inventory_items SET ' + setClauses.join(', ') + ' WHERE id = ?',
       params
     );
@@ -746,7 +746,7 @@ function updateInventoryItem(id, updateData) {
       return Promise.reject(new AppError('Itemul de inventar nu a fost găsit.', 404, 'ITEM_NOT_FOUND'));
     }
 
-    const updated = get(
+    const updated = db.get(
       'SELECT id AS _id, name, category, quantity, unit, minQuantity AS minThreshold, location, supplierId, tenantId, createdAt, updatedAt FROM inventory_items WHERE id = ?',
       [id]
     );
@@ -774,7 +774,7 @@ function deleteInventoryItem(id) {
   try {
     const db = getDb();
 
-    const result = run(
+    const result = db.run(
       'DELETE FROM inventory_items WHERE id = ?',
       [id]
     );

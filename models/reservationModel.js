@@ -31,120 +31,19 @@
 //   updatedAt        {string}  – data actualizării (ISO 8601)
 // ---------------------------------------------------------------------------
 
-const fs = require('fs');
 const path = require('path');
-const { reservations, getDb, run, get, all } = require('../config/db');
+const Datastore = require('nedb');
+const { getDb, run, get, all } = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
 
 // ---------------------------------------------------------------------------
-// Marcaj pentru migrarea tabelei reservations în SQLite (executată o singură
-// dată, la primul apel către orice funcție SQL)
+// NeDB – Datastore pentru fallback
 // ---------------------------------------------------------------------------
 
-let _sqlMigrated = false;
-
-/**
- * Asigură că tabela `reservations` din SQLite există și are schema completă.
- * Se execută o singură dată, idempotent.
- */
-function _ensureSqlSchema() {
-  if (_sqlMigrated) return;
-  try {
-    const db = getDb();
-
-    // Verifică dacă tabela reservations există deja
-    const tableInfo = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='reservations'");
-    const tableExists = tableInfo.length > 0 && tableInfo[0].values.length > 0;
-
-    if (!tableExists) {
-      // Tabela nu există – o creăm cu schema completă
-      db.run(`
-        CREATE TABLE reservations (
-          id              INTEGER PRIMARY KEY AUTOINCREMENT,
-          tenantId        TEXT    NOT NULL,
-          tip             TEXT    NOT NULL,
-          restaurantId    TEXT,
-          hotelId         TEXT,
-          data            TEXT    NOT NULL,
-          ora             TEXT,
-          numarPersoane   INTEGER NOT NULL DEFAULT 1,
-          numeClient      TEXT    NOT NULL,
-          emailClient     TEXT    NOT NULL,
-          telefonClient   TEXT    NOT NULL,
-          observatii      TEXT    DEFAULT '',
-          masa            INTEGER,
-          camera          TEXT,
-          checkIn         TEXT,
-          checkOut        TEXT,
-          status          TEXT    DEFAULT 'confirmată',
-          statusFacturare TEXT    DEFAULT 'nefacturat',
-          sumaTotala      REAL    DEFAULT 0,
-          moneda          TEXT    DEFAULT 'RON',
-          guestId         TEXT,
-          createdAt       TEXT    DEFAULT (datetime('now')),
-          updatedAt       TEXT    DEFAULT (datetime('now'))
-        );
-      `);
-
-      // Indexuri pentru performanță
-      db.run('CREATE INDEX IF NOT EXISTS idx_reservations_tenantId ON reservations(tenantId);');
-      db.run('CREATE INDEX IF NOT EXISTS idx_reservations_tip ON reservations(tip);');
-      db.run('CREATE INDEX IF NOT EXISTS idx_reservations_status ON reservations(status);');
-      db.run('CREATE INDEX IF NOT EXISTS idx_reservations_tenantId_tip ON reservations(tenantId, tip);');
-      db.run('CREATE INDEX IF NOT EXISTS idx_reservations_tenantId_status ON reservations(tenantId, status);');
-      db.run('CREATE INDEX IF NOT EXISTS idx_reservations_guestId ON reservations(guestId);');
-    } else {
-      // Tabela există – verificăm și adăugăm coloanele lipsă (migrare incrementală)
-      const info = db.exec('PRAGMA table_info(reservations)');
-      const columns = info.length > 0 ? info[0].values.map(function (r) { return r[1]; }) : [];
-
-      const missingColumns = [
-        { name: 'tenantId', def: 'TEXT' },
-        { name: 'tip', def: "TEXT NOT NULL DEFAULT 'restaurant'" },
-        { name: 'restaurantId', def: 'TEXT' },
-        { name: 'data', def: 'TEXT' },
-        { name: 'ora', def: 'TEXT' },
-        { name: 'numarPersoane', def: 'INTEGER NOT NULL DEFAULT 1' },
-        { name: 'numeClient', def: 'TEXT' },
-        { name: 'emailClient', def: 'TEXT' },
-        { name: 'telefonClient', def: 'TEXT' },
-        { name: 'observatii', def: "TEXT DEFAULT ''" },
-        { name: 'masa', def: 'INTEGER' },
-        { name: 'camera', def: 'TEXT' },
-        { name: 'statusFacturare', def: "TEXT DEFAULT 'nefacturat'" },
-        { name: 'sumaTotala', def: 'REAL DEFAULT 0' },
-        { name: 'moneda', def: "TEXT DEFAULT 'RON'" },
-        { name: 'guestId', def: 'TEXT' },
-      ];
-
-      for (let i = 0; i < missingColumns.length; i++) {
-        const col = missingColumns[i];
-        if (columns.indexOf(col.name) === -1) {
-          try {
-            db.run('ALTER TABLE reservations ADD COLUMN ' + col.name + ' ' + col.def);
-          } catch (_colErr) {
-            // Coloana poate exista deja; ignorăm eroarea silențios
-          }
-        }
-      }
-    }
-
-    // Persistă modificarea de schemă pe disc
-    const data = db.export();
-    const dataDir = path.resolve(process.env.DB_PATH || './data');
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
-    const dbPath = path.join(dataDir, 'gastrohub.db');
-    const buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-    fs.writeFileSync(dbPath, buffer);
-
-    _sqlMigrated = true;
-  } catch (_e) {
-    // SQLite nu este disponibil – ignorăm; vom folosi NeDB
-    _sqlMigrated = true;
-  }
-}
+const reservations = new Datastore({
+  filename: path.join(__dirname, '..', 'data', 'reservations.db'),
+  autoload: true,
+});
 
 // ---------------------------------------------------------------------------
 // Detecție backend SQLite
@@ -152,12 +51,12 @@ function _ensureSqlSchema() {
 
 /**
  * Returnează `true` dacă SQLite este disponibil și inițializat.
- * @returns {boolean}
+ * Schema este deja gestionată de config/db (_createTables).
+ * @returns {Promise<boolean>}
  */
-function _isSqlAvailable() {
+async function _isSqlAvailable() {
   try {
-    getDb();
-    _ensureSqlSchema();
+    await getDb();
     return true;
   } catch (_e) {
     return false;
@@ -578,9 +477,9 @@ async function createReservation(data) {
   // -------------------------------------------------------------------
   // Încercare SQLite
   // -------------------------------------------------------------------
-  if (_isSqlAvailable()) {
+  if (await _isSqlAvailable()) {
     try {
-      const result = run(
+      const result = await run(
         'INSERT INTO reservations (' +
         'tenantId, tip, restaurantId, hotelId, data, ora, ' +
         'numarPersoane, numeClient, emailClient, telefonClient, ' +
@@ -598,7 +497,7 @@ async function createReservation(data) {
       );
 
       const newId = result.lastInsertRowid;
-      const newRow = get('SELECT * FROM reservations WHERE id = ?', [newId]);
+      const newRow = await get('SELECT * FROM reservations WHERE id = ?', [newId]);
       return _sqlRowToDoc(newRow);
     } catch (sqlErr) {
       throw new AppError(
@@ -673,17 +572,17 @@ async function findReservationById(id, tenantId) {
   }
 
   // ---- SQLite ----
-  if (_isSqlAvailable()) {
+  if (await _isSqlAvailable()) {
     try {
       const numericId = parseInt(id, 10);
       let row;
       if (isNaN(numericId)) {
-        row = get(
+        row = await get(
           'SELECT * FROM reservations WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
           [String(id), tenantId]
         );
       } else {
-        row = get(
+        row = await get(
           'SELECT * FROM reservations WHERE id = ? AND tenantId = ?',
           [numericId, tenantId]
         );
@@ -733,7 +632,7 @@ async function findReservationsByRestaurant(restaurantId, tenantId, options) {
   }
 
   // ---- SQLite ----
-  if (_isSqlAvailable()) {
+  if (await _isSqlAvailable()) {
     try {
       const built = _buildSqlWhere(tenantId, Object.assign({}, options, {
         tip: 'restaurant',
@@ -744,7 +643,7 @@ async function findReservationsByRestaurant(restaurantId, tenantId, options) {
       sql += _buildSqlOrderBy(options.sort);
 
       const paginated = _applySqlPagination(sql, built.params, options);
-      const rows = all(paginated.sql, paginated.params);
+      const rows = await all(paginated.sql, paginated.params);
       return rows.map(function (r) { return _sqlRowToDoc(r); });
     } catch (sqlErr) {
       throw new AppError(
@@ -788,7 +687,7 @@ async function findReservationsByHotel(hotelId, tenantId, options) {
   }
 
   // ---- SQLite ----
-  if (_isSqlAvailable()) {
+  if (await _isSqlAvailable()) {
     try {
       const built = _buildSqlWhere(tenantId, Object.assign({}, options, {
         tip: 'hotel',
@@ -799,7 +698,7 @@ async function findReservationsByHotel(hotelId, tenantId, options) {
       sql += _buildSqlOrderBy(options.sort);
 
       const paginated = _applySqlPagination(sql, built.params, options);
-      const rows = all(paginated.sql, paginated.params);
+      const rows = await all(paginated.sql, paginated.params);
       return rows.map(function (r) { return _sqlRowToDoc(r); });
     } catch (sqlErr) {
       throw new AppError(
@@ -839,14 +738,14 @@ async function findReservationsByTenant(tenantId, options) {
   }
 
   // ---- SQLite ----
-  if (_isSqlAvailable()) {
+  if (await _isSqlAvailable()) {
     try {
       const built = _buildSqlWhere(tenantId, options);
       let sql = 'SELECT * FROM reservations WHERE ' + built.whereClause;
       sql += _buildSqlOrderBy(options.sort);
 
       const paginated = _applySqlPagination(sql, built.params, options);
-      const rows = all(paginated.sql, paginated.params);
+      const rows = await all(paginated.sql, paginated.params);
       return rows.map(function (r) { return _sqlRowToDoc(r); });
     } catch (sqlErr) {
       throw new AppError(
@@ -882,7 +781,7 @@ async function findReservationsByPerson(searchTerm, tenantId, options) {
   }
 
   // ---- SQLite ----
-  if (_isSqlAvailable()) {
+  if (await _isSqlAvailable()) {
     try {
       const likeTerm = '%' + searchTerm.trim() + '%';
       const whereClause = 'tenantId = ? AND (numeClient LIKE ? OR emailClient LIKE ? OR telefonClient LIKE ?)';
@@ -892,7 +791,7 @@ async function findReservationsByPerson(searchTerm, tenantId, options) {
       sql += _buildSqlOrderBy(options.sort);
 
       const paginated = _applySqlPagination(sql, params, options);
-      const rows = all(paginated.sql, paginated.params);
+      const rows = await all(paginated.sql, paginated.params);
       return rows.map(function (r) { return _sqlRowToDoc(r); });
     } catch (sqlErr) {
       throw new AppError(
@@ -943,14 +842,14 @@ async function findReservationsByStatus(status, tenantId, options) {
   }
 
   // ---- SQLite ----
-  if (_isSqlAvailable()) {
+  if (await _isSqlAvailable()) {
     try {
       const built = _buildSqlWhere(tenantId, Object.assign({}, options, { status: status }));
       let sql = 'SELECT * FROM reservations WHERE ' + built.whereClause;
       sql += _buildSqlOrderBy(options.sort);
 
       const paginated = _applySqlPagination(sql, built.params, options);
-      const rows = all(paginated.sql, paginated.params);
+      const rows = await all(paginated.sql, paginated.params);
       return rows.map(function (r) { return _sqlRowToDoc(r); });
     } catch (sqlErr) {
       throw new AppError(
@@ -986,14 +885,14 @@ async function findReservationsByDate(date, tenantId, options) {
   }
 
   // ---- SQLite ----
-  if (_isSqlAvailable()) {
+  if (await _isSqlAvailable()) {
     try {
       const built = _buildSqlWhere(tenantId, Object.assign({}, options, { data: date }));
       let sql = 'SELECT * FROM reservations WHERE ' + built.whereClause;
       sql += _buildSqlOrderBy(options.sort);
 
       const paginated = _applySqlPagination(sql, built.params, options);
-      const rows = all(paginated.sql, paginated.params);
+      const rows = await all(paginated.sql, paginated.params);
       return rows.map(function (r) { return _sqlRowToDoc(r); });
     } catch (sqlErr) {
       throw new AppError(
@@ -1029,7 +928,7 @@ async function findReservationsByCheckInDate(date, tenantId, options) {
   }
 
   // ---- SQLite ----
-  if (_isSqlAvailable()) {
+  if (await _isSqlAvailable()) {
     try {
       let whereClause = 'tenantId = ? AND tip = ? AND checkIn = ?';
       const params = [tenantId, 'hotel', date];
@@ -1043,7 +942,7 @@ async function findReservationsByCheckInDate(date, tenantId, options) {
       sql += _buildSqlOrderBy(options.sort);
 
       const paginated = _applySqlPagination(sql, params, options);
-      const rows = all(paginated.sql, paginated.params);
+      const rows = await all(paginated.sql, paginated.params);
       return rows.map(function (r) { return _sqlRowToDoc(r); });
     } catch (sqlErr) {
       throw new AppError(
@@ -1086,7 +985,7 @@ async function findReservationsByCheckOutDate(date, tenantId, options) {
   }
 
   // ---- SQLite ----
-  if (_isSqlAvailable()) {
+  if (await _isSqlAvailable()) {
     try {
       let whereClause = 'tenantId = ? AND tip = ? AND checkOut = ?';
       const params = [tenantId, 'hotel', date];
@@ -1100,7 +999,7 @@ async function findReservationsByCheckOutDate(date, tenantId, options) {
       sql += _buildSqlOrderBy(options.sort);
 
       const paginated = _applySqlPagination(sql, params, options);
-      const rows = all(paginated.sql, paginated.params);
+      const rows = await all(paginated.sql, paginated.params);
       return rows.map(function (r) { return _sqlRowToDoc(r); });
     } catch (sqlErr) {
       throw new AppError(
@@ -1143,14 +1042,14 @@ async function findReservationsByGuestId(guestId, tenantId, options) {
   }
 
   // ---- SQLite ----
-  if (_isSqlAvailable()) {
+  if (await _isSqlAvailable()) {
     try {
       let sql = 'SELECT * FROM reservations WHERE tenantId = ? AND guestId = ?';
       const params = [tenantId, guestId];
       sql += _buildSqlOrderBy(options.sort);
 
       const paginated = _applySqlPagination(sql, params, options);
-      const rows = all(paginated.sql, paginated.params);
+      const rows = await all(paginated.sql, paginated.params);
       return rows.map(function (r) { return _sqlRowToDoc(r); });
     } catch (sqlErr) {
       throw new AppError(
@@ -1348,32 +1247,32 @@ async function updateReservation(id, tenantId, updates) {
   sqlParams.push(now);
 
   // ---- SQLite ----
-  if (_isSqlAvailable()) {
+  if (await _isSqlAvailable()) {
     try {
       const numericId = parseInt(id, 10);
       if (!isNaN(numericId)) {
         sqlParams.push(numericId);
         sqlParams.push(tenantId);
-        const result = run(
+        const result = await run(
           'UPDATE reservations SET ' + sqlSetClauses.join(', ') + ' WHERE id = ? AND tenantId = ?',
           sqlParams
         );
         if (result.changes === 0) {
           return null;
         }
-        const updatedRow = get('SELECT * FROM reservations WHERE id = ?', [numericId]);
+        const updatedRow = await get('SELECT * FROM reservations WHERE id = ?', [numericId]);
         return _sqlRowToDoc(updatedRow);
       } else {
         sqlParams.push(String(id));
         sqlParams.push(tenantId);
-        const result = run(
+        const result = await run(
           'UPDATE reservations SET ' + sqlSetClauses.join(', ') + ' WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
           sqlParams
         );
         if (result.changes === 0) {
           return null;
         }
-        const updatedRow = get('SELECT * FROM reservations WHERE CAST(id AS TEXT) = ?', [String(id)]);
+        const updatedRow = await get('SELECT * FROM reservations WHERE CAST(id AS TEXT) = ?', [String(id)]);
         return _sqlRowToDoc(updatedRow);
       }
     } catch (sqlErr) {
@@ -1461,17 +1360,17 @@ async function updateReservationStatus(id, tenantId, status) {
   const now = nowISO();
 
   // ---- SQLite ----
-  if (_isSqlAvailable()) {
+  if (await _isSqlAvailable()) {
     try {
       const numericId = parseInt(id, 10);
       let result;
       if (!isNaN(numericId)) {
-        result = run(
+        result = await run(
           'UPDATE reservations SET status = ?, updatedAt = ? WHERE id = ? AND tenantId = ?',
           [status, now, numericId, tenantId]
         );
       } else {
-        result = run(
+        result = await run(
           'UPDATE reservations SET status = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
           [status, now, String(id), tenantId]
         );

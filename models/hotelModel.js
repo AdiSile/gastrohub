@@ -4,10 +4,11 @@
 // Model Hotel - GastroHub
 // Contine operatii CRUD pentru hoteluri, camere si rezervari.
 // Foloseste SQLite via sql.js (getDb() din config/db).
-// Toate operatiile sunt Promise-based cu interogari SQL parametrizate.
+// Toate operatiile sunt Promise-based (async/await) cu interogari SQL parametrizate.
+// Utilizeaza direct db.run() / db.exec() dupa await getDb().
 // ---------------------------------------------------------------------------
 
-const { getDb, run, get, all } = require('../config/db');
+const { getDb } = require('../config/db');
 
 // ---------------------------------------------------------------------------
 // Constante si liste valide
@@ -219,6 +220,65 @@ function nowISO() {
 // Operatii CRUD - Hoteluri
 // =========================================================================
 
+// ---------------------------------------------------------------------------
+// Helpers interne: executie interogari peste sql.js (db.run / db.exec)
+// ---------------------------------------------------------------------------
+
+/**
+ * Executa o interogare de tip INSERT/UPDATE/DELETE cu parametri.
+ * Foloseste db.run() din sql.js si extrage changes + lastInsertRowid via db.exec().
+ *
+ * @param {import('sql.js').Database} db - Instanta bazei de date
+ * @param {string} sql - Interogarea SQL parametrizata
+ * @param {Array} [params=[]] - Parametrii
+ * @returns {{ changes: number, lastInsertRowid: number }}
+ */
+function _dbRun(db, sql, params = []) {
+  db.run(sql, params);
+  const lastIdRes = db.exec('SELECT last_insert_rowid() AS id');
+  const changesRes = db.exec('SELECT changes() AS cnt');
+  return {
+    changes: (changesRes.length > 0 && changesRes[0].values.length > 0) ? changesRes[0].values[0][0] : 0,
+    lastInsertRowid: (lastIdRes.length > 0 && lastIdRes[0].values.length > 0) ? lastIdRes[0].values[0][0] : 0,
+  };
+}
+
+/**
+ * Executa o interogare SELECT cu parametri si returneaza un singur rand.
+ * Foloseste prepared statements (singura cale sigura de a parametriza SELECT in sql.js).
+ *
+ * @param {import('sql.js').Database} db - Instanta bazei de date
+ * @param {string} sql - Interogarea SQL parametrizata
+ * @param {Array} [params=[]] - Parametrii
+ * @returns {Object|undefined}
+ */
+function _dbGet(db, sql, params = []) {
+  const stmt = db.prepare(sql);
+  if (params.length > 0) stmt.bind(params);
+  let row;
+  if (stmt.step()) row = stmt.getAsObject();
+  stmt.free();
+  return row;
+}
+
+/**
+ * Executa o interogare SELECT cu parametri si returneaza toate randurile.
+ * Foloseste prepared statements.
+ *
+ * @param {import('sql.js').Database} db - Instanta bazei de date
+ * @param {string} sql - Interogarea SQL parametrizata
+ * @param {Array} [params=[]] - Parametrii
+ * @returns {Array<Object>}
+ */
+function _dbAll(db, sql, params = []) {
+  const stmt = db.prepare(sql);
+  if (params.length > 0) stmt.bind(params);
+  const rows = [];
+  while (stmt.step()) rows.push(stmt.getAsObject());
+  stmt.free();
+  return rows;
+}
+
 /**
  * Creeaza un hotel nou.
  * @param {Object} data - Datele hotelului
@@ -235,86 +295,82 @@ function nowISO() {
  * @param {string} data.tenantId - ID-ul tenant-ului (obligatoriu)
  * @returns {Promise<Object>}
  */
-function createHotel(data) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!data || typeof data !== 'object') {
-        return reject(new Error('Datele hotelului sunt invalide.'));
-      }
+async function createHotel(data) {
+  if (!data || typeof data !== 'object') {
+    throw new Error('Datele hotelului sunt invalide.');
+  }
 
-      if (!data.nume || !isValidString(data.nume, 1, 200)) {
-        return reject(new Error('Numele hotelului este obligatoriu si trebuie sa aiba intre 1 si 200 de caractere.'));
-      }
+  if (!data.nume || !isValidString(data.nume, 1, 200)) {
+    throw new Error('Numele hotelului este obligatoriu si trebuie sa aiba intre 1 si 200 de caractere.');
+  }
 
-      if (!data.adresa || !isValidString(data.adresa, 1, 500)) {
-        return reject(new Error('Adresa hotelului este obligatorie si trebuie sa aiba intre 1 si 500 de caractere.'));
-      }
+  if (!data.adresa || !isValidString(data.adresa, 1, 500)) {
+    throw new Error('Adresa hotelului este obligatorie si trebuie sa aiba intre 1 si 500 de caractere.');
+  }
 
-      if (!data.tenantId) {
-        return reject(new Error('ID-ul tenant-ului este obligatoriu.'));
-      }
+  if (!data.tenantId) {
+    throw new Error('ID-ul tenant-ului este obligatoriu.');
+  }
 
-      if (data.numarStele !== undefined && data.numarStele !== null) {
-        if (!Number.isInteger(data.numarStele) || data.numarStele < 0 || data.numarStele > 5) {
-          return reject(new Error('Numarul de stele trebuie sa fie un intreg intre 0 si 5.'));
-        }
-      }
-
-      if (data.facilitati !== undefined && data.facilitati !== null) {
-        if (!Array.isArray(data.facilitati)) {
-          return reject(new Error('Facilitatile trebuie sa fie o lista.'));
-        }
-      }
-
-      if (data.telefon !== undefined && data.telefon !== null && data.telefon !== '') {
-        if (!isValidPhone(data.telefon)) {
-          return reject(new Error('Numarul de telefon nu este valid.'));
-        }
-      }
-
-      if (data.email !== undefined && data.email !== null && data.email !== '') {
-        if (!isValidEmail(data.email)) {
-          return reject(new Error('Adresa de email nu este valida.'));
-        }
-      }
-
-      if (data.status !== undefined && data.status !== null && !isValidHotelStatus(data.status)) {
-        return reject(new Error(`Statusul "${data.status}" nu este valid. Statusuri permise: ${VALID_HOTEL_STATUSES.join(', ')}.`));
-      }
-
-      const now = nowISO();
-      const amenities = Array.isArray(data.facilitati) ? JSON.stringify(data.facilitati) : '[]';
-      const images = data.imagine
-        ? (Array.isArray(data.imagine) ? JSON.stringify(data.imagine) : JSON.stringify([data.imagine]))
-        : '[]';
-      const status = data.status || 'active';
-
-      const result = run(
-        `INSERT INTO hotels (tenantId, name, address, stars, amenities, description, phone, email, website, images, status, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          data.tenantId,
-          data.nume.trim(),
-          data.adresa.trim(),
-          data.numarStele !== undefined && data.numarStele !== null ? data.numarStele : 0,
-          amenities,
-          data.descriere || '',
-          data.telefon || '',
-          data.email || '',
-          data.website || '',
-          images,
-          status,
-          now,
-          now,
-        ]
-      );
-
-      const newHotel = get('SELECT * FROM hotels WHERE id = ?', [result.lastInsertRowid]);
-      resolve(normalizeHotel(newHotel));
-    } catch (err) {
-      reject(new Error(`Eroare la crearea hotelului: ${err.message}`));
+  if (data.numarStele !== undefined && data.numarStele !== null) {
+    if (!Number.isInteger(data.numarStele) || data.numarStele < 0 || data.numarStele > 5) {
+      throw new Error('Numarul de stele trebuie sa fie un intreg intre 0 si 5.');
     }
-  });
+  }
+
+  if (data.facilitati !== undefined && data.facilitati !== null) {
+    if (!Array.isArray(data.facilitati)) {
+      throw new Error('Facilitatile trebuie sa fie o lista.');
+    }
+  }
+
+  if (data.telefon !== undefined && data.telefon !== null && data.telefon !== '') {
+    if (!isValidPhone(data.telefon)) {
+      throw new Error('Numarul de telefon nu este valid.');
+    }
+  }
+
+  if (data.email !== undefined && data.email !== null && data.email !== '') {
+    if (!isValidEmail(data.email)) {
+      throw new Error('Adresa de email nu este valida.');
+    }
+  }
+
+  if (data.status !== undefined && data.status !== null && !isValidHotelStatus(data.status)) {
+    throw new Error(`Statusul "${data.status}" nu este valid. Statusuri permise: ${VALID_HOTEL_STATUSES.join(', ')}.`);
+  }
+
+  const now = nowISO();
+  const amenities = Array.isArray(data.facilitati) ? JSON.stringify(data.facilitati) : '[]';
+  const images = data.imagine
+    ? (Array.isArray(data.imagine) ? JSON.stringify(data.imagine) : JSON.stringify([data.imagine]))
+    : '[]';
+  const status = data.status || 'active';
+
+  const db = await getDb();
+  const result = _dbRun(
+    db,
+    `INSERT INTO hotels (tenantId, name, address, stars, amenities, description, phone, email, website, images, status, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      data.tenantId,
+      data.nume.trim(),
+      data.adresa.trim(),
+      data.numarStele !== undefined && data.numarStele !== null ? data.numarStele : 0,
+      amenities,
+      data.descriere || '',
+      data.telefon || '',
+      data.email || '',
+      data.website || '',
+      images,
+      status,
+      now,
+      now,
+    ]
+  );
+
+  const newHotel = _dbGet(db, 'SELECT * FROM hotels WHERE id = ?', [result.lastInsertRowid]);
+  return normalizeHotel(newHotel);
 }
 
 /**
@@ -322,20 +378,15 @@ function createHotel(data) {
  * @param {string|number} id - ID-ul hotelului
  * @returns {Promise<Object|null>}
  */
-function getHotelById(id) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!id) {
-        return reject(new Error('ID-ul hotelului este invalid.'));
-      }
+async function getHotelById(id) {
+  if (!id) {
+    throw new Error('ID-ul hotelului este invalid.');
+  }
 
-      const intId = toIntId(id);
-      const row = get('SELECT * FROM hotels WHERE id = ?', [intId]);
-      resolve(normalizeHotel(row));
-    } catch (err) {
-      reject(new Error(`Eroare la cautarea hotelului: ${err.message}`));
-    }
-  });
+  const intId = toIntId(id);
+  const db = await getDb();
+  const row = _dbGet(db, 'SELECT * FROM hotels WHERE id = ?', [intId]);
+  return normalizeHotel(row);
 }
 
 /**
@@ -343,19 +394,14 @@ function getHotelById(id) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Object[]>}
  */
-function getHotelsByTenant(tenantId) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!tenantId) {
-        return reject(new Error('ID-ul tenant-ului este obligatoriu.'));
-      }
+async function getHotelsByTenant(tenantId) {
+  if (!tenantId) {
+    throw new Error('ID-ul tenant-ului este obligatoriu.');
+  }
 
-      const rows = all('SELECT * FROM hotels WHERE tenantId = ? ORDER BY name ASC', [tenantId]);
-      resolve(rows.map(normalizeHotel));
-    } catch (err) {
-      reject(new Error(`Eroare la cautarea hotelurilor: ${err.message}`));
-    }
-  });
+  const db = await getDb();
+  const rows = _dbAll(db, 'SELECT * FROM hotels WHERE tenantId = ? ORDER BY name ASC', [tenantId]);
+  return rows.map(normalizeHotel);
 }
 
 /**
@@ -364,128 +410,124 @@ function getHotelsByTenant(tenantId) {
  * @param {Object} updates - Campurile de actualizat
  * @returns {Promise<Object|null>}
  */
-function updateHotel(id, updates) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!id) {
-        return reject(new Error('ID-ul hotelului este invalid.'));
-      }
+async function updateHotel(id, updates) {
+  if (!id) {
+    throw new Error('ID-ul hotelului este invalid.');
+  }
 
-      if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
-        return reject(new Error('Datele de actualizare sunt invalide.'));
-      }
+  if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
+    throw new Error('Datele de actualizare sunt invalide.');
+  }
 
-      const campuriPermise = [
-        'nume', 'adresa', 'numarStele', 'facilitati',
-        'descriere', 'telefon', 'email', 'website', 'imagine', 'status',
-      ];
+  const campuriPermise = [
+    'nume', 'adresa', 'numarStele', 'facilitati',
+    'descriere', 'telefon', 'email', 'website', 'imagine', 'status',
+  ];
 
-      // Validare
-      for (const [key, value] of Object.entries(updates)) {
-        if (!campuriPermise.includes(key)) {
-          return reject(new Error(`Campul "${key}" nu este permis pentru actualizare.`));
-        }
-
-        switch (key) {
-          case 'nume':
-            if (!isValidString(value, 1, 200)) {
-              return reject(new Error('Numele hotelului trebuie sa aiba intre 1 si 200 de caractere.'));
-            }
-            break;
-          case 'adresa':
-            if (!isValidString(value, 1, 500)) {
-              return reject(new Error('Adresa hotelului trebuie sa aiba intre 1 si 500 de caractere.'));
-            }
-            break;
-          case 'numarStele':
-            if (!Number.isInteger(value) || value < 0 || value > 5) {
-              return reject(new Error('Numarul de stele trebuie sa fie un intreg intre 0 si 5.'));
-            }
-            break;
-          case 'facilitati':
-            if (!Array.isArray(value)) {
-              return reject(new Error('Facilitatile trebuie sa fie o lista.'));
-            }
-            break;
-          case 'telefon':
-            if (value && !isValidPhone(value)) {
-              return reject(new Error('Numarul de telefon nu este valid.'));
-            }
-            break;
-          case 'email':
-            if (value && !isValidEmail(value)) {
-              return reject(new Error('Adresa de email nu este valida.'));
-            }
-            break;
-          case 'status':
-            if (!isValidHotelStatus(value)) {
-              return reject(new Error(`Statusul "${value}" nu este valid. Statusuri permise: ${VALID_HOTEL_STATUSES.join(', ')}.`));
-            }
-            break;
-          case 'descriere':
-          case 'website':
-          case 'imagine':
-            break;
-        }
-      }
-
-      const intId = toIntId(id);
-
-      // Verifica daca hotelul exista
-      const existing = get('SELECT id FROM hotels WHERE id = ?', [intId]);
-      if (!existing) {
-        return resolve(null);
-      }
-
-      // Construieste clauza SET dinamic
-      const setClauses = [];
-      const params = [];
-      const fieldMap = {
-        nume: 'name',
-        adresa: 'address',
-        numarStele: 'stars',
-        facilitati: 'amenities',
-        descriere: 'description',
-        telefon: 'phone',
-        email: 'email',
-        website: 'website',
-        imagine: 'images',
-        status: 'status',
-      };
-
-      for (const [key, value] of Object.entries(updates)) {
-        const col = fieldMap[key];
-        if (col === 'amenities') {
-          setClauses.push(`${col} = ?`);
-          params.push(JSON.stringify(value));
-        } else if (col === 'images') {
-          setClauses.push(`${col} = ?`);
-          params.push(Array.isArray(value) ? JSON.stringify(value) : JSON.stringify([value]));
-        } else {
-          setClauses.push(`${col} = ?`);
-          params.push(typeof value === 'string' ? value.trim() : value);
-        }
-      }
-
-      setClauses.push('updatedAt = ?');
-      params.push(nowISO());
-      params.push(intId);
-
-      const result = run(
-        `UPDATE hotels SET ${setClauses.join(', ')} WHERE id = ?`,
-        params
-      );
-
-      if (result.changes === 0) {
-        return resolve(null);
-      }
-
-      const updated = get('SELECT * FROM hotels WHERE id = ?', [intId]);
-      resolve(normalizeHotel(updated));
-    } catch (err) {
-      reject(new Error(`Eroare la actualizarea hotelului: ${err.message}`));
+  // Validare
+  for (const [key, value] of Object.entries(updates)) {
+    if (!campuriPermise.includes(key)) {
+      throw new Error(`Campul "${key}" nu este permis pentru actualizare.`);
     }
-  });
+
+    switch (key) {
+      case 'nume':
+        if (!isValidString(value, 1, 200)) {
+          throw new Error('Numele hotelului trebuie sa aiba intre 1 si 200 de caractere.');
+        }
+        break;
+      case 'adresa':
+        if (!isValidString(value, 1, 500)) {
+          throw new Error('Adresa hotelului trebuie sa aiba intre 1 si 500 de caractere.');
+        }
+        break;
+      case 'numarStele':
+        if (!Number.isInteger(value) || value < 0 || value > 5) {
+          throw new Error('Numarul de stele trebuie sa fie un intreg intre 0 si 5.');
+        }
+        break;
+      case 'facilitati':
+        if (!Array.isArray(value)) {
+          throw new Error('Facilitatile trebuie sa fie o lista.');
+        }
+        break;
+      case 'telefon':
+        if (value && !isValidPhone(value)) {
+          throw new Error('Numarul de telefon nu este valid.');
+        }
+        break;
+      case 'email':
+        if (value && !isValidEmail(value)) {
+          throw new Error('Adresa de email nu este valida.');
+        }
+        break;
+      case 'status':
+        if (!isValidHotelStatus(value)) {
+          throw new Error(`Statusul "${value}" nu este valid. Statusuri permise: ${VALID_HOTEL_STATUSES.join(', ')}.`);
+        }
+        break;
+      case 'descriere':
+      case 'website':
+      case 'imagine':
+        break;
+    }
+  }
+
+  const intId = toIntId(id);
+  const db = await getDb();
+
+  // Verifica daca hotelul exista
+  const existing = _dbGet(db, 'SELECT id FROM hotels WHERE id = ?', [intId]);
+  if (!existing) {
+    return null;
+  }
+
+  // Construieste clauza SET dinamic
+  const setClauses = [];
+  const params = [];
+  const fieldMap = {
+    nume: 'name',
+    adresa: 'address',
+    numarStele: 'stars',
+    facilitati: 'amenities',
+    descriere: 'description',
+    telefon: 'phone',
+    email: 'email',
+    website: 'website',
+    imagine: 'images',
+    status: 'status',
+  };
+
+  for (const [key, value] of Object.entries(updates)) {
+    const col = fieldMap[key];
+    if (col === 'amenities') {
+      setClauses.push(`${col} = ?`);
+      params.push(JSON.stringify(value));
+    } else if (col === 'images') {
+      setClauses.push(`${col} = ?`);
+      params.push(Array.isArray(value) ? JSON.stringify(value) : JSON.stringify([value]));
+    } else {
+      setClauses.push(`${col} = ?`);
+      params.push(typeof value === 'string' ? value.trim() : value);
+    }
+  }
+
+  setClauses.push('updatedAt = ?');
+  params.push(nowISO());
+  params.push(intId);
+
+  const result = _dbRun(
+    db,
+    `UPDATE hotels SET ${setClauses.join(', ')} WHERE id = ?`,
+    params
+  );
+
+  if (result.changes === 0) {
+    return null;
+  }
+
+  const updated = _dbGet(db, 'SELECT * FROM hotels WHERE id = ?', [intId]);
+  return normalizeHotel(updated);
 }
 
 /**
@@ -493,40 +535,30 @@ function updateHotel(id, updates) {
  * @param {string|number} id - ID-ul hotelului
  * @returns {Promise<boolean>}
  */
-function deleteHotel(id) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!id) {
-        return reject(new Error('ID-ul hotelului este invalid.'));
-      }
+async function deleteHotel(id) {
+  if (!id) {
+    throw new Error('ID-ul hotelului este invalid.');
+  }
 
-      const intId = toIntId(id);
-      const result = run('DELETE FROM hotels WHERE id = ?', [intId]);
+  const intId = toIntId(id);
+  const db = await getDb();
+  const result = _dbRun(db, 'DELETE FROM hotels WHERE id = ?', [intId]);
 
-      if (result.changes === 0) {
-        return reject(new Error('Hotelul nu a fost gasit.'));
-      }
+  if (result.changes === 0) {
+    throw new Error('Hotelul nu a fost gasit.');
+  }
 
-      resolve(true);
-    } catch (err) {
-      reject(new Error(`Eroare la stergerea hotelului: ${err.message}`));
-    }
-  });
+  return true;
 }
 
 /**
  * Lista toate hotelurile din baza de date.
  * @returns {Promise<Object[]>}
  */
-function listAllHotels() {
-  return new Promise((resolve, reject) => {
-    try {
-      const rows = all('SELECT * FROM hotels ORDER BY name ASC');
-      resolve(rows.map(normalizeHotel));
-    } catch (err) {
-      reject(new Error(`Eroare la listarea hotelurilor: ${err.message}`));
-    }
-  });
+async function listAllHotels() {
+  const db = await getDb();
+  const rows = _dbAll(db, 'SELECT * FROM hotels ORDER BY name ASC');
+  return rows.map(normalizeHotel);
 }
 
 // =========================================================================
@@ -544,73 +576,69 @@ function listAllHotels() {
  * @param {string} data.tenantId - ID-ul tenant-ului (obligatoriu)
  * @returns {Promise<Object>}
  */
-function createRoom(data) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!data || typeof data !== 'object') {
-        return reject(new Error('Datele camerei sunt invalide.'));
-      }
+async function createRoom(data) {
+  if (!data || typeof data !== 'object') {
+    throw new Error('Datele camerei sunt invalide.');
+  }
 
-      if (!data.tip || !isValidRoomType(data.tip)) {
-        return reject(new Error(`Tipul camerei este invalid. Tipuri permise: ${VALID_ROOM_TYPES.join(', ')}.`));
-      }
+  if (!data.tip || !isValidRoomType(data.tip)) {
+    throw new Error(`Tipul camerei este invalid. Tipuri permise: ${VALID_ROOM_TYPES.join(', ')}.`);
+  }
 
-      if (data.numar === undefined || data.numar === null || !isValidPositiveInt(data.numar)) {
-        return reject(new Error('Numarul camerei trebuie sa fie un numar intreg pozitiv.'));
-      }
+  if (data.numar === undefined || data.numar === null || !isValidPositiveInt(data.numar)) {
+    throw new Error('Numarul camerei trebuie sa fie un numar intreg pozitiv.');
+  }
 
-      if (!data.hotelId) {
-        return reject(new Error('ID-ul hotelului este obligatoriu.'));
-      }
+  if (!data.hotelId) {
+    throw new Error('ID-ul hotelului este obligatoriu.');
+  }
 
-      if (!data.tenantId) {
-        return reject(new Error('ID-ul tenant-ului este obligatoriu.'));
-      }
+  if (!data.tenantId) {
+    throw new Error('ID-ul tenant-ului este obligatoriu.');
+  }
 
-      if (data.status !== undefined && !isValidRoomStatus(data.status)) {
-        return reject(new Error(`Statusul "${data.status}" nu este valid. Statusuri permise: ${VALID_ROOM_STATUSES.join(', ')}.`));
-      }
+  if (data.status !== undefined && !isValidRoomStatus(data.status)) {
+    throw new Error(`Statusul "${data.status}" nu este valid. Statusuri permise: ${VALID_ROOM_STATUSES.join(', ')}.`);
+  }
 
-      if (data.preturiSezoniere !== undefined) {
-        if (!Array.isArray(data.preturiSezoniere)) {
-          return reject(new Error('Preturile sezoniere trebuie sa fie o lista.'));
-        }
-        for (let i = 0; i < data.preturiSezoniere.length; i++) {
-          const p = data.preturiSezoniere[i];
-          if (!p || typeof p !== 'object' || !p.sezon || !isValidPrice(p.pret)) {
-            return reject(new Error(`Pretul sezonier #${i + 1} este invalid.`));
-          }
-        }
-      }
-
-      const now = nowISO();
-      const preturiSezoniere = Array.isArray(data.preturiSezoniere) ? JSON.stringify(data.preturiSezoniere) : '[]';
-
-      const result = run(
-        `INSERT INTO rooms (hotelId, tenantId, tip, numar, preturiSezoniere, status, floor, capacity, amenities, notes, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          String(data.hotelId),
-          data.tenantId,
-          data.tip,
-          data.numar,
-          preturiSezoniere,
-          data.status || 'available',
-          data.floor || null,
-          data.capacity || 1,
-          Array.isArray(data.amenities) ? JSON.stringify(data.amenities) : '[]',
-          data.notes || '',
-          now,
-          now,
-        ]
-      );
-
-      const newRoom = get('SELECT * FROM rooms WHERE id = ?', [result.lastInsertRowid]);
-      resolve(normalizeRoom(newRoom));
-    } catch (err) {
-      reject(new Error(`Eroare la crearea camerei: ${err.message}`));
+  if (data.preturiSezoniere !== undefined) {
+    if (!Array.isArray(data.preturiSezoniere)) {
+      throw new Error('Preturile sezoniere trebuie sa fie o lista.');
     }
-  });
+    for (let i = 0; i < data.preturiSezoniere.length; i++) {
+      const p = data.preturiSezoniere[i];
+      if (!p || typeof p !== 'object' || !p.sezon || !isValidPrice(p.pret)) {
+        throw new Error(`Pretul sezonier #${i + 1} este invalid.`);
+      }
+    }
+  }
+
+  const now = nowISO();
+  const preturiSezoniere = Array.isArray(data.preturiSezoniere) ? JSON.stringify(data.preturiSezoniere) : '[]';
+
+  const db = await getDb();
+  const result = _dbRun(
+    db,
+    `INSERT INTO rooms (hotelId, tenantId, tip, numar, preturiSezoniere, status, floor, capacity, amenities, notes, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      String(data.hotelId),
+      data.tenantId,
+      data.tip,
+      data.numar,
+      preturiSezoniere,
+      data.status || 'available',
+      data.floor || null,
+      data.capacity || 1,
+      Array.isArray(data.amenities) ? JSON.stringify(data.amenities) : '[]',
+      data.notes || '',
+      now,
+      now,
+    ]
+  );
+
+  const newRoom = _dbGet(db, 'SELECT * FROM rooms WHERE id = ?', [result.lastInsertRowid]);
+  return normalizeRoom(newRoom);
 }
 
 /**
@@ -618,20 +646,15 @@ function createRoom(data) {
  * @param {string|number} id - ID-ul camerei
  * @returns {Promise<Object|null>}
  */
-function getRoomById(id) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!id) {
-        return reject(new Error('ID-ul camerei este invalid.'));
-      }
+async function getRoomById(id) {
+  if (!id) {
+    throw new Error('ID-ul camerei este invalid.');
+  }
 
-      const intId = toIntId(id);
-      const row = get('SELECT * FROM rooms WHERE id = ?', [intId]);
-      resolve(normalizeRoom(row));
-    } catch (err) {
-      reject(new Error(`Eroare la cautarea camerei: ${err.message}`));
-    }
-  });
+  const intId = toIntId(id);
+  const db = await getDb();
+  const row = _dbGet(db, 'SELECT * FROM rooms WHERE id = ?', [intId]);
+  return normalizeRoom(row);
 }
 
 /**
@@ -639,19 +662,14 @@ function getRoomById(id) {
  * @param {string} hotelId - ID-ul hotelului
  * @returns {Promise<Object[]>}
  */
-function getRoomsByHotel(hotelId) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!hotelId) {
-        return reject(new Error('ID-ul hotelului este invalid.'));
-      }
+async function getRoomsByHotel(hotelId) {
+  if (!hotelId) {
+    throw new Error('ID-ul hotelului este invalid.');
+  }
 
-      const rows = all('SELECT * FROM rooms WHERE hotelId = ? ORDER BY numar ASC', [String(hotelId)]);
-      resolve(rows.map(normalizeRoom));
-    } catch (err) {
-      reject(new Error(`Eroare la cautarea camerelor: ${err.message}`));
-    }
-  });
+  const db = await getDb();
+  const rows = _dbAll(db, 'SELECT * FROM rooms WHERE hotelId = ? ORDER BY numar ASC', [String(hotelId)]);
+  return rows.map(normalizeRoom);
 }
 
 /**
@@ -660,88 +678,83 @@ function getRoomsByHotel(hotelId) {
  * @param {Object} updates - Campurile de actualizat
  * @returns {Promise<Object|null>}
  */
-function updateRoom(id, updates) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!id) {
-        return reject(new Error('ID-ul camerei este invalid.'));
-      }
+async function updateRoom(id, updates) {
+  if (!id) {
+    throw new Error('ID-ul camerei este invalid.');
+  }
 
-      if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
-        return reject(new Error('Datele de actualizare sunt invalide.'));
-      }
+  if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
+    throw new Error('Datele de actualizare sunt invalide.');
+  }
 
-      const campuriPermise = ['tip', 'numar', 'preturiSezoniere', 'status'];
+  const campuriPermise = ['tip', 'numar', 'preturiSezoniere', 'status'];
 
-      for (const [key, value] of Object.entries(updates)) {
-        if (!campuriPermise.includes(key)) {
-          return reject(new Error(`Campul "${key}" nu este permis pentru actualizare.`));
-        }
-
-        switch (key) {
-          case 'tip':
-            if (!isValidRoomType(value)) {
-              return reject(new Error(`Tipul camerei "${value}" nu este valid.`));
-            }
-            break;
-          case 'numar':
-            if (!isValidPositiveInt(value)) {
-              return reject(new Error('Numarul camerei trebuie sa fie un numar intreg pozitiv.'));
-            }
-            break;
-          case 'preturiSezoniere':
-            if (!Array.isArray(value)) {
-              return reject(new Error('Preturile sezoniere trebuie sa fie o lista.'));
-            }
-            for (let i = 0; i < value.length; i++) {
-              const p = value[i];
-              if (!p || typeof p !== 'object' || !p.sezon || !isValidPrice(p.pret)) {
-                return reject(new Error(`Pretul sezonier #${i + 1} este invalid.`));
-              }
-            }
-            break;
-          case 'status':
-            if (!isValidRoomStatus(value)) {
-              return reject(new Error(`Statusul "${value}" nu este valid.`));
-            }
-            break;
-        }
-      }
-
-      const intId = toIntId(id);
-
-      // Verifica daca exista
-      const existing = get('SELECT id FROM rooms WHERE id = ?', [intId]);
-      if (!existing) {
-        return reject(new Error('Camera nu a fost gasita.'));
-      }
-
-      // Construieste SET dinamic
-      const setClauses = [];
-      const params = [];
-
-      for (const [key, value] of Object.entries(updates)) {
-        if (key === 'preturiSezoniere') {
-          setClauses.push('preturiSezoniere = ?');
-          params.push(JSON.stringify(value));
-        } else {
-          setClauses.push(`${key} = ?`);
-          params.push(value);
-        }
-      }
-
-      setClauses.push('updatedAt = ?');
-      params.push(nowISO());
-      params.push(intId);
-
-      run(`UPDATE rooms SET ${setClauses.join(', ')} WHERE id = ?`, params);
-
-      const updated = get('SELECT * FROM rooms WHERE id = ?', [intId]);
-      resolve(normalizeRoom(updated));
-    } catch (err) {
-      reject(new Error(`Eroare la actualizarea camerei: ${err.message}`));
+  for (const [key, value] of Object.entries(updates)) {
+    if (!campuriPermise.includes(key)) {
+      throw new Error(`Campul "${key}" nu este permis pentru actualizare.`);
     }
-  });
+
+    switch (key) {
+      case 'tip':
+        if (!isValidRoomType(value)) {
+          throw new Error(`Tipul camerei "${value}" nu este valid.`);
+        }
+        break;
+      case 'numar':
+        if (!isValidPositiveInt(value)) {
+          throw new Error('Numarul camerei trebuie sa fie un numar intreg pozitiv.');
+        }
+        break;
+      case 'preturiSezoniere':
+        if (!Array.isArray(value)) {
+          throw new Error('Preturile sezoniere trebuie sa fie o lista.');
+        }
+        for (let i = 0; i < value.length; i++) {
+          const p = value[i];
+          if (!p || typeof p !== 'object' || !p.sezon || !isValidPrice(p.pret)) {
+            throw new Error(`Pretul sezonier #${i + 1} este invalid.`);
+          }
+        }
+        break;
+      case 'status':
+        if (!isValidRoomStatus(value)) {
+          throw new Error(`Statusul "${value}" nu este valid.`);
+        }
+        break;
+    }
+  }
+
+  const intId = toIntId(id);
+  const db = await getDb();
+
+  // Verifica daca exista
+  const existing = _dbGet(db, 'SELECT id FROM rooms WHERE id = ?', [intId]);
+  if (!existing) {
+    throw new Error('Camera nu a fost gasita.');
+  }
+
+  // Construieste SET dinamic
+  const setClauses = [];
+  const params = [];
+
+  for (const [key, value] of Object.entries(updates)) {
+    if (key === 'preturiSezoniere') {
+      setClauses.push('preturiSezoniere = ?');
+      params.push(JSON.stringify(value));
+    } else {
+      setClauses.push(`${key} = ?`);
+      params.push(value);
+    }
+  }
+
+  setClauses.push('updatedAt = ?');
+  params.push(nowISO());
+  params.push(intId);
+
+  _dbRun(db, `UPDATE rooms SET ${setClauses.join(', ')} WHERE id = ?`, params);
+
+  const updated = _dbGet(db, 'SELECT * FROM rooms WHERE id = ?', [intId]);
+  return normalizeRoom(updated);
 }
 
 /**
@@ -749,25 +762,20 @@ function updateRoom(id, updates) {
  * @param {string|number} id - ID-ul camerei
  * @returns {Promise<boolean>}
  */
-function deleteRoom(id) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!id) {
-        return reject(new Error('ID-ul camerei este invalid.'));
-      }
+async function deleteRoom(id) {
+  if (!id) {
+    throw new Error('ID-ul camerei este invalid.');
+  }
 
-      const intId = toIntId(id);
-      const result = run('DELETE FROM rooms WHERE id = ?', [intId]);
+  const intId = toIntId(id);
+  const db = await getDb();
+  const result = _dbRun(db, 'DELETE FROM rooms WHERE id = ?', [intId]);
 
-      if (result.changes === 0) {
-        return reject(new Error('Camera nu a fost gasita.'));
-      }
+  if (result.changes === 0) {
+    throw new Error('Camera nu a fost gasita.');
+  }
 
-      resolve(true);
-    } catch (err) {
-      reject(new Error(`Eroare la stergerea camerei: ${err.message}`));
-    }
-  });
+  return true;
 }
 
 // =========================================================================
@@ -790,89 +798,85 @@ function deleteRoom(id) {
  * @param {string} [data.note] - Note aditionale
  * @returns {Promise<Object>}
  */
-function createReservation(data) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!data || typeof data !== 'object') {
-        return reject(new Error('Datele rezervarii sunt invalide.'));
-      }
+async function createReservation(data) {
+  if (!data || typeof data !== 'object') {
+    throw new Error('Datele rezervarii sunt invalide.');
+  }
 
-      if (!data.hotelId) {
-        return reject(new Error('ID-ul hotelului este obligatoriu.'));
-      }
+  if (!data.hotelId) {
+    throw new Error('ID-ul hotelului este obligatoriu.');
+  }
 
-      if (!data.tenantId) {
-        return reject(new Error('ID-ul tenant-ului este obligatoriu.'));
-      }
+  if (!data.tenantId) {
+    throw new Error('ID-ul tenant-ului este obligatoriu.');
+  }
 
-      if (!data.numePersoana || !isValidString(data.numePersoana, 2, 200)) {
-        return reject(new Error('Numele persoanei trebuie sa aiba intre 2 si 200 de caractere.'));
-      }
+  if (!data.numePersoana || !isValidString(data.numePersoana, 2, 200)) {
+    throw new Error('Numele persoanei trebuie sa aiba intre 2 si 200 de caractere.');
+  }
 
-      if (!data.checkIn || !isValidDate(data.checkIn)) {
-        return reject(new Error('Data de check-in este obligatorie si trebuie sa fie o data valida (YYYY-MM-DD).'));
-      }
+  if (!data.checkIn || !isValidDate(data.checkIn)) {
+    throw new Error('Data de check-in este obligatorie si trebuie sa fie o data valida (YYYY-MM-DD).');
+  }
 
-      if (!data.checkOut || !isValidDate(data.checkOut)) {
-        return reject(new Error('Data de check-out este obligatorie si trebuie sa fie o data valida (YYYY-MM-DD).'));
-      }
+  if (!data.checkOut || !isValidDate(data.checkOut)) {
+    throw new Error('Data de check-out este obligatorie si trebuie sa fie o data valida (YYYY-MM-DD).');
+  }
 
-      if (new Date(data.checkOut) <= new Date(data.checkIn)) {
-        return reject(new Error('Data de check-out trebuie sa fie dupa data de check-in.'));
-      }
+  if (new Date(data.checkOut) <= new Date(data.checkIn)) {
+    throw new Error('Data de check-out trebuie sa fie dupa data de check-in.');
+  }
 
-      if (data.telefon && !isValidPhone(data.telefon)) {
-        return reject(new Error('Numarul de telefon nu este valid.'));
-      }
+  if (data.telefon && !isValidPhone(data.telefon)) {
+    throw new Error('Numarul de telefon nu este valid.');
+  }
 
-      if (data.email && !isValidEmail(data.email)) {
-        return reject(new Error('Adresa de email nu este valida.'));
-      }
+  if (data.email && !isValidEmail(data.email)) {
+    throw new Error('Adresa de email nu este valida.');
+  }
 
-      if (data.status && !isValidReservationStatus(data.status)) {
-        return reject(new Error(`Statusul "${data.status}" nu este valid. Statusuri permise: ${VALID_RESERVATION_STATUSES.join(', ')}.`));
-      }
+  if (data.status && !isValidReservationStatus(data.status)) {
+    throw new Error(`Statusul "${data.status}" nu este valid. Statusuri permise: ${VALID_RESERVATION_STATUSES.join(', ')}.`);
+  }
 
-      if (data.numarPersoane !== undefined && data.numarPersoane !== null) {
-        if (!Number.isInteger(data.numarPersoane) || data.numarPersoane < 1) {
-          return reject(new Error('Numarul de persoane trebuie sa fie un numar intreg pozitiv.'));
-        }
-      }
-
-      const now = nowISO();
-      const status = data.status || 'confirmata';
-
-      const result = run(
-        `INSERT INTO reservations
-           (tenantId, tip, hotelId, data, numarPersoane, numeClient, emailClient, telefonClient,
-            observatii, camera, checkIn, checkOut, status, guestId, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          data.tenantId,
-          'hotel',
-          String(data.hotelId),
-          data.checkIn,
-          data.numarPersoane || 1,
-          data.numePersoana.trim(),
-          data.email || '',
-          data.telefon || '',
-          data.note || '',
-          data.cameraId || null,
-          data.checkIn,
-          data.checkOut,
-          status,
-          data.guestId || null,
-          now,
-          now,
-        ]
-      );
-
-      const newReservation = get('SELECT * FROM reservations WHERE id = ?', [result.lastInsertRowid]);
-      resolve(normalizeReservation(newReservation));
-    } catch (err) {
-      reject(new Error(`Eroare la crearea rezervarii: ${err.message}`));
+  if (data.numarPersoane !== undefined && data.numarPersoane !== null) {
+    if (!Number.isInteger(data.numarPersoane) || data.numarPersoane < 1) {
+      throw new Error('Numarul de persoane trebuie sa fie un numar intreg pozitiv.');
     }
-  });
+  }
+
+  const now = nowISO();
+  const status = data.status || 'confirmata';
+
+  const db = await getDb();
+  const result = _dbRun(
+    db,
+    `INSERT INTO reservations
+       (tenantId, tip, hotelId, data, numarPersoane, numeClient, emailClient, telefonClient,
+        observatii, camera, checkIn, checkOut, status, guestId, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      data.tenantId,
+      'hotel',
+      String(data.hotelId),
+      data.checkIn,
+      data.numarPersoane || 1,
+      data.numePersoana.trim(),
+      data.email || '',
+      data.telefon || '',
+      data.note || '',
+      data.cameraId || null,
+      data.checkIn,
+      data.checkOut,
+      status,
+      data.guestId || null,
+      now,
+      now,
+    ]
+  );
+
+  const newReservation = _dbGet(db, 'SELECT * FROM reservations WHERE id = ?', [result.lastInsertRowid]);
+  return normalizeReservation(newReservation);
 }
 
 /**
