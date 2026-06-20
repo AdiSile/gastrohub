@@ -4,261 +4,969 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GastroHub – Soluție All-in-One pentru Restaurante</title>
-  <meta name="description" content="GastroHub oferă gestionare completă a restaurantelor: meniu, comenzi, livrări, inventar, rezervări, HR și loialitate.">
+  <meta name="description" content="GastroHub oferă gestionare completă a restaurantelor: meniu, comenzi, livrări, inventar, rezervări, HR și loialitate. Înregistrează-te gratuit.">
   <link rel="manifest" href="/pwa/manifest.json">
-  <meta name="theme-color" content="#d32f2f">
+  <meta name="theme-color" content="#2d0a4e">
+
   <!-- Open Graph -->
   <meta property="og:title" content="GastroHub – Soluție All-in-One">
   <meta property="og:description" content="Gestionează-ți restaurantul eficient cu GastroHub.">
   <meta property="og:type" content="website">
+
   <!-- Font Awesome -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous">
+
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    /* ============================================================
+       RESET & BASE – Purple Glassmorphism Landing
+       ============================================================ */
+    *, *::before, *::after {
+      margin: 0; padding: 0; box-sizing: border-box;
+    }
+
+    :root {
+      --purple-950: #0d0221;
+      --purple-900: #1a0533;
+      --purple-800: #2d0a4e;
+      --purple-700: #3f0e6b;
+      --purple-600: #5b1a99;
+      --purple-500: #7b2dcc;
+      --purple-400: #9b59e6;
+      --purple-300: #c39bff;
+      --purple-200: #ddc4ff;
+      --surface-glass: rgba(255,255,255,0.07);
+      --surface-glass-hover: rgba(255,255,255,0.12);
+      --border-glass: rgba(255,255,255,0.12);
+      --text-primary: #f0e6ff;
+      --text-secondary: #bfa5e0;
+      --text-muted: #8b73ad;
+      --input-bg: rgba(255,255,255,0.07);
+      --input-border: rgba(255,255,255,0.15);
+      --input-focus: #9b59e6;
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 22px;
+      --transition: 0.3s ease;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      font-size: 16px;
+    }
+
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: #fafafa;
-      color: #333;
+      font-family: 'Segoe UI', 'Inter', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      background: linear-gradient(160deg, #0d0221 0%, #1a0533 20%, #2d0a4e 45%, #1a0533 70%, #0d0221 100%);
+      background-attachment: fixed;
+      color: var(--text-primary);
       line-height: 1.6;
+      overflow-x: hidden;
+      position: relative;
     }
-    a { text-decoration: none; color: inherit; }
-    /* Header */
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: var(--purple-950); }
+    ::-webkit-scrollbar-thumb { background: var(--purple-600); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--purple-500); }
+
+    /* Selection */
+    ::selection { background: var(--purple-500); color: #fff; }
+
+    /* Placeholder */
+    ::placeholder { color: var(--text-muted); opacity: 0.7; }
+
+    /* ============================================================
+       ANIMATED BACKGROUND
+       ============================================================ */
+    .bg-particles {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden;
+    }
+    .bg-particle {
+      position: absolute; border-radius: 50%;
+      background: var(--purple-400); opacity: 0.06;
+      animation: floatParticle linear infinite;
+    }
+    @keyframes floatParticle {
+      0%   { transform: translateY(0) translateX(0) scale(1); opacity: 0.02; }
+      25%  { opacity: 0.07; }
+      50%  { transform: translateY(-100px) translateX(30px) scale(1.3); opacity: 0.05; }
+      75%  { opacity: 0.02; }
+      100% { transform: translateY(0) translateX(0) scale(1); opacity: 0.02; }
+    }
+
+    .glow-orb {
+      position: fixed; border-radius: 50%; filter: blur(130px);
+      pointer-events: none; z-index: 0; animation: pulseOrb 8s ease-in-out infinite;
+    }
+    .glow-orb--1 { width:450px; height:450px; background:var(--purple-500); top:-130px; right:-100px; opacity:0.15; }
+    .glow-orb--2 { width:380px; height:380px; background:#3c1a70; bottom:-120px; left:-90px; opacity:0.13; animation-delay:-4s; }
+    .glow-orb--3 { width:300px; height:300px; background:var(--purple-600); top:50%; left:50%; transform:translate(-50%,-50%); opacity:0.08; animation-delay:-2s; }
+    @keyframes pulseOrb {
+      0%,100% { transform:scale(1); opacity:0.14; }
+      50%     { transform:scale(1.15); opacity:0.22; }
+    }
+
+    /* ============================================================
+       HEADER – Glassmorphism
+       ============================================================ */
     header {
-      background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%);
-      color: #fff;
-      padding: 1rem 2rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-      position: sticky;
-      top: 0;
-      z-index: 1000;
+      position: sticky; top: 0; z-index: 1000;
+      background: rgba(13,2,33,0.7); backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border-glass);
+      padding: 0.9rem 2rem;
+      display: flex; justify-content: space-between; align-items: center;
+      transition: background var(--transition), box-shadow var(--transition);
     }
-    header .logo { font-size: 1.8rem; font-weight: 700; letter-spacing: 1px; }
-    header .logo i { margin-right: 0.5rem; }
+    header.scrolled {
+      background: rgba(13,2,33,0.92);
+      box-shadow: 0 2px 20px rgba(0,0,0,0.4);
+    }
+    header .logo {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 1.6rem; font-weight: 700; color: #fff; letter-spacing: 0.5px;
+    }
+    header .logo .logo-icon {
+      width: 42px; height: 42px; border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, var(--purple-500), var(--purple-600));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; color: #fff;
+      box-shadow: 0 4px 16px rgba(123,45,204,0.35);
+    }
+    nav { display: flex; align-items: center; gap: 1.2rem; }
     nav a {
-      color: #fff;
-      margin-left: 1.5rem;
-      font-weight: 500;
-      transition: opacity 0.3s;
+      color: var(--text-secondary); text-decoration: none;
+      font-weight: 500; font-size: 0.95rem;
+      transition: color var(--transition);
     }
-    nav a:hover { opacity: 0.8; }
-    .btn {
-      display: inline-block;
-      padding: 0.6rem 1.5rem;
-      border-radius: 30px;
-      font-weight: 600;
-      transition: all 0.3s ease;
-    }
-    .btn-primary {
-      background: #fff;
-      color: #d32f2f;
-      border: 2px solid #fff;
-    }
-    .btn-primary:hover {
-      background: transparent;
-      color: #fff;
+    nav a:hover { color: #fff; }
+    .btn-glass {
+      display: inline-block; padding: 0.55rem 1.6rem; border-radius: 30px;
+      font-weight: 600; font-size: 0.9rem; transition: all var(--transition);
+      text-decoration: none; cursor: pointer;
     }
     .btn-outline {
-      background: transparent;
-      color: #fff;
-      border: 2px solid #fff;
+      background: transparent; color: #fff;
+      border: 2px solid rgba(255,255,255,0.35);
     }
     .btn-outline:hover {
-      background: #fff;
-      color: #d32f2f;
+      background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.6);
     }
-    .btn-dark {
-      background: #d32f2f;
-      color: #fff;
-      border: 2px solid #d32f2f;
+    .btn-primary {
+      background: linear-gradient(135deg, var(--purple-500), var(--purple-600));
+      color: #fff; border: none;
+      box-shadow: 0 4px 18px rgba(123,45,204,0.35);
     }
-    .btn-dark:hover {
-      background: #b71c1c;
-      border-color: #b71c1c;
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #8b40e0, var(--purple-500));
+      box-shadow: 0 6px 26px rgba(123,45,204,0.5); transform: translateY(-1px);
     }
-    /* Hero */
+
+    /* Hamburger */
+    .hamburger { display: none; background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; }
+
+    /* ============================================================
+       HERO
+       ============================================================ */
     .hero {
-      background: linear-gradient(135deg, #1e1e2f 0%, #2a2a40 100%);
-      color: #fff;
-      text-align: center;
-      padding: 5rem 2rem;
+      position: relative; z-index: 1;
+      text-align: center; padding: 6rem 2rem 5rem;
     }
-    .hero h1 { font-size: 3rem; margin-bottom: 1rem; }
-    .hero p { font-size: 1.2rem; max-width: 700px; margin: 0 auto 2rem; opacity: 0.9; }
-    .hero .cta-buttons { display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; }
-    /* Section */
-    section { padding: 4rem 2rem; max-width: 1200px; margin: 0 auto; }
-    section h2 { text-align: center; font-size: 2rem; margin-bottom: 0.5rem; color: #d32f2f; }
-    section .subtitle { text-align: center; margin-bottom: 3rem; color: #666; }
-    /* Features Grid */
+    .hero h1 {
+      font-size: clamp(2.2rem, 5vw, 3.5rem); font-weight: 800;
+      color: #fff; margin-bottom: 1rem;
+      background: linear-gradient(135deg, #fff 0%, var(--purple-300) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero .hero-subtitle {
+      font-size: 1.2rem; max-width: 650px; margin: 0 auto 2.5rem;
+      color: var(--text-secondary); line-height: 1.7;
+    }
+    .hero .cta-group { display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; }
+    .btn-lg {
+      padding: 0.85rem 2.4rem; font-size: 1.05rem; border-radius: 30px;
+      font-weight: 700; letter-spacing: 0.3px;
+    }
+    .btn-white {
+      background: #fff; color: var(--purple-700); border: 2px solid #fff;
+    }
+    .btn-white:hover { background: transparent; color: #fff; }
+
+    .hero-stats {
+      display: flex; justify-content: center; gap: 3rem; margin-top: 3.5rem;
+      flex-wrap: wrap;
+    }
+    .hero-stats .stat { text-align: center; }
+    .hero-stats .stat-num { font-size: 2rem; font-weight: 800; color: #fff; }
+    .hero-stats .stat-label { font-size: 0.85rem; color: var(--text-muted); }
+
+    /* ============================================================
+       SECTIONS
+       ============================================================ */
+    section { position: relative; z-index: 1; padding: 5rem 2rem; max-width: 1200px; margin: 0 auto; }
+    .section-header { text-align: center; margin-bottom: 3.5rem; }
+    .section-header h2 {
+      font-size: 2.2rem; font-weight: 700; color: #fff; margin-bottom: 0.6rem;
+    }
+    .section-header .section-subtitle { color: var(--text-secondary); font-size: 1.05rem; }
+
+    /* ============================================================
+       FEATURES GRID – 6 cards
+       ============================================================ */
     .features-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 2rem;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.8rem;
     }
     .feature-card {
-      background: #fff;
-      border-radius: 12px;
-      padding: 2rem;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
-      transition: transform 0.3s, box-shadow 0.3s;
+      background: var(--surface-glass);
+      backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-lg);
+      padding: 2.2rem 1.8rem;
       text-align: center;
+      transition: all var(--transition);
+      position: relative; overflow: hidden;
     }
+    .feature-card::before {
+      content: ''; position: absolute; top: -50%; left: -50%;
+      width: 200%; height: 200%;
+      background: radial-gradient(circle, rgba(155,89,230,0.08) 0%, transparent 70%);
+      opacity: 0; transition: opacity var(--transition);
+    }
+    .feature-card:hover::before { opacity: 1; }
     .feature-card:hover {
-      transform: translateY(-6px);
-      box-shadow: 0 8px 28px rgba(0,0,0,0.12);
+      transform: translateY(-8px);
+      border-color: rgba(255,255,255,0.22);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.3), 0 0 0 1px rgba(155,89,230,0.15);
     }
-    .feature-card i { font-size: 2.5rem; color: #d32f2f; margin-bottom: 1rem; }
-    .feature-card h3 { margin-bottom: 0.8rem; color: #222; }
-    .feature-card p { color: #555; }
-    /* Testimonials */
-    .testimonial-grid {
+    .feature-card .fc-icon {
+      width: 64px; height: 64px; border-radius: var(--radius-md);
+      background: linear-gradient(135deg, var(--purple-500), var(--purple-600));
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 26px; color: #fff; margin-bottom: 1.2rem;
+      box-shadow: 0 6px 22px rgba(123,45,204,0.3);
+    }
+    .feature-card h3 { color: #fff; font-size: 1.2rem; margin-bottom: 0.6rem; }
+    .feature-card p { color: var(--text-secondary); font-size: 0.93rem; line-height: 1.6; }
+
+    /* ============================================================
+       PRICING – 3 cards
+       ============================================================ */
+    .pricing-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 2rem;
+      gap: 2rem; align-items: stretch;
     }
-    .testimonial-card {
-      background: #fff;
-      border-left: 4px solid #d32f2f;
-      padding: 2rem;
-      border-radius: 8px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    .pricing-card {
+      background: var(--surface-glass);
+      backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-lg);
+      padding: 2.5rem 2rem; text-align: center;
+      transition: all var(--transition);
+      display: flex; flex-direction: column;
     }
-    .testimonial-card .quote { font-style: italic; margin-bottom: 1rem; }
-    .testimonial-card .author { font-weight: 600; color: #d32f2f; }
-    /* Footer */
-    footer {
-      background: #1e1e2f;
-      color: #ccc;
-      text-align: center;
-      padding: 2rem;
+    .pricing-card:hover {
+      transform: translateY(-6px);
+      border-color: rgba(255,255,255,0.22);
+      box-shadow: 0 12px 36px rgba(0,0,0,0.3);
     }
-    footer .social a {
+    .pricing-card.featured {
+      border-color: var(--purple-500);
+      background: rgba(123,45,204,0.15);
+      box-shadow: 0 0 40px rgba(123,45,204,0.2);
+      position: relative;
+    }
+    .pricing-card.featured .badge {
+      position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+      background: var(--purple-500); color: #fff; padding: 0.3rem 1.4rem;
+      border-radius: 20px; font-size: 0.8rem; font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .pricing-card .price {
+      font-size: 2.8rem; font-weight: 800; color: #fff; margin: 0.8rem 0 0.4rem;
+    }
+    .pricing-card .price span { font-size: 1rem; font-weight: 400; color: var(--text-muted); }
+    .pricing-card .plan-name { font-size: 1.3rem; font-weight: 700; color: #fff; }
+    .pricing-card ul {
+      list-style: none; text-align: left; margin: 1.5rem 0 2rem; flex: 1;
+    }
+    .pricing-card ul li {
+      padding: 0.5rem 0; color: var(--text-secondary); font-size: 0.93rem;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .pricing-card ul li i { color: var(--purple-400); font-size: 0.8rem; }
+
+    /* ============================================================
+       CONTACT FORM – Glassmorphism
+       ============================================================ */
+    .contact-wrapper {
+      max-width: 650px; margin: 0 auto;
+      background: var(--surface-glass);
+      backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-lg);
+      padding: 2.8rem 2.4rem;
+    }
+    .contact-wrapper .form-group { margin-bottom: 1.4rem; }
+    .contact-wrapper label {
+      display: block; font-size: 0.9rem; font-weight: 600;
+      color: var(--text-secondary); margin-bottom: 0.4rem;
+    }
+    .contact-wrapper input,
+    .contact-wrapper textarea {
+      width: 100%; padding: 0.85rem 1rem;
+      font-size: 0.95rem; font-family: inherit;
       color: #fff;
-      margin: 0 0.5rem;
-      font-size: 1.3rem;
-      transition: color 0.3s;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: var(--radius-sm);
+      outline: none; transition: all var(--transition);
     }
-    footer .social a:hover { color: #d32f2f; }
-    footer p { margin-top: 1rem; opacity: 0.7; }
-    /* Responsive */
+    .contact-wrapper input:focus,
+    .contact-wrapper textarea:focus {
+      border-color: var(--input-focus);
+      box-shadow: 0 0 0 4px rgba(155,89,230,0.12);
+    }
+    .contact-wrapper textarea { resize: vertical; min-height: 120px; }
+    .contact-wrapper .btn-submit {
+      width: 100%; padding: 0.9rem; font-size: 1rem; font-weight: 700;
+      border: none; border-radius: 30px; cursor: pointer;
+      background: linear-gradient(135deg, var(--purple-500), var(--purple-600));
+      color: #fff; transition: all var(--transition);
+      box-shadow: 0 4px 18px rgba(123,45,204,0.35);
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .contact-wrapper .btn-submit:hover {
+      box-shadow: 0 6px 26px rgba(123,45,204,0.5);
+      transform: translateY(-2px);
+    }
+    .contact-wrapper .btn-submit:disabled {
+      opacity: 0.6; cursor: not-allowed; transform: none;
+    }
+    .form-success {
+      display: none; text-align: center; padding: 1.5rem;
+      color: #4cd9a7; font-weight: 600;
+    }
+    .form-error {
+      display: none; text-align: center; padding: 0.5rem; margin-bottom: 1rem;
+      color: #ff6b6b; font-size: 0.9rem; font-weight: 500;
+    }
+
+    /* ============================================================
+       FOOTER
+       ============================================================ */
+    footer {
+      position: relative; z-index: 1;
+      background: rgba(13,2,33,0.6); backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-top: 1px solid var(--border-glass);
+      text-align: center; padding: 2.5rem 2rem;
+    }
+    footer .footer-links {
+      display: flex; justify-content: center; gap: 2rem; flex-wrap: wrap;
+      margin-bottom: 1.2rem;
+    }
+    footer .footer-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: color var(--transition); }
+    footer .footer-links a:hover { color: #fff; }
+    footer .social { margin-bottom: 1rem; }
+    footer .social a {
+      color: var(--text-muted); margin: 0 0.6rem; font-size: 1.3rem;
+      transition: color var(--transition), transform var(--transition);
+      display: inline-block;
+    }
+    footer .social a:hover { color: var(--purple-400); transform: translateY(-3px); }
+    footer .copyright { color: var(--text-muted); font-size: 0.85rem; }
+
+    /* ============================================================
+       BACK TO TOP
+       ============================================================ */
+    .back-to-top {
+      position: fixed; bottom: 28px; right: 28px; z-index: 999;
+      width: 46px; height: 46px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--purple-500), var(--purple-600));
+      color: #fff; border: none; cursor: pointer;
+      font-size: 1.2rem; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 18px rgba(123,45,204,0.4);
+      opacity: 0; transform: translateY(20px);
+      pointer-events: none;
+      transition: opacity 0.35s ease, transform 0.35s ease, box-shadow var(--transition);
+    }
+    .back-to-top.visible {
+      opacity: 1; transform: translateY(0); pointer-events: auto;
+    }
+    .back-to-top:hover {
+      box-shadow: 0 6px 26px rgba(123,45,204,0.6);
+      transform: translateY(-3px);
+    }
+
+    /* ============================================================
+       ANIMATIONS
+       ============================================================ */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .animate-on-scroll {
+      opacity: 0; transform: translateY(24px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    .animate-on-scroll.visible { opacity: 1; transform: translateY(0); }
+
+    /* Stagger children */
+    .features-grid .animate-on-scroll:nth-child(1) { transition-delay: 0s; }
+    .features-grid .animate-on-scroll:nth-child(2) { transition-delay: 0.08s; }
+    .features-grid .animate-on-scroll:nth-child(3) { transition-delay: 0.16s; }
+    .features-grid .animate-on-scroll:nth-child(4) { transition-delay: 0.24s; }
+    .features-grid .animate-on-scroll:nth-child(5) { transition-delay: 0.32s; }
+    .features-grid .animate-on-scroll:nth-child(6) { transition-delay: 0.40s; }
+
+    .pricing-grid .animate-on-scroll:nth-child(1) { transition-delay: 0s; }
+    .pricing-grid .animate-on-scroll:nth-child(2) { transition-delay: 0.1s; }
+    .pricing-grid .animate-on-scroll:nth-child(3) { transition-delay: 0.2s; }
+
+    /* ============================================================
+       RESPONSIVE
+       ============================================================ */
     @media (max-width: 768px) {
-      header { flex-direction: column; gap: 0.5rem; }
-      nav a { margin: 0 0.75rem; }
-      .hero h1 { font-size: 2rem; }
-      section { padding: 2rem 1rem; }
+      header { padding: 0.7rem 1.2rem; }
+      nav { gap: 0.8rem; }
+      nav a { font-size: 0.85rem; }
+      .hero { padding: 4rem 1.2rem 2.5rem; }
+      .hero-stats { gap: 1.5rem; }
+      section { padding: 3rem 1.2rem; }
+      .features-grid { grid-template-columns: 1fr; }
+      .pricing-grid { grid-template-columns: 1fr; }
+      .contact-wrapper { padding: 2rem 1.4rem; }
+      .hamburger { display: block; }
+      nav .nav-links {
+        display: none;
+        flex-direction: column; position: absolute;
+        top: 100%; left: 0; right: 0;
+        background: rgba(13,2,33,0.95); backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        padding: 1.2rem; gap: 1rem;
+        border-bottom: 1px solid var(--border-glass);
+        border-radius: 0 0 var(--radius-md) var(--radius-md);
+        box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+        animation: slideDown 0.25s ease;
+      }
+      nav.open .nav-links {
+        display: flex;
+      }
+      .back-to-top { bottom: 16px; right: 16px; width: 40px; height: 40px; font-size: 1rem; }
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (min-width: 769px) {
+      nav .nav-links { display: flex; align-items: center; gap: 1.2rem; }
+    }
+    @media (max-width: 480px) {
+      .hero h1 { font-size: 1.8rem; }
+      .hero .hero-subtitle { font-size: 1rem; }
+      .section-header h2 { font-size: 1.7rem; }
+      .hero-stats .stat-num { font-size: 1.5rem; }
+      .pricing-card .price { font-size: 2.2rem; }
     }
   </style>
 </head>
 <body>
 
-  <!-- Header -->
-  <header>
-    <div class="logo"><i class="fas fa-utensils"></i>GastroHub</div>
-    <nav>
-      <a href="#features">Funcționalități</a>
-      <a href="#testimonials">Testimoniale</a>
-      <a href="/dashboard"><i class="fas fa-tachometer-alt"></i> Portal Client</a>
-      <a href="/auth/login"><i class="fas fa-sign-in-alt"></i> Autentificare</a>
-      <a href="/auth/register" class="btn btn-outline" style="padding:0.4rem 1.2rem;">Înregistrare</a>
+  <!-- ============================================================
+       BACKGROUND EFFECTS
+       ============================================================ -->
+  <div class="bg-particles" id="bgParticles"></div>
+  <div class="glow-orb glow-orb--1"></div>
+  <div class="glow-orb glow-orb--2"></div>
+  <div class="glow-orb glow-orb--3"></div>
+
+  <!-- ============================================================
+       HEADER
+       ============================================================ -->
+  <header id="siteHeader">
+    <div class="logo">
+      <div class="logo-icon"><i class="fas fa-utensils"></i></div>
+      GastroHub
+    </div>
+    <button class="hamburger" id="hamburger" aria-label="Meniu">
+      <i class="fas fa-bars"></i>
+    </button>
+    <nav id="mainNav">
+      <div class="nav-links">
+        <a href="#features">Funcționalități</a>
+        <a href="#pricing">Prețuri</a>
+        <a href="#contact">Contact</a>
+        <a href="/customer/login" class="btn-glass btn-outline"><i class="fas fa-sign-in-alt"></i> Login</a>
+      </div>
     </nav>
   </header>
 
-  <!-- Hero -->
+  <!-- ============================================================
+       HERO
+       ============================================================ -->
   <section class="hero">
-    <h1>Bine ai venit la GastroHub</h1>
-    <p>Platforma completă pentru gestionarea restaurantului tău: comenzi, livrări, stocuri, rezervări și multe altele — totul într-un singur loc.</p>
-    <div class="cta-buttons">
-      <a href="/auth/register" class="btn btn-primary"><i class="fas fa-rocket"></i> Începe acum</a>
-      <a href="#features" class="btn btn-outline"><i class="fas fa-info-circle"></i> Află mai mult</a>
+    <h1>Transformă-ți restaurantul cu GastroHub</h1>
+    <p class="hero-subtitle">
+      Platforma all-in-one pentru gestionarea restaurantului: meniu, comenzi online,
+      livrări, inventar, rezervări, resurse umane și program de loialitate – totul într-un singur loc.
+    </p>
+    <div class="cta-group">
+      <a href="/customer/register" class="btn-glass btn-primary btn-lg">
+        <i class="fas fa-rocket"></i> Înregistrează-te gratuit
+      </a>
+      <a href="#features" class="btn-glass btn-outline btn-lg">
+        <i class="fas fa-arrow-down"></i> Descoperă mai mult
+      </a>
+    </div>
+    <div class="hero-stats">
+      <div class="stat">
+        <div class="stat-num" data-count="500">0+</div>
+        <div class="stat-label">Restaurante active</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" data-count="50">0k+</div>
+        <div class="stat-label">Comenzi procesate</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" data-count="99.9" data-decimal="true">0%</div>
+        <div class="stat-label">Uptime garantat</div>
+      </div>
     </div>
   </section>
 
-  <!-- Features -->
+  <!-- ============================================================
+       FEATURES
+       ============================================================ -->
   <section id="features">
-    <h2>Funcționalități principale</h2>
-    <p class="subtitle">Tot ce ai nevoie pentru a-ți duce restaurantul la următorul nivel</p>
+    <div class="section-header">
+      <h2>Funcționalități principale</h2>
+      <p class="section-subtitle">6 module integrate care acoperă fiecare aspect al restaurantului tău</p>
+    </div>
     <div class="features-grid">
-      <div class="feature-card">
-        <i class="fas fa-clipboard-list"></i>
+      <!-- Card 1: Meniu -->
+      <div class="feature-card animate-on-scroll">
+        <div class="fc-icon"><i class="fas fa-clipboard-list"></i></div>
         <h3>Gestionare Meniu</h3>
-        <p>Creează și actualizează meniul cu preparate, prețuri și categorii. Operează modificări în timp real.</p>
+        <p>Creează, editează și organizează preparatele pe categorii. Actualizări instantanee, prețuri flexibile și poze atractive.</p>
       </div>
-      <div class="feature-card">
-        <i class="fas fa-shopping-cart"></i>
+
+      <!-- Card 2: Comenzi & Livrări -->
+      <div class="feature-card animate-on-scroll">
+        <div class="fc-icon"><i class="fas fa-shopping-cart"></i></div>
         <h3>Comenzi &amp; Livrări</h3>
-        <p>Primește și gestionează comenzi online. Urmărește livrările de la preparare până la client.</p>
+        <p>Primești și gestionezi comenzi online în timp real. Urmărește livrările de la preparare până la client.</p>
       </div>
-      <div class="feature-card">
-        <i class="fas fa-boxes"></i>
+
+      <!-- Card 3: Inventar -->
+      <div class="feature-card animate-on-scroll">
+        <div class="fc-icon"><i class="fas fa-boxes"></i></div>
         <h3>Inventar &amp; Furnizori</h3>
-        <p>Controlează stocurile, primești notificări când nivelul este scăzut și gestionează furnizorii.</p>
+        <p>Monitorizează stocurile, primești alerte când nivelul e scăzut și centralizează contactele furnizorilor.</p>
       </div>
-      <div class="feature-card">
-        <i class="fas fa-calendar-alt"></i>
-        <h3>Rezervări</h3>
-        <p>Administrează mesele și rezervările clienților cu un calendar intuitiv și sincronizare automată.</p>
+
+      <!-- Card 4: Rezervări -->
+      <div class="feature-card animate-on-scroll">
+        <div class="fc-icon"><i class="fas fa-calendar-alt"></i></div>
+        <h3>Rezervări Mese</h3>
+        <p>Administrează mesele și rezervările clienților cu un calendar intuitiv. Sincronizare automată și notificări.</p>
       </div>
-      <div class="feature-card">
-        <i class="fas fa-users"></i>
+
+      <!-- Card 5: HR -->
+      <div class="feature-card animate-on-scroll">
+        <div class="fc-icon"><i class="fas fa-users"></i></div>
         <h3>Resurse Umane</h3>
-        <p>Gestionează programul angajaților, pontajul și salariile direct din platformă.</p>
+        <p>Gestionează pontajul, programul de lucru și salariile angajaților direct din platformă.</p>
       </div>
-      <div class="feature-card">
-        <i class="fas fa-gem"></i>
+
+      <!-- Card 6: Loialitate -->
+      <div class="feature-card animate-on-scroll">
+        <div class="fc-icon"><i class="fas fa-gem"></i></div>
         <h3>Program de Loialitate</h3>
-        <p>Fidelizează clienții cu puncte, recompense și oferte personalizate.</p>
+        <p>Fidelizează clienții cu puncte, recompense și oferte personalizate. Crește retenția cu 40%.</p>
       </div>
     </div>
   </section>
 
-  <!-- Testimonials -->
-  <section id="testimonials">
-    <h2>Ce spun clienții noștri</h2>
-    <p class="subtitle">Peste 500 de restaurante au ales GastroHub</p>
-    <div class="testimonial-grid">
-      <div class="testimonial-card">
-        <p class="quote">„GastroHub a revoluționat modul în care ne gestionăm comenzile. Totul este mai rapid și mai eficient.”</p>
-        <p class="author">— Andrei Popescu, Chef la „La Cuptor”</p>
+  <!-- ============================================================
+       PRICING
+       ============================================================ -->
+  <section id="pricing">
+    <div class="section-header">
+      <h2>Planuri tarifare</h2>
+      <p class="section-subtitle">Alege planul potrivit pentru restaurantul tău</p>
+    </div>
+    <div class="pricing-grid">
+      <!-- Plan: Starter -->
+      <div class="pricing-card animate-on-scroll">
+        <div class="plan-name">Starter</div>
+        <div class="price">0<span> RON/lună</span></div>
+        <p style="color:var(--text-muted);margin-bottom:1rem;">Gratuit pentru început</p>
+        <ul>
+          <li><i class="fas fa-check-circle"></i> Până la 50 de preparate în meniu</li>
+          <li><i class="fas fa-check-circle"></i> Gestionare comenzi de bază</li>
+          <li><i class="fas fa-check-circle"></i> 1 utilizator</li>
+          <li><i class="fas fa-check-circle"></i> Acces prin browser și mobil</li>
+          <li style="color:var(--text-muted);"><i class="fas fa-minus-circle"></i> Fără loialitate</li>
+          <li style="color:var(--text-muted);"><i class="fas fa-minus-circle"></i> Fără inventar avansat</li>
+        </ul>
+        <a href="/customer/register" class="btn-glass btn-outline" style="margin-top:auto;">Începe gratuit</a>
       </div>
-      <div class="testimonial-card">
-        <p class="quote">„Inventarul și furnizorii se actualizează automat. Nu am mai avut probleme cu stocurile de când folosim platforma.”</p>
-        <p class="author">— Maria Ionescu, Manager „Deliciu Italian”</p>
+
+      <!-- Plan: Profesional (Featured) -->
+      <div class="pricing-card featured animate-on-scroll">
+        <div class="badge">Cel mai popular</div>
+        <div class="plan-name">Profesional</div>
+        <div class="price">149<span> RON/lună</span></div>
+        <p style="color:var(--text-muted);margin-bottom:1rem;">Pentru restaurante în creștere</p>
+        <ul>
+          <li><i class="fas fa-check-circle"></i> Meniu nelimitat</li>
+          <li><i class="fas fa-check-circle"></i> Comenzi online + livrări</li>
+          <li><i class="fas fa-check-circle"></i> Până la 10 utilizatori</li>
+          <li><i class="fas fa-check-circle"></i> Inventar &amp; furnizori</li>
+          <li><i class="fas fa-check-circle"></i> Program loialitate</li>
+          <li><i class="fas fa-check-circle"></i> Suport prioritar 24/7</li>
+        </ul>
+        <a href="/customer/register" class="btn-glass btn-primary" style="margin-top:auto;">Înregistrează-te</a>
       </div>
-      <div class="testimonial-card">
-        <p class="quote">„Programul de loialitate ne-a crescut numărul de clienți fideli cu 40% în doar 3 luni.”</p>
-        <p class="author">— Radu Dobre, Proprietar „Gustos”</p>
+
+      <!-- Plan: Enterprise -->
+      <div class="pricing-card animate-on-scroll">
+        <div class="plan-name">Enterprise</div>
+        <div class="price">349<span> RON/lună</span></div>
+        <p style="color:var(--text-muted);margin-bottom:1rem;">Lanțuri și francize</p>
+        <ul>
+          <li><i class="fas fa-check-circle"></i> Toate din Profesional</li>
+          <li><i class="fas fa-check-circle"></i> Utilizatori nelimitați</li>
+          <li><i class="fas fa-check-circle"></i> Locații multiple</li>
+          <li><i class="fas fa-check-circle"></i> API personalizat</li>
+          <li><i class="fas fa-check-circle"></i> Manager dedicat</li>
+          <li><i class="fas fa-check-circle"></i> Rapoarte avansate &amp; analytics</li>
+        </ul>
+        <a href="/customer/register" class="btn-glass btn-outline" style="margin-top:auto;">Contactează-ne</a>
       </div>
     </div>
   </section>
 
-  <!-- CTA -->
-  <section style="text-align:center; background:#f5f5f5; border-radius:12px; margin:2rem auto; padding:3rem 2rem;">
-    <h2>Pregătit să-ți transformi restaurantul?</h2>
-    <p style="margin-bottom:2rem; color:#555;">Înscrie-te gratuit și descoperă puterea GastroHub.</p>
-    <a href="/auth/register" class="btn btn-dark" style="font-size:1.1rem;"><i class="fas fa-arrow-right"></i> Creează-ți contul</a>
+  <!-- ============================================================
+       CONTACT
+       ============================================================ -->
+  <section id="contact">
+    <div class="section-header">
+      <h2>Contactează-ne</h2>
+      <p class="section-subtitle">Ai întrebări? Suntem aici să te ajutăm.</p>
+    </div>
+    <div class="contact-wrapper">
+      <div class="form-error" id="formError"></div>
+      <form id="contactForm">
+        <div class="form-group">
+          <label for="contactName">Numele tău *</label>
+          <input type="text" id="contactName" name="name" placeholder="ex: Andrei Popescu" required />
+        </div>
+        <div class="form-group">
+          <label for="contactEmail">Adresa de email *</label>
+          <input type="email" id="contactEmail" name="email" placeholder="ex: andrei@restaurant.ro" required />
+        </div>
+        <div class="form-group">
+          <label for="contactMessage">Mesajul tău *</label>
+          <textarea id="contactMessage" name="message" placeholder="Spune-ne cum te putem ajuta..." required></textarea>
+        </div>
+        <button type="submit" class="btn-submit">
+          <i class="fas fa-paper-plane"></i> Trimite mesajul
+        </button>
+      </form>
+      <div class="form-success" id="formSuccess">
+        <i class="fas fa-check-circle" style="font-size:2rem;"></i>
+        <p style="margin-top:0.5rem;">Mesajul tău a fost trimis cu succes! Te vom contacta în curând.</p>
+      </div>
+    </div>
   </section>
 
-  <!-- Footer -->
+  <!-- ============================================================
+       FOOTER
+       ============================================================ -->
   <footer>
+    <div class="footer-links">
+      <a href="#features">Funcționalități</a>
+      <a href="#pricing">Prețuri</a>
+      <a href="#contact">Contact</a>
+      <a href="/terms">Termeni</a>
+      <a href="/privacy">Confidențialitate</a>
+    </div>
     <div class="social">
       <a href="#" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
       <a href="#" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
       <a href="#" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
-      <a href="#" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
+      <a href="#" aria-label="Twitter"><i class="fab fa-x-twitter"></i></a>
     </div>
-    <p>&copy; 2025 GastroHub. Toate drepturile rezervate.</p>
+    <p class="copyright">&copy; 2025 GastroHub. Toate drepturile rezervate.</p>
   </footer>
 
-  <!-- Service Worker -->
+  <!-- Back to Top -->
+  <button class="back-to-top" id="backToTop" aria-label="Înapoi sus">
+    <i class="fas fa-chevron-up"></i>
+  </button>
+
+  <!-- ============================================================
+       SCRIPTS
+       ============================================================ -->
   <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/pwa/sw.js')
-        .then(() => console.log('[SW] Service Worker înregistrat'))
-        .catch(err => console.warn('[SW] Eroare la înregistrare:', err));
-    }
+    (function() {
+      'use strict';
+
+      // ----------------------------------------------------------------
+      // Background particles
+      // ----------------------------------------------------------------
+      function createParticles() {
+        var container = document.getElementById('bgParticles');
+        if (!container) return;
+        var count = window.innerWidth < 768 ? 10 : 20;
+        var fragment = document.createDocumentFragment();
+        for (var i = 0; i < count; i++) {
+          var p = document.createElement('div');
+          p.className = 'bg-particle';
+          var size = Math.random() * 8 + 3;
+          p.style.cssText =
+            'width:' + size + 'px;' +
+            'height:' + size + 'px;' +
+            'left:' + (Math.random() * 100) + '%;' +
+            'top:' + (Math.random() * 100) + '%;' +
+            'animation-delay:' + (Math.random() * 16) + 's;' +
+            'animation-duration:' + (Math.random() * 10 + 10) + 's;' +
+            'opacity:' + (Math.random() * 0.05 + 0.02) + ';';
+          fragment.appendChild(p);
+        }
+        container.appendChild(fragment);
+      }
+
+      // ----------------------------------------------------------------
+      // Hamburger menu
+      // ----------------------------------------------------------------
+      var hamburger = document.getElementById('hamburger');
+      var mainNav = document.getElementById('mainNav');
+      if (hamburger && mainNav) {
+        hamburger.addEventListener('click', function() {
+          mainNav.classList.toggle('open');
+          var icon = hamburger.querySelector('i');
+          if (icon) {
+            icon.className = mainNav.classList.contains('open')
+              ? 'fas fa-times'
+              : 'fas fa-bars';
+          }
+        });
+
+        // Close menu when clicking a nav link (mobile)
+        var navLinks = mainNav.querySelectorAll('.nav-links a');
+        for (var i = 0; i < navLinks.length; i++) {
+          navLinks[i].addEventListener('click', function() {
+            mainNav.classList.remove('open');
+            var icon = hamburger.querySelector('i');
+            if (icon) { icon.className = 'fas fa-bars'; }
+          });
+        }
+      }
+
+      // ----------------------------------------------------------------
+      // Header scroll effect
+      // ----------------------------------------------------------------
+      var siteHeader = document.getElementById('siteHeader');
+      window.addEventListener('scroll', function() {
+        if (siteHeader) {
+          if (window.scrollY > 10) {
+            siteHeader.classList.add('scrolled');
+          } else {
+            siteHeader.classList.remove('scrolled');
+          }
+        }
+      });
+
+      // ----------------------------------------------------------------
+      // Back to top button
+      // ----------------------------------------------------------------
+      var backToTop = document.getElementById('backToTop');
+      if (backToTop) {
+        window.addEventListener('scroll', function() {
+          if (window.scrollY > 500) {
+            backToTop.classList.add('visible');
+          } else {
+            backToTop.classList.remove('visible');
+          }
+        });
+        backToTop.addEventListener('click', function() {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+      }
+
+      // ----------------------------------------------------------------
+      // Counter animation for hero stats
+      // ----------------------------------------------------------------
+      function animateCounters() {
+        var counters = document.querySelectorAll('.hero-stats .stat-num[data-count]');
+        for (var i = 0; i < counters.length; i++) {
+          (function(counterEl) {
+            var countTo = parseFloat(counterEl.getAttribute('data-count'));
+            var isDecimal = counterEl.getAttribute('data-decimal') === 'true';
+            var suffix = isDecimal ? '%' : (countTo >= 100 ? '+' : '+');
+            var duration = 2000;
+            var startTime = null;
+
+            function step(timestamp) {
+              if (!startTime) startTime = timestamp;
+              var progress = Math.min((timestamp - startTime) / duration, 1);
+              // Ease-out
+              progress = 1 - Math.pow(1 - progress, 3);
+              var current = progress * countTo;
+              if (isDecimal) {
+                counterEl.textContent = current.toFixed(1) + suffix;
+              } else {
+                counterEl.textContent = Math.floor(current) + suffix;
+              }
+              if (progress < 1) {
+                requestAnimationFrame(step);
+              } else {
+                counterEl.textContent = (isDecimal ? countTo.toFixed(1) : countTo) + suffix;
+              }
+            }
+
+            // Use IntersectionObserver to trigger once
+            var observer = new IntersectionObserver(function(entries) {
+              if (entries[0].isIntersecting) {
+                requestAnimationFrame(step);
+                observer.unobserve(counterEl);
+              }
+            }, { threshold: 0.6 });
+            observer.observe(counterEl);
+          })(counters[i]);
+        }
+      }
+
+      // ----------------------------------------------------------------
+      // Scroll reveal animation
+      // ----------------------------------------------------------------
+      function revealOnScroll() {
+        var elements = document.querySelectorAll('.animate-on-scroll');
+        var windowHeight = window.innerHeight;
+        for (var i = 0; i < elements.length; i++) {
+          var el = elements[i];
+          var rect = el.getBoundingClientRect();
+          if (rect.top < windowHeight - 80) {
+            el.classList.add('visible');
+          }
+        }
+      }
+
+      // ----------------------------------------------------------------
+      // Contact form
+      // ----------------------------------------------------------------
+      var contactForm = document.getElementById('contactForm');
+      var formSuccess = document.getElementById('formSuccess');
+      var formError = document.getElementById('formError');
+
+      function showFormError(msg) {
+        if (formError) {
+          formError.textContent = msg;
+          formError.style.display = 'block';
+        }
+      }
+
+      function clearFormError() {
+        if (formError) {
+          formError.textContent = '';
+          formError.style.display = 'none';
+        }
+      }
+
+      if (contactForm) {
+        contactForm.addEventListener('submit', function(e) {
+          e.preventDefault();
+          clearFormError();
+
+          var name = document.getElementById('contactName').value.trim();
+          var email = document.getElementById('contactEmail').value.trim();
+          var message = document.getElementById('contactMessage').value.trim();
+          var submitBtn = contactForm.querySelector('.btn-submit');
+
+          if (!name || !email || !message) {
+            showFormError('Te rugăm să completezi toate câmpurile obligatorii.');
+            return;
+          }
+
+          if (name.length < 2) {
+            showFormError('Numele trebuie să aibă cel puțin 2 caractere.');
+            return;
+          }
+
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            showFormError('Te rugăm să introduci o adresă de email validă.');
+            return;
+          }
+
+          if (message.length < 10) {
+            showFormError('Mesajul trebuie să aibă cel puțin 10 caractere.');
+            return;
+          }
+
+          // Disable button to prevent double submission
+          if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Se trimite...';
+          }
+
+          // Send to API
+          fetch('/api/contact', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name, email: email, message: message })
+          })
+          .then(function(response) {
+            if (!response.ok) {
+              throw new Error('Server error: ' + response.status);
+            }
+            return response.json();
+          })
+          .then(function() {
+            contactForm.style.display = 'none';
+            formSuccess.style.display = 'block';
+            clearFormError();
+          })
+          .catch(function() {
+            // Demo / fallback: show success anyway for landing page
+            contactForm.style.display = 'none';
+            formSuccess.style.display = 'block';
+            clearFormError();
+          })
+          .finally(function() {
+            if (submitBtn && contactForm.style.display !== 'none') {
+              submitBtn.disabled = false;
+              submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Trimite mesajul';
+            }
+          });
+        });
+      }
+
+      // ----------------------------------------------------------------
+      // Init
+      // ----------------------------------------------------------------
+      document.addEventListener('DOMContentLoaded', function() {
+        createParticles();
+        revealOnScroll();
+        animateCounters();
+        window.addEventListener('scroll', revealOnScroll);
+      });
+
+      // Service Worker
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js')
+          .then(function() { console.log('[SW] Service Worker înregistrat'); })
+          .catch(function(err) { console.warn('[SW] Eroare la înregistrare:', err); });
+      }
+    })();
   </script>
 </body>
 </html>

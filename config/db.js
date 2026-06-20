@@ -149,6 +149,17 @@ async function getDb() {
     created_at TEXT DEFAULT (datetime('now'))
   )`);
 
+  db.run(`CREATE TABLE IF NOT EXISTS tenants (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    email TEXT,
+    phone TEXT,
+    address TEXT,
+    settings TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now'))
+  )`);
+
   // Seed admin
   const existing = db.exec("SELECT id FROM users WHERE email = 'super_admin@gastrohub.io'");
   if (!existing.length || existing[0].values.length === 0) {

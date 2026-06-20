@@ -321,6 +321,27 @@
       gap: 5px;
     }
 
+    /* Form-level generic error alert (populated by client-side fetch) */
+    .form-alert {
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 20px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      background: rgba(255, 107, 138, 0.15);
+      border: 1px solid rgba(255, 107, 138, 0.3);
+      color: #ffb3c3;
+    }
+
+    .form-alert.show {
+      display: flex;
+    }
+
     /* Password toggle */
     .password-toggle {
       position: absolute;
@@ -703,6 +724,12 @@
         </div>
       <% } %>
 
+      <!-- Generic form alert (populated by client-side fetch errors) -->
+      <div class="form-alert" id="formAlert">
+        <i class="fas fa-exclamation-circle"></i>
+        <span id="formAlertText"></span>
+      </div>
+
       <!-- Register Form -->
       <form id="registerForm" action="/api/auth/register" method="POST" novalidate>
         <!-- Nume și Prenume - pe același rând -->
@@ -951,6 +978,8 @@
       var confirmPasswordError = document.getElementById('confirmPasswordError');
       var confirmPasswordErrorText = document.getElementById('confirmPasswordErrorText');
       var termsError = document.getElementById('termsError');
+      var formAlert = document.getElementById('formAlert');
+      var formAlertText = document.getElementById('formAlertText');
 
       var passwordToggle = document.getElementById('passwordToggle');
       var confirmPasswordToggle = document.getElementById('confirmPasswordToggle');
@@ -987,29 +1016,34 @@
         if (errorEl) errorEl.classList.remove('show');
       }
 
+      function hideFormAlert() {
+        if (formAlert) formAlert.classList.remove('show');
+      }
+
       if (prenumeInput) {
-        prenumeInput.addEventListener('input', function() { hideError(prenumeError); });
+        prenumeInput.addEventListener('input', function() { hideError(prenumeError); hideFormAlert(); });
       }
       if (numeInput) {
-        numeInput.addEventListener('input', function() { hideError(numeError); });
+        numeInput.addEventListener('input', function() { hideError(numeError); hideFormAlert(); });
       }
       if (emailInput) {
-        emailInput.addEventListener('input', function() { hideError(emailError); });
+        emailInput.addEventListener('input', function() { hideError(emailError); hideFormAlert(); });
       }
       if (telefonInput) {
-        telefonInput.addEventListener('input', function() { hideError(telefonError); });
+        telefonInput.addEventListener('input', function() { hideError(telefonError); hideFormAlert(); });
       }
       if (passwordInput) {
         passwordInput.addEventListener('input', function() {
           hideError(passwordError);
+          hideFormAlert();
           updatePasswordStrength();
         });
       }
       if (confirmPasswordInput) {
-        confirmPasswordInput.addEventListener('input', function() { hideError(confirmPasswordError); });
+        confirmPasswordInput.addEventListener('input', function() { hideError(confirmPasswordError); hideFormAlert(); });
       }
       if (termsCheckbox) {
-        termsCheckbox.addEventListener('change', function() { hideError(termsError); });
+        termsCheckbox.addEventListener('change', function() { hideError(termsError); hideFormAlert(); });
       }
 
       // =================================================================
@@ -1171,13 +1205,30 @@
       }
 
       // =================================================================
-      // Submit handler
+      // Set loading state
+      // =================================================================
+      function setLoading(loading) {
+        if (submitBtn) {
+          if (loading) {
+            submitBtn.classList.add('loading');
+            submitBtn.disabled = true;
+          } else {
+            submitBtn.classList.remove('loading');
+            submitBtn.disabled = false;
+          }
+        }
+      }
+
+      // =================================================================
+      // Submit handler — uses fetch to call API, then redirects on success
       // =================================================================
       if (form) {
         form.addEventListener('submit', function(e) {
+          // Prevent default always — we handle submission via fetch
+          e.preventDefault();
+
           // Client-side validation
           if (!validateForm()) {
-            e.preventDefault();
             // Scroll to first error
             var firstError = form.querySelector('.form-error.show, .terms-error.show');
             if (firstError) {
@@ -1187,19 +1238,82 @@
           }
 
           if (isSubmitting) {
-            e.preventDefault();
             return;
           }
 
           isSubmitting = true;
-          if (submitBtn) {
-            submitBtn.classList.add('loading');
-            submitBtn.disabled = true;
+          setLoading(true);
+          hideFormAlert();
+
+          // Build request body
+          var body = {
+            email: emailInput ? emailInput.value.trim() : '',
+            password: passwordInput ? passwordInput.value : '',
+            role: 'client'
+          };
+
+          // Optional fields
+          var prenume = prenumeInput ? prenumeInput.value.trim() : '';
+          var nume = numeInput ? numeInput.value.trim() : '';
+          if (prenume || nume) {
+            body.name = (prenume + ' ' + nume).trim();
           }
 
-          // Allow form to submit normally (POST to /api/auth/register)
-          // The loading state shows the spinner while the request is in flight.
-          // After server response, the page will either redirect or re-render with errors.
+          var telefon = telefonInput ? telefonInput.value.trim() : '';
+          if (telefon) {
+            body.phone = telefon;
+          }
+
+          // Send register request to API
+          fetch(form.action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            credentials: 'same-origin'  // Send cookies along
+          })
+            .then(function(response) {
+              return response.json().then(function(data) {
+                return { status: response.status, ok: response.ok, data: data };
+              });
+            })
+            .then(function(result) {
+              if (result.ok && result.data.success) {
+                // Registration successful — redirect to dashboard
+                window.location.href = '/customer/dashboard';
+                return;
+              }
+
+              // Server returned an error
+              var errorMsg = result.data.message || result.data.error || 'Eroare la înregistrare.';
+              if (result.data.errors && Array.isArray(result.data.errors) && result.data.errors.length > 0) {
+                errorMsg = result.data.errors.map(function(e) { return e.msg || e; }).join('; ');
+              }
+
+              // Check for duplicate email
+              if (result.status === 409) {
+                if (emailErrorText) emailErrorText.textContent = errorMsg;
+                if (emailError) emailError.classList.add('show');
+                emailInput.focus();
+              } else {
+                if (formAlert && formAlertText) {
+                  formAlertText.textContent = errorMsg;
+                  formAlert.classList.add('show');
+                }
+              }
+
+              // Reset loading state
+              setLoading(false);
+              isSubmitting = false;
+            })
+            .catch(function(err) {
+              // Network error or unexpected issue
+              if (formAlert && formAlertText) {
+                formAlertText.textContent = 'Eroare de rețea sau server indisponibil. Verifică conexiunea și încearcă din nou.';
+                formAlert.classList.add('show');
+              }
+              setLoading(false);
+              isSubmitting = false;
+            });
         });
       }
 
