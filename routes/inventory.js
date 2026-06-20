@@ -10,10 +10,8 @@ const {
   deleteItem
 } = require('../models/inventoryModel');
 
-// ✅ Definim aici categoriile valide
 const VALID_CATEGORIES = ['alimente', 'bauturi', 'consumabile', 'curatenie', 'ambalaje', 'altele'];
 
-// Listare stocuri
 router.get('/', auth, checkRole('super_admin', 'admin', 'manager'), async (req, res) => {
   try {
     const items = await getInventoryByTenant(req.user.tenant_id);
@@ -23,7 +21,6 @@ router.get('/', auth, checkRole('super_admin', 'admin', 'manager'), async (req, 
   }
 });
 
-// Detaliu produs
 router.get('/:id', auth, checkRole('super_admin', 'admin', 'manager'), async (req, res) => {
   try {
     const item = await getItemById(req.params.id);
@@ -34,7 +31,6 @@ router.get('/:id', auth, checkRole('super_admin', 'admin', 'manager'), async (re
   }
 });
 
-// Adăugare produs
 router.post('/',
   auth,
   checkRole('super_admin', 'admin', 'manager'),
@@ -60,7 +56,6 @@ router.post('/',
   }
 );
 
-// Actualizare produs
 router.put('/:id',
   auth,
   checkRole('super_admin', 'admin', 'manager'),
@@ -84,7 +79,6 @@ router.put('/:id',
   }
 );
 
-// Ștergere produs
 router.delete('/:id', auth, checkRole('super_admin', 'admin'), async (req, res) => {
   try {
     await deleteItem(req.params.id);

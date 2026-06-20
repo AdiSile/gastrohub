@@ -544,6 +544,21 @@
       "role": "assistant",
       "content": "✅ 3 fișiere generate.",
       "timestamp": 1781948693.8751445
+    },
+    {
+      "role": "user",
+      "content": "Creează fișierul `models/inventoryModel.js` pentru GastroHub. Trebuie să:  1. Folosească `const { getDb } = require('../config/db');` 2. Exporte funcțiile: createItem, getItemById, getInventoryByTenant, updateItem, deleteItem. 3. Funcțiile să fie async și să folosească interogări `sql.js` (db.run, db.exec). 4. Tabela `inventory` are coloanele: id, name, category, quantity, unit, min_quantity, price_per_unit, location, tenant_id. 5. Creează tabela dacă nu există.  După ce ai creat modelul, verifică și ruta `routes/inventory.js` să se potrivească cu exporturile modelului. Dacă funcțiile importate nu există, adaptează ruta.  Returnează fișierul `models/inventoryModel.js` și, dacă e nevoie, `routes/inventory.js`.",
+      "timestamp": 1781951308.7889643
+    },
+    {
+      "role": "system",
+      "content": "🚀 Proiect pornit: Proiect: gastrohub-core",
+      "timestamp": 1781951308.824963
+    },
+    {
+      "role": "assistant",
+      "content": "✅ Pas 1 (tdd-guide): 1 fișiere salvate.\n✅ Pas 2 (tdd-guide): 1 fișiere salvate.\n✅ Pas 3 (tdd-guide): 0 fișiere salvate.\n✅ Pas 4 (tdd-guide): 2 fișiere salvate.\n✅ Pas 5 (tdd-guide): 1 fișiere salvate.\n✅ Pas 6 (tdd-guide): 0 fișiere salvate.",
+      "timestamp": 1781951950.784167
     }
   ],
   "cerinta": "Rescrie complet fișierul models/reservationModel.js din proiectul GastroHub. Fișierul trebuie să fie un model Node.js care folosește SQLite (better-sqlite3) și exportă funcțiile necesare pentru gestionarea rezervărilor hoteliere.  **Structură obligatorie:** - Folosește `const db = require('../config/db');` pentru a accesa baza de date. - Exportă funcțiile: createReservation, getReservationById, getReservationsByHotel, getReservationsByGuest, updateReservationStatus, cancelReservation. - Fiecare funcție trebuie să fie completă, fără linii tăiate sau erori de sintaxă. - Nu folosi `better-sqlite3` direct aici; folosește metodele expuse de `db.js` (presupunem că există `db.run(sql, params)`, `db.get(sql, params)`, `db.all(sql, params)`).  **Nu adăuga alt fișier.** Returnează DOAR `models/reservationModel.js` complet, în formatul ### models/reservationModel.js ... ### END.",
@@ -2737,12 +2752,48 @@
       "desc": "Implementează complet cerința: <｜｜DSML｜｜tool_calls>\n<｜｜DSML｜｜invoke name=\"shell_exec\">\n<｜｜DSML｜｜parameter name=\"command\" string=\"true\">powershell -Command \"Get-ChildItem -Path . -Recurse -Include *.js -Exclude node_modules | Select-String 'VALID_RESERVATION_TYPES|ROOM_TYPES|VALID_ORDER_STATUSES|VALID_PAYMENT_METHODS|VALID_TABLE_STATUSES|VALID_DELIVERY_STATUSES|VALID_ROOM_STATUSES|VALID_EMPLOYEE_ROLES|VALID_ATTENDANCE_TYPES' | ForEach-Object { $_.Filename + ':' + $_.LineNumber + ':' + $_.Line }\"</｜｜DSML｜｜parameter>\n</｜｜DSML｜｜invoke>\n</｜｜DSML｜｜tool_calls>. Generează toate fișierele necesare.\n\nIMPORTANT: Returnează fiecare fișier în formatul:\n### cale/fișier.ext\nconținut\n### END\nFolosește DOAR căi relative la proiect, nu absolute.",
       "agent": "tdd-guide",
       "status": "pending"
+    },
+    {
+      "id": "a0032055",
+      "desc": "**routes/inventory.js** deja există și importă din `../models/inventoryModel`: `createItem`, `getItemById`, `getInventoryByTenant`, `updateItem`, `deleteItem`\n\nSkill-uri relevante:\nSkill: codebase-onboarding\n# Codebase Onboarding\n\nSystematically analyze an unfamiliar codebase and produce a structured onboarding guide. Designed for developers joining a new project or setting up Claude Code in an existing repo for the first time.\n\n## When to Use\n\n- First time opening a project with Claude Code\n- Joining a\n\nSkill: coding-standards\n# Coding Standards & Best Practices\n\nBaseline coding conventions applicable across projects.\n\nThis skill is the shared floor, not the detailed framework playbook.\n\n- Use `frontend-patterns` for React, state, forms, rendering, and UI architecture.\n- Use `backend-patterns` or `api-design` for reposito\n\nSkill: cpp-coding-standards\n# C++ Coding Standards (C++ Core Guidelines)\n\nComprehensive coding standards for modern C++ (C++17/20/23) derived from the [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines). Enforces type safety, resource safety, immutability, and clarity.\n\n## When to Use\n\n- Writing\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "8e61a766",
+      "desc": "**models/inventoryModel.js** nu există încă – trebuie creat\n\nSkill-uri relevante:\nSkill: continuous-agent-loop\n# Continuous Agent Loop\n\nThis is the v1.8+ canonical loop skill name. It supersedes `autonomous-loops` while keeping compatibility for one release.\n\n## Loop Selection Flow\n\n```text\nStart\n  |\n  +-- Need strict CI/PR control? -- yes --> continuous-pr\n  |\n  +-- Need RFC decomposition? -- yes --> rfc-da\n\nSkill: continuous-learning\n# Continuous Learning Skill - DEPRECATED\n\n> **DEPRECATED 2026-04-28.** Use `continuous-learning-v2` instead. v2 is a strict superset: stop-hook observation becomes PreToolUse/PostToolUse observation, full skills become atomic instincts with confidence scoring, and global-only storage becomes project\n\nSkill: continuous-learning-v2\n# Continuous Learning v2.1 - Instinct\n-Based Architecture\n\nAn advanced learning system that turns your Claude Code sessions into reusable knowledge through atomic \"instincts\" - small learned behaviors with confidence scoring.\n\n**v2.1** adds **project-scoped instincts** — React patterns stay in your \n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "a7b45bd9",
+      "desc": "**config/db.js** conține deja tabela `inventory` cu coloanele: `id, name, category, quantity, unit, min_quantity, price_per_unit, location, tenant_id, created_at`\n\nSkill-uri relevante:\nSkill: android-clean-architecture\n# Android Clean Architecture\n\nClean Architecture patterns for Android and KMP projects. Covers module boundaries, dependency inversion, UseCase/Repository patterns, and data layer design with Room, SQLDelight, and Ktor.\n\n## When to Activate\n\n- Structuring Android or KMP project modules\n- Implementin\n\nSkill: configure-ecc\n# Configure Everything Claude Code (ECC)\n\nAn interactive, step-by-step installation wizard for the Everything Claude Code project. Uses `AskUserQuestion` to guide users through selective installation of skills and rules, then verifies correctness and offers optimization.\n\n## When to Activate\n\n- User\n\nSkill: customer-billing-ops\n# Customer Billing Ops\n\nUse this skill for real customer operations, not generic payment API design.\n\nThe goal is to help the operator answer: who is this customer, what happened, what is the safest fix, and what follow-up should we send?\n\n## When to Use\n\n- Customer says billing is broken, they want\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "2184b506",
+      "desc": "Ruta existentă se potrivește perfect cu exporturile cerute – nu necesită modificări, doar verificare\n\nSkill-uri relevante:\nSkill: browser-qa\n# Browser QA — Automated Visual Testing & Interaction\n\n## When to Use\n\n- After deploying a feature to staging/preview\n- When you need to verify UI behavior across pages\n- Before shipping — confirm layouts, forms, interactions actually work\n- When reviewing PRs that touch frontend code\n- Accessibilit\n\nSkill: clickhouse-io\n# ClickHouse Analytics Patterns\n\nClickHouse-specific patterns for high-performance analytics and data engineering.\n\n## When to Activate\n\n- Designing ClickHouse table schemas (MergeTree engine selection)\n- Writing analytical queries (aggregations, window functions, joins)\n- Optimizing query performan\n\nSkill: codebase-onboarding\n# Codebase Onboarding\n\nSystematically analyze an unfamiliar codebase and produce a structured onboarding guide. Designed for developers joining a new project or setting up Claude Code in an existing repo for the first time.\n\n## When to Use\n\n- First time opening a project with Claude Code\n- Joining a\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "08335309",
+      "desc": "`models/inventoryModel.js` - Creează modelul de inventar care: folosește `getDb` din `config/db`, exportă funcțiile async `createItem`, `getItemById`, `getInventoryByTenant`, `updateItem`, `deleteItem`, operează pe tabela `inventory` (id, name, category, quantity, unit, min_quantity, price_per_unit, location, tenant_id) și include `CREATE TABLE IF NOT EXISTS`\n\nSkill-uri relevante:\nSkill: agent-introspection-debugging\n# Agent Introspection Debugging\n\nUse this skill when an agent run is failing repeatedly, consuming tokens without progress, looping on the same tools, or drifting away from the intended task.\n\nThis is a workflow skill, not a hidden runtime. It teaches the agent to debug itself systematically before \n\nSkill: android-clean-architecture\n# Android Clean Architecture\n\nClean Architecture patterns for Android and KMP projects. Covers module boundaries, dependency inversion, UseCase/Repository patterns, and data layer design with Room, SQLDelight, and Ktor.\n\n## When to Activate\n\n- Structuring Android or KMP project modules\n- Implementin\n\nSkill: angular-developer\n# Angular Developer Guidelines\n\n## When to Activate\n\n- Working in any Angular project or codebase\n- Creating or scaffolding a new Angular project, application, or library\n- Generating components, services, directives, pipes, guards, or resolvers\n- Implementing reactivity with Angular Signals, `linke\n\nReguli:\n---\npaths:\n  - \"**/*.pl\"\n  - \"**/*.pm\"\n  - \"**/*.t\"\n  - \"**/*.psgi\"\n  - \"**/*.cgi\"\n---\n# Perl Coding Style\n> This file extends [common/coding-style.md](../common/coding-style.md) with Perl-specific content.\n- Always `use v5.36` (enables `strict`, `warnings`, `say`, subroutine signatures)\n- Use subroutine signatures — never unpack `@_` manually\n- Prefer `say` over `print` with explicit newlines\n---\npaths:\n  - \"**/*.swift\"\n  - \"**/Package.swift\"\n---\n# Swift Coding Style\n> This file extends [common/coding-style.md](../common/coding-style.md) with Swift specific content.\n- **SwiftFormat** for auto-formatting, **SwiftLint** for style enforcement\n- `swift-format` is bundled with Xcode 16+ as an alternative\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "64a2a10c",
+      "desc": "`routes/inventory.js` - Verifică că importurile din `../models/inventoryModel` (`createItem`, `getItemById`, `getInventoryByTenant`, `updateItem`, `deleteItem`) coincid cu exporturile noului model; deoarece ruta existentă deja le importă corect, nu sunt necesare modificări\n\nSkill-uri relevante:\nSkill: android-clean-architecture\n# Android Clean Architecture\n\nClean Architecture patterns for Android and KMP projects. Covers module boundaries, dependency inversion, UseCase/Repository patterns, and data layer design with Room, SQLDelight, and Ktor.\n\n## When to Activate\n\n- Structuring Android or KMP project modules\n- Implementin\n\nSkill: article-writing\n# Article Writing\n\nWrite long-form content that sounds like an actual person with a point of view, not an LLM smoothing itself into paste.\n\n## When to Activate\n\n- drafting blog posts, essays, launch posts, guides, tutorials, or newsletter issues\n- turning notes, transcripts, or research into polishe\n\nSkill: blender-motion-state-inspection\n# Blender Motion State Inspection\n\n## When to Use\n\n- A Blender character looks twisted, mirrored, flattened, offset, or foot-sliding in an animation.\n- A user asks whether an imported avatar, armature, or retargeted motion matches an expected pose.\n- You need to compare rendered evidence with struct\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
     }
   ],
   "plan": [],
   "status": "completed",
   "checkpoint": {
-    "step": 1,
+    "step": 6,
     "files": {
       "$null": "e7c64c8cf028788701062c071f1a0ebd",
       ".env.example": "f60215253048f074b62bba0b4e631c66",
@@ -2751,12 +2802,12 @@
       "generated.js": "c708eeee3c480bcf80426d76782d90ff",
       "lines.txt": "5f6e5c32e28b21a75b256b3e8adb274a",
       "out.txt": "14c7325e6bde1d8fbc4c74bbc5d6804e",
-      "package-lock.json": "cec5c76d679afda5b89a0ab7803d0c28",
-      "package.json": "0ccf71cadf4e8e47a40e7fdb82dc2fd7",
+      "package-lock.json": "71db4a959892ecafb30177c14fa288be",
+      "package.json": "4b7ae721d83f7b52ae4893db57389dcf",
       "plan.md": "ba296c8c45624b41148cc0d569688fc4",
       "README.md": "b48b43402c6b77d7d1d06c12d91d6520",
       "server.js": "054c78e3ea6ebdb81e29077db6776df8",
-      "state.json": "f248310bca30070820ef075fb9c47e1f",
+      "state.json": "ab1c238acf640f52d4047cac6a8e7fe1",
       "temp_dashboard_prefix.txt": "8a595c5c72b6a569e831c26767a71495",
       "temp_dashboard_tail.txt": "87d5a1f1d0f6840e69702704c250081c",
       "temp_db_original.js": "2545a12b610beba5cb320f60d8a1e962",
@@ -2810,6 +2861,7 @@
       "data\\tenants.db": "4c546875137c000080894ef428eab4e8",
       "data\\test.db": "d41d8cd98f00b204e9800998ecf8427e",
       "data\\users.db": "5b5933d25c0b9190421e23b795cd9b83",
+      "data_test\\inventory_items.db": "d41d8cd98f00b204e9800998ecf8427e",
       "hotel\\routes.js": "12dc218953942b7dee9eb8ad2d68d924",
       "hotel\\public\\css\\hotel.css": "65692cd81a368a1ae244b69b9a2ea152",
       "hotel\\public\\js\\hotel.js": "0aa1e2a23b6b144bef7f37f81fbaf4ef",
@@ -2824,20 +2876,22 @@
       "hotel\\views\\suppliers.ejs": "dda80ba11a53d2cada7aa4c8e75dbe5b",
       "middleware\\auth.js": "46576bd5077f8a717ddbe63827be5a8f",
       "middleware\\errorHandler.js": "7d0e82785975d76bde7bedd74aa3442b",
-      "middleware\\roles.js": "c6ef341b89ff2203d115240cf10816e7",
+      "middleware\\roles.js": "9daf4a6a8ef0bbf68912013d220c1a92",
       "middleware\\tenant.js": "eb3b57e02befc3704048ebcd0f703f5d",
+      "models\\constants.js": "17e1120d7f41c8bfd744ee83e3d0dbd1",
       "models\\couponModel.js": "1832b4ef126ce6d4a3fb4fbc8d69ccc7",
       "models\\customerModel.js": "1c8561905e284c59355972b3368f99b8",
       "models\\deliveryModel.js": "14b6f91949f5b3e793dd422f9aadd8d1",
       "models\\hotelModel.js": "aecb9e713bc81d32eb6dcdd09202251e",
       "models\\hrModel.js": "7d0e896453962333ceae71378eb7a990",
-      "models\\inventoryItemModel.js": "181a214f6fe54c576e4baca1a1654786",
-      "models\\inventoryTransactionModel.js": "3dac927f842977b7041199416d9e2139",
+      "models\\inventoryItemModel.js": "e95fce128c8849d916374c8f6faa8397",
+      "models\\inventoryModel.js": "44246e8e927672623b66f6b62d355b1b",
+      "models\\inventoryTransactionModel.js": "31892cd9bc6588f4ec4eeb1aa72cfe73",
       "models\\loyaltyModel.js": "47da0190afc9bf24ae44d0751932e3bd",
       "models\\menuItemModel.js": "e9003d06964fcfd996e71ad87f02e55e",
       "models\\orderModel.js": "c055630c1f6a8bdc48bcf20c2f2d8b53",
       "models\\reservationModel.js": "1e62742763f879d1e427333c5e97d05f",
-      "models\\restaurantModel.js": "6b697e302ab0f8d6ce2cc8b9392933a2",
+      "models\\restaurantModel.js": "a7f6b3d2b5c7ab23a53864fd0217978c",
       "models\\roomModel.js": "84c3c560b3ca81e0912d4800ab21d648",
       "models\\supplierModel.js": "c708eeee3c480bcf80426d76782d90ff",
       "models\\userModel.js": "9bbc7d3ad5d9dfc5f9103322d49a2fba",
@@ -2859,7 +2913,7 @@
       "routes\\deliveries.js": "b0e4f171248107953864dffe27fecac4",
       "routes\\hotels.js": "dffdc4412ea4523a6ea90e6906b54c67",
       "routes\\hr.js": "e033fe6d51e401db54f275f877415220",
-      "routes\\inventory.js": "6937b33127b27ec836d11e001d83815c",
+      "routes\\inventory.js": "eddef7e64b71b1aa3983f358b32ba23b",
       "routes\\loyalty.js": "5d1fadeb39c01ce06a074c6204102c63",
       "routes\\orders.js": "d53926074d276fc8371a4e4fb1074984",
       "routes\\reservations.js": "a4e383070b755e466d447a337a7c27c3",
@@ -2874,5 +2928,5 @@
     }
   },
   "modified_files": {},
-  "updated": 1781948693.841147
+  "updated": 1781951950.7561653
 }
