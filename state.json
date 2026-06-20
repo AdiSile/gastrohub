@@ -424,6 +424,21 @@
       "role": "assistant",
       "content": "✅ Pas 1 (tdd-guide): 1 fișiere salvate.\n✅ Pas 2 (tdd-guide): 1 fișiere salvate.\n✅ Pas 3 (tdd-guide): 1 fișiere salvate.\n✅ Pas 4 (tdd-guide): 1 fișiere salvate.\n✅ Pas 5 (tdd-guide): 1 fișiere salvate.\n✅ Pas 6 (tdd-guide): 1 fișiere salvate.\n✅ Pas 7 (tdd-guide): 1 fișiere salvate.",
       "timestamp": 1781921287.065988
+    },
+    {
+      "role": "user",
+      "content": "În proiectul GastroHub, repară toate instanțierile greșite ale modelelor din rute și views. Modelele (hotel, restaurant, reservation, room, inventory, loyalty, user) exportă funcții direct, NU sunt clase.  1. În `hotel/routes.js`:    - Șterge `const hotelModel = new HotelModel();`    - Importă direct funcțiile necesare: `const { createHotel, getHotelById, getHotelsByTenant, updateHotel, deleteHotel } = require('../models/hotelModel');`    - Înlocuiește `hotelModel.createHotel(...)` cu `createHotel(...)`.  2. Aplică aceeași corecție în:    - `restaurant/routes.js` (dacă există `new RestaurantModel()`)    - `customer/routes.js`    - `admin/routes.js`    - `routes/reservations.js`    - `routes/inventory.js`    - `routes/loyalty.js`    - `routes/restaurants.js`    - `routes/hotels.js`  3. Asigură-te că toate view-urile EJS funcționează și că nu există apeluri `new Model()` nicăieri.  Returnează toate fișierele modificate.",
+      "timestamp": 1781921582.6714559
+    },
+    {
+      "role": "system",
+      "content": "🚀 Proiect pornit: Proiect: gastrohub-core",
+      "timestamp": 1781921582.7014563
+    },
+    {
+      "role": "assistant",
+      "content": "✅ Pas 1 (tdd-guide): 0 fișiere salvate.",
+      "timestamp": 1781921659.7356899
     }
   ],
   "cerinta": "Rescrie complet fișierul models/reservationModel.js din proiectul GastroHub. Fișierul trebuie să fie un model Node.js care folosește SQLite (better-sqlite3) și exportă funcțiile necesare pentru gestionarea rezervărilor hoteliere.  **Structură obligatorie:** - Folosește `const db = require('../config/db');` pentru a accesa baza de date. - Exportă funcțiile: createReservation, getReservationById, getReservationsByHotel, getReservationsByGuest, updateReservationStatus, cancelReservation. - Fiecare funcție trebuie să fie completă, fără linii tăiate sau erori de sintaxă. - Nu folosi `better-sqlite3` direct aici; folosește metodele expuse de `db.js` (presupunem că există `db.run(sql, params)`, `db.get(sql, params)`, `db.all(sql, params)`).  **Nu adăuga alt fișier.** Returnează DOAR `models/reservationModel.js` complet, în formatul ### models/reservationModel.js ... ### END.",
@@ -2167,12 +2182,18 @@
       "desc": "Fișier: server.js\nMontează rutele hotel și restaurant în server.js (lipsesc complet: app.use('/hotel', require('./hotel/routes')) și app.use('/restaurant', require('./restaurant/routes')))\n\nSkill-uri relevante:\nSkill: clickhouse-io\n# ClickHouse Analytics Patterns\n\nClickHouse-specific patterns for high-performance analytics and data engineering.\n\n## When to Activate\n\n- Designing ClickHouse table schemas (MergeTree engine selection)\n- Writing analytical queries (aggregations, window functions, joins)\n- Optimizing query performan\n\nSkill: mcp-server-patterns\n# MCP Server Patterns\n\nThe Model Context Protocol (MCP) lets AI assistants call tools, read resources, and use prompts from your server. Use this skill when building or maintaining MCP servers. The SDK API evolves; check Context7 (query-docs for \"MCP\") or the official MCP documentation for current m\n\nSkill: nestjs-patterns\n# NestJS Development Patterns\n\nProduction-grade NestJS patterns for modular TypeScript backends.\n\n## When to Activate\n\n- Building NestJS APIs or services\n- Structuring modules, controllers, and providers\n- Adding DTO validation, guards, interceptors, or exception filters\n- Configuring environment-aw\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
       "agent": "tdd-guide",
       "status": "pending"
+    },
+    {
+      "id": "541dd0e2",
+      "desc": "Fișier: hotel/routes.js\nÎnlocuiește instanțierea greșită `new HotelModel()` și `hotelModel.findByTenant()` cu import direct de funcție `getHotelsByTenant` și elimină `const { HotelModel }`\n\nSkill-uri relevante:\nSkill: agent-harness-construction\n# Agent Harness Construction\n\nUse this skill when you are improving how an agent plans, calls tools, recovers from errors, and converges on completion.\n\n## Core Model\n\nAgent output quality is constrained by:\n1. Action space quality\n2. Observation quality\n3. Recovery quality\n4. Context budget quality\n\nSkill: agent-introspection-debugging\n# Agent Introspection Debugging\n\nUse this skill when an agent run is failing repeatedly, consuming tokens without progress, looping on the same tools, or drifting away from the intended task.\n\nThis is a workflow skill, not a hidden runtime. It teaches the agent to debug itself systematically before \n\nSkill: angular-developer\n# Angular Developer Guidelines\n\n## When to Activate\n\n- Working in any Angular project or codebase\n- Creating or scaffolding a new Angular project, application, or library\n- Generating components, services, directives, pipes, guards, or resolvers\n- Implementing reactivity with Angular Signals, `linke\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
     }
   ],
   "plan": [],
   "status": "completed",
   "checkpoint": {
-    "step": 7,
+    "step": 1,
     "files": {
       "$null": "e7c64c8cf028788701062c071f1a0ebd",
       ".env.example": "f60215253048f074b62bba0b4e631c66",
@@ -2185,7 +2206,7 @@
       "plan.md": "ba296c8c45624b41148cc0d569688fc4",
       "README.md": "b48b43402c6b77d7d1d06c12d91d6520",
       "server.js": "b82032f41f6d634fed936e624c63e631",
-      "state.json": "3dda26fdc1910a3e1350a9c3e25f9cc3",
+      "state.json": "3d186d2295ec837c24c569dee0f804e4",
       "temp_db_original.js": "2545a12b610beba5cb320f60d8a1e962",
       "temp_hr_prefix.txt": "a6e792e9e879f0c1f85a475f1b7e099c",
       "temp_part1.txt": "e575aced791ae4886290f6ccd8309512",
@@ -2227,7 +2248,7 @@
       "data\\tenants.db": "4c546875137c000080894ef428eab4e8",
       "data\\test.db": "d41d8cd98f00b204e9800998ecf8427e",
       "data\\users.db": "5b5933d25c0b9190421e23b795cd9b83",
-      "hotel\\routes.js": "0119b19a028bb58ccddb786377e68a54",
+      "hotel\\routes.js": "67ce5dd9fe5180e9cb6c4b28c85c8387",
       "hotel\\public\\css\\hotel.css": "65692cd81a368a1ae244b69b9a2ea152",
       "hotel\\public\\js\\hotel.js": "0aa1e2a23b6b144bef7f37f81fbaf4ef",
       "hotel\\views\\dashboard.ejs": "b2d6d841c928408a3b321c5cf42f88bc",
@@ -2291,5 +2312,5 @@
     }
   },
   "modified_files": {},
-  "updated": 1781921287.0412323
+  "updated": 1781921659.7106855
 }
