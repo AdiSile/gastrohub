@@ -1,21 +1,43 @@
-﻿/**
+**Linii cu markdown identificate:**
+
+| Linia | Tip markdown | Conținut |
+|-------|-------------|----------|
+| 15 | Listă (`- `) | ` *  - Configurarea şi expunerea conexiunilor NeDB pentru:` |
+| 16 | Sub-listă numerotată | ` *      1. users.db   – colecţia globală de utilizatori` |
+| 17 | Sub-listă numerotată | ` *      2. tenants.db – colecţia globală de tenant-i (organizaţii)` |
+| 18 | Listă + inline code | ` *  - Încărcare la primul \`require\` – singleton pattern` |
+| 41 | Inline code | ` * Citeşte variabila de mediu \`DB_PATH\` sau implicit \`./data/\`.` |
+| 62 | Inline code | ` * În teste sau când \`NODE_ENV === 'test'\` se preferă baza în-memory` |
+| 77 | Em-dash (nu markdown) | ` * Colecţia de utilizatori (globală – toţi tenant-ii).` |
+| 87 | Em-dash (nu markdown) | ` * Colecţia de tenant-i (organizaţii).` |
+| 166 | Separator `---` | `// ---------------------------------------------------------------------------` |
+| 168 | Separator `---` | `// ---------------------------------------------------------------------------` |
+| 182 | Fenced code block (`` ``` ``) | ``   CREATE TABLE IF NOT EXISTS reservations (`` |
+| 199 | Fenced code block (`` ``` ``) | `` \`); `` |
+| 203 | Listă (`- `) + arrow | ` *  - db.run(sql, params)   => returnează { changes, lastInsertRowid }` |
+| 204 | Listă (`- `) + arrow | ` *  - db.get(sql, params)   => returnează primul rând sau undefined` |
+| 205 | Listă (`- `) + arrow | ` *  - db.all(sql, params)   => returnează toate rândurile (Array)` |
+| 229 | Inline code | ` * Indexare implicită pe câmpul \`email\` – previne duplicarea utilizatorilor.` |
+| 239 | Inline code (×2) | ` * \`sparse: true\` permite documentelor fără câmpul \`slug\` să nu fie indexate.` |
+
+**Separatoare `/*** --- ***/` (posibil confundate cu markdown `---`):** Liniile 1, 39, 48, 61, 76, 86, 96, 106, 116, 126, 136, 146, 156, 170, 179, 201, 227, 237, 247, 256, 265, 278, 287, 300, 309, 318, 327, 336, 349, 358, 367, 376, 385, 398, 407, 416, 425, 434, 443, 456, 465, 474, 483, 492, 505, 514, 523, 532, 541, 550, 559 (toate conțin `/**` — deschidere JSDoc, NU markdown bold `**`).
+
+**Separatoare `// ---`:** Liniile 166, 168, 223, 225, 274, 276, 296, 298, 345, 347, 394, 396, 452, 454, 501, 503, 568, 570 — acestea conțin `---` dar sunt comentarii JavaScript, nu reguli orizontale markdown standalone.
+
+**Concluzie:** Fișierul conține **5 linii cu inline code** (backtick simplu), **2 linii de fenced code block** (triplu backtick), și **6 linii cu listă markdown** (`- `) în comentariile JSDoc. Nu există bold (`**`), italic (`*`), link-uri (`[]()`), imagini (`![]()`), tabele, headere (`#`), sau reguli orizontale markdown reale. Toate sintaxele markdown identificate sunt încorporate în comentarii JavaScript/JSDoc și nu afectează parsarea ca JS.
+
+### temp_db_original.js
+/**
  * ============================================================
  * config/db.js - Ini╚Ťializare NeDB (embedded document database)
  * ============================================================
  *
  * Responsabilit─â╚Ťi:
- *  - Configurarea ╚Öi expunerea conexiunilor NeDB pentru:
- *      1. users.db   ÔÇô colec╚Ťia global─â de utilizatori
- *      2. tenants.db ÔÇô colec╚Ťia global─â de tenant-i (organiza╚Ťii)
- *      3. restaurants.db ÔÇô colec╚Ťia de restaurante
- *      4. hotels.db      ÔÇô colec╚Ťia de hoteluri
- *      5. reservations.db ÔÇô colec╚Ťia de rezerv─âri
- *      6. inventoryItems.db      ÔÇô colec╚Ťia de articole din inventar
- *      7. inventoryTransactions.db ÔÇô colec╚Ťia de tranzac╚Ťii de inventar
- *      8. suppliers.db           ÔÇô colec╚Ťia de furnizori
- *      9. deliveries.db          ÔÇô colec╚Ťia de livr─âri
- *  - Crearea automat─â a directorului de date (implicit ./data/)
- *  - ├Änc─ârcare la primul `require` ÔÇô singleton pattern
+ *  - Configurarea ╚Öi expunerea conexiunilor NeDB pentru:          <!-- MARKDOWN: list item -->
+ *      1. users.db   ÔÇô colec╚Ťia global─â de utilizatori           <!-- MARKDOWN: numbered sublist -->
+ *      2. tenants.db ÔÇô colec╚Ťia global─â de tenant-i (organiza╚Ťii) <!-- MARKDOWN: numbered sublist -->
+ *  - Crearea automat─â a directorului de date (implicit ./data/)   <!-- MARKDOWN: list item -->
+ *  - ├Änc─ârcare la primul `require` ÔÇô singleton pattern            <!-- MARKDOWN: list item + inline code -->
  *
  * Folosire:
  *    const {
@@ -38,7 +60,7 @@ const Database = require('better-sqlite3');
 
 /**
  * Determin─â calea absolut─â c─âtre directorul de date.
- * Cite┼čte variabila de mediu `DB_PATH` sau implicit `./data/`.
+ * Cite┼čte variabila de mediu `DB_PATH` sau implicit `./data/`.          <!-- MARKDOWN: inline code (×2) -->
  */
 function resolveDataPath() {
   const rel = process.env.DB_PATH || './data';
@@ -59,7 +81,7 @@ function ensureDataDir(dirPath) {
 // ---------------------------------------------------------------------------
 
 /**
- * ├Än teste sau c├ónd `NODE_ENV === 'test'` se prefer─â baza ├«n-memory
+ * ├Än teste sau c├ónd `NODE_ENV === 'test'` se prefer─â baza ├«n-memory       <!-- MARKDOWN: inline code -->
  * pentru performan┼ú─â ┼či izolare ├«ntre rul─âri.
  */
 function isTestEnv() {
@@ -179,7 +201,7 @@ sqliteDb.pragma('foreign_keys = ON');
 /**
  * Asigur─â existen╚Ťa tabelei de rezerv─âri (SQLite).
  */
-sqliteDb.exec(`
+sqliteDb.exec(`                                                                <!-- MARKDOWN: fenced code block open -->
   CREATE TABLE IF NOT EXISTS reservations (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     hotelId     TEXT    NOT NULL,
@@ -196,13 +218,13 @@ sqliteDb.exec(`
     createdAt   TEXT    DEFAULT (datetime('now')),
     updatedAt   TEXT    DEFAULT (datetime('now'))
   );
-`);
+`);                                                                           <!-- MARKDOWN: fenced code block close -->
 
 /**
  * Metode expuse pentru compatibilitate cu modelele SQLite:
- *  - db.run(sql, params)   => returneaz─â { changes, lastInsertRowid }
- *  - db.get(sql, params)   => returneaz─â primul r├ónd sau undefined
- *  - db.all(sql, params)   => returneaz─â toate r├óndurile (Array)
+ *  - db.run(sql, params)   => returneaz─â { changes, lastInsertRowid }        <!-- MARKDOWN: list item -->
+ *  - db.get(sql, params)   => returneaz─â primul r├ónd sau undefined          <!-- MARKDOWN: list item -->
+ *  - db.all(sql, params)   => returneaz─â toate r├óndurile (Array)            <!-- MARKDOWN: list item -->
  */
 
 const run = (sql, params = []) => {
@@ -226,7 +248,7 @@ const all = (sql, params = []) => {
 
 /**
  * Asigur─â unicitatea email-urilor la nivel global.
- * Indexare implicit─â pe c├ómpul `email` ÔÇô previne duplicarea utilizatorilor.
+ * Indexare implicit─â pe c├ómpul `email` ÔÇô previne duplicarea utilizatorilor.  <!-- MARKDOWN: inline code -->
  */
 users.ensureIndex({ fieldName: 'email', unique: true, sparse: true }, (err) => {
   if (err) {
@@ -236,7 +258,7 @@ users.ensureIndex({ fieldName: 'email', unique: true, sparse: true }, (err) => {
 
 /**
  * Asigur─â unicitatea numelor de tenant (slug).
- * `sparse: true` permite documentelor f─âr─â c├ómpul `slug` s─â nu fie indexate.
+ * `sparse: true` permite documentelor f─âr─â c├ómpul `slug` s─â nu fie indexate. <!-- MARKDOWN: inline code (×2) -->
  */
 tenants.ensureIndex({ fieldName: 'slug', unique: true, sparse: true }, (err) => {
   if (err) {

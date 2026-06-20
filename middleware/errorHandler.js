@@ -14,14 +14,14 @@
  *    const errorHandler = require('./middleware/errorHandler');
  *    app.use(errorHandler);
  *
- *    // În rute:
+ *    // în rute:
  *    next(new AppError('Resursa nu a fost găsită', 404));
  *
  * ============================================================
  */
 
 // ---------------------------------------------------------------------------
-// AppError – clasă personalizată pentru erori operaționale
+// AppError - clasă personalizată pentru erori operaționale
 // ---------------------------------------------------------------------------
 
 /**
@@ -52,7 +52,7 @@ class AppError extends Error {
 
 /**
  * Middleware global de gestionare a erorilor pentru Express.
- * Primește 4 parametri (err, req, res, next) – Express îl recunoaște
+ * Primește 4 parametri (err, req, res, next) - Express îl recunoaște
  * automat ca middleware de eroare datorită numărului de parametri.
  *
  * @param {Error}  err   - Obiectul erorii (poate fi AppError sau orice Error)

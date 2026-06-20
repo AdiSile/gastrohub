@@ -1,14 +1,3 @@
-- **`GET /hotel/login`** – Servește formularul de login (`hotel/views/login.ejs`). Utilizează `optionalAuth` pentru a detecta dacă utilizatorul e deja logat și face redirect la `/hotel/dashboard`.
-- **`POST /hotel/login`** – Procesează autentificarea prin **fetch intern** către `/api/auth/login`, forwardând cookie-urile originale. La succes face forward la `Set-Cookie` primit de la API și redirect la dashboard. La eroare reafișează formularul cu mesajul corespunzător (401, erori de rețea etc.).
-- Include helper-e: `renderHotelView`, `buildInternalUrl`, `internalFetch` – compatibile cu Node.js < 18.
-- Rutele existente (CRUD hoteluri, camere) sunt păstrate intacte, iar `/login` este poziționat înaintea `/:id` pentru a evita conflictele de rutare.
-
-### hotel/views/login.ejs
-- Formular complet de autentificare cu branding **Hotel** (temă teal/turcoaz `#1abc9c`).
-- Validare client-side (email + parolă), toggle vizibilitate parolă, stare de loading.
-- Submit prin fetch către `/hotel/login` cu gestionare erori și redirect automat la dashboard.
-
-### hotel/routes.js
 const express = require('express');
 const router = express.Router();
 const path = require('path');

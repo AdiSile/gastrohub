@@ -1,0 +1,1054 @@
+/**
+ * ============================================================
+ * routes/hotels.js - Rute API pentru gestionarea hotelurilor (CRUD + configurare)
+ * ============================================================
+ *
+ * Responsabilit«?i:
+ *  1. GET    /api/hotels                  - Listare hoteluri (cu filtre, paginare, c«utare)
+ *  2. GET    /api/hotels/:id              - Detalii hotel
+ *  3. POST   /api/hotels                  - Creare hotel nou
+ *  4. PUT    /api/hotels/:id              - Actualizare hotel
+ *  5. PATCH  /api/hotels/:id/status       - Actualizare status hotel
+ *  6. PATCH  /api/hotels/:id/facilities   - Actualizare facilit«?i
+ *  7. DELETE /api/hotels/:id              - ?tergere hotel
+ *  8. GET    /api/hotels/:id/rooms        - Listare camere ale unui hotel
+ *  9. GET    /api/hotels/:id/rooms/available - Camere disponibile
+ * 10. POST   /api/hotels/:id/rooms        - Ad«ugare camer« nou«
+ *
+ * Folose?te:
+ *  - express-validator pentru validarea cÉmpurilor
+ *  - hotelModel.js pentru opera?ii CRUD pe hoteluri (export direct de func?ii)
+ *  - roomModel.js pentru opera?ii pe camere
+ *  - middleware/auth.js pentru autentificare
+ *  - middleware/roles.js pentru autorizare pe baz« de roluri
+ *
+ * ============================================================
+ */
+
+const express = require('express');
+const router = express.Router();
+const { body, param, query, validationResult } = require('express-validator');
+
+const {
+  createHotel,
+  getHotelById,
+  getHotelsByTenant,
+  updateHotel,
+  deleteHotel,
+  listAllHotels,
+} = require('../models/hotelModel');
+
+const {
+  RoomModel,
+  VALID_ROOM_TYPES,
+  VALID_ROOM_STATUSES,
+} = require('../models/roomModel');
+
+const { authenticate } = require('../middleware/auth');
+const { authorize, authorizeMinLevel } = require('../middleware/roles');
+const { AppError } = require('../middleware/errorHandler');
+
+// ---------------------------------------------------------------------------
+// Instan?iere modele
+// ---------------------------------------------------------------------------
+
+const roomModel = new RoomModel();
+
+// ---------------------------------------------------------------------------
+// Statusuri valide pentru hoteluri (definite local, deoarece hotelModel
+// export« doar func?ii, nu ?i constantele)
+// ---------------------------------------------------------------------------
+
+const VALID_HOTEL_STATUSES = ['active', 'inactive', 'maintenance', 'closed'];
+
+// ---------------------------------------------------------------------------
+// CÉmpuri permise pentru sortare hoteluri
+// ---------------------------------------------------------------------------
+
+const VALID_HOTEL_SORT_FIELDS = ['nume', 'status', 'createdAt', 'updatedAt'];
+
+// ---------------------------------------------------------------------------
+// Helper: verificare rezultate validare
+// ---------------------------------------------------------------------------
+
+/**
+ * Verific« dac« exist« erori de validare din express-validator.
+ * Dac« da, trimite un r«spuns 422 cu lista de erori.
+ *
+ * @param {Object} req  - Request Express
+ * @param {Object} res  - Response Express
+ * @param {Function} next - Next middleware
+ * @returns {void}
+ */
+function handleValidationErrors(req, res, next) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    const errorMessages = errors.array().map((e) => e.msg);
+    return next(new AppError(errorMessages.join('; '), 422, 'VALIDATION_ERROR'));
+  }
+  next();
+}
+
+// ---------------------------------------------------------------------------
+// Helper: determinare tenantId pentru filtrare
+// ---------------------------------------------------------------------------
+
+/**
+ * Determin« tenantId-ul care trebuie folosit ån interog«ri.
+ * super_admin poate specifica un tenantId prin query param, ceilal?i
+ * utilizatori sunt limita?i la propriul tenant.
+ *
+ * @param {Object} req - Request Express (cu req.user populat)
+ * @returns {string|null} tenantId-ul de filtrat
+ */
+function resolveTenantId(req) {
+  if (req.user.role === 'super_admin' && req.query.tenantId) {
+    return req.query.tenantId;
+  }
+  return req.user.tenantId || null;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: sortare array hoteluri dup« un cÉmp
+// ---------------------------------------------------------------------------
+
+/**
+ * Sorteaz« un array de hoteluri dup« cÉmpul specificat.
+ *
+ * @param {Array}  hotels    - Array-ul de hoteluri
+ * @param {string} sortField - CÉmpul dup« care se sorteaz«
+ * @param {string} [order='asc'] - Direc?ia de sortare ('asc' sau 'desc')
+ * @returns {Array} Array-ul sortat
+ */
+function sortHotels(hotels, sortField, order = 'asc') {
+  if (!sortField || !VALID_HOTEL_SORT_FIELDS.includes(sortField)) {
+    return hotels;
+  }
+
+  const sorted = [...hotels].sort((a, b) => {
+    const valA = (a[sortField] || '').toString().toLowerCase();
+    const valB = (b[sortField] || '').toString().toLowerCase();
+
+    if (valA < valB) return -1;
+    if (valA > valB) return 1;
+    return 0;
+  });
+
+  return order === 'desc' ? sorted.reverse() : sorted;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: aplic« paginare pe un array
+// ---------------------------------------------------------------------------
+
+/**
+ * Aplic« skip ?i limit pe un array de rezultate.
+ *
+ * @param {Array}  array - Array-ul de rezultate
+ * @param {number} [skip=0]  - CÉte elemente se sar
+ * @param {number} [limit]   - Num«rul maxim de elemente returnate
+ * @returns {Array} Sub-array-ul paginat
+ */
+function paginateArray(array, skip = 0, limit) {
+  const start = skip || 0;
+  const end = limit ? start + limit : undefined;
+  return array.slice(start, end);
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/hotels
+// ---------------------------------------------------------------------------
+
+/**
+ * @route   GET /api/hotels
+ * @desc    Listare hoteluri cu op?iuni de filtrare, c«utare ?i paginare
+ * @access  Privat (autentificare necesar«)
+ *
+ * Query params:
+ *   - status    {string}  op?ional - filtrare dup« status
+ *   - search    {string}  op?ional - c«utare dup« nume
+ *   - tenantId  {string}  op?ional - (doar super_admin) filtrare dup« tenant
+ *   - sort      {string}  op?ional - cÉmp dup« care se sorteaz« (nume, status, createdAt, updatedAt)
+ *   - order     {string}  op?ional - direc?ia de sortare ('asc' sau 'desc', implicit 'asc')
+ *   - limit     {number}  op?ional - num«r maxim de rezultate
+ *   - skip      {number}  op?ional - cÉte rezultate se sar
+ *
+ * R«spuns (200):
+ *   {
+ *     success: true,
+ *     data: { hotels, total, limit, skip }
+ *   }
+ */
+router.get(
+  '/',
+  authenticate,
+  authorizeMinLevel('recep?ie'),
+  [
+    query('status')
+      .optional()
+      .isIn(VALID_HOTEL_STATUSES)
+      .withMessage(`Statusul trebuie s« fie unul dintre: ${VALID_HOTEL_STATUSES.join(', ')}.`),
+    query('search')
+      .optional()
+      .isString()
+      .trim()
+      .isLength({ min: 1 })
+      .withMessage('Termenul de c«utare trebuie s« aib« cel pu?in 1 caracter.'),
+    query('sort')
+      .optional()
+      .isIn(VALID_HOTEL_SORT_FIELDS)
+      .withMessage(`CÉmpul de sortare trebuie s« fie unul dintre: ${VALID_HOTEL_SORT_FIELDS.join(', ')}.`),
+    query('order')
+      .optional()
+      .isIn(['asc', 'desc'])
+      .withMessage('Direc?ia de sortare trebuie s« fie "asc" sau "desc".'),
+    query('limit')
+      .optional()
+      .isInt({ min: 1, max: 100 })
+      .withMessage('Limit trebuie s« fie un num«r åntre 1 ?i 100.'),
+    query('skip')
+      .optional()
+      .isInt({ min: 0 })
+      .withMessage('Skip trebuie s« fie un num«r åntreg, mai mare sau egal cu 0.'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
+    try {
+      const { status, search, sort, order, limit, skip } = req.query;
+      const tenantId = resolveTenantId(req);
+
+      // Parseaz« op?iunile de paginare
+      const parsedLimit = limit ? parseInt(limit, 10) : null;
+      const parsedSkip = skip ? parseInt(skip, 10) : 0;
+
+      // Dac« nu avem tenantId (utilizator f«r« tenant ?i nu e super_admin),
+      // return«m list« goal«
+      if (!tenantId && req.user.role !== 'super_admin') {
+        return res.status(200).json({
+          success: true,
+          data: {
+            hotels: [],
+            total: 0,
+            limit: parsedLimit,
+            skip: parsedSkip,
+          },
+        });
+      }
+
+      let hotels;
+      let total;
+
+      if (search) {
+        // C«utare dup« nume - filtr«m din lista tenantului
+        const allHotels = await getHotelsByTenant(tenantId);
+        const searchLower = search.toLowerCase();
+        hotels = allHotels.filter((h) => h.nume && h.nume.toLowerCase().includes(searchLower));
+      } else if (status) {
+        // Filtrare dup« status - filtr«m din lista tenantului
+        const allHotels = await getHotelsByTenant(tenantId);
+        hotels = allHotels.filter((h) => h.status === status);
+      } else {
+        // Listare toate hotelurile tenant-ului
+        hotels = await getHotelsByTenant(tenantId);
+      }
+
+      // Aplic« sortarea (dac« este specificat«)
+      if (sort) {
+        hotels = sortHotels(hotels, sort, order || 'asc');
+      }
+
+      // P«streaz« totalul ånainte de paginare
+      total = hotels.length;
+
+      // Aplic« paginarea
+      hotels = paginateArray(hotels, parsedSkip, parsedLimit);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          hotels,
+          total,
+          limit: parsedLimit,
+          skip: parsedSkip,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// GET /api/hotels/:id
+// ---------------------------------------------------------------------------
+
+/**
+ * @route   GET /api/hotels/:id
+ * @desc    Ob?ine detaliile unui hotel dup« ID
+ * @access  Privat (autentificare necesar«)
+ *
+ * R«spuns (200):
+ *   { success: true, data: { hotel } }
+ */
+router.get(
+  '/:id',
+  authenticate,
+  authorizeMinLevel('recep?ie'),
+  [
+    param('id')
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('ID-ul hotelului este obligatoriu.'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+
+      const hotel = await getHotelById(id);
+
+      if (!hotel) {
+        return next(new AppError(
+          'Hotelul nu a fost g«sit.',
+          404,
+          'HOTEL_NOT_FOUND'
+        ));
+      }
+
+      // Verificare acces tenant (doar super_admin poate vedea hoteluri din alt tenant)
+      if (req.user.role !== 'super_admin') {
+        if (String(hotel.tenantId) !== String(req.user.tenantId)) {
+          return next(new AppError(
+            'Nu ai acces la acest hotel.',
+            403,
+            'TENANT_MISMATCH'
+          ));
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          hotel,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// POST /api/hotels
+// ---------------------------------------------------------------------------
+
+/**
+ * @route   POST /api/hotels
+ * @desc    Creeaz« un hotel nou
+ * @access  Privat (autentificare + rol manager, owner sau super_admin)
+ *
+ * Body (JSON):
+ *   - nume        {string}  obligatoriu - numele hotelului
+ *   - adres«      {string}  obligatoriu - adresa hotelului
+ *   - facilit«?i  {string[]} op?ional - lista facilit«?ilor
+ *   - configurareCamere {Object[]} op?ional - configurarea camerelor
+ *   - pre?uriSezoniere  {Object[]} op?ional - pre?uri sezoniere
+ *   - telefon     {string}  op?ional - num«r de telefon
+ *   - email       {string}  op?ional - email de contact
+ *   - descriere   {string}  op?ional - descrierea hotelului
+ *   - status      {string}  op?ional - statusul (implicit 'active')
+ *
+ * R«spuns (201):
+ *   { success: true, data: { hotel } }
+ */
+router.post(
+  '/',
+  authenticate,
+  authorizeMinLevel('manager'),
+  [
+    body('nume')
+      .isString()
+      .trim()
+      .isLength({ min: 1, max: 200 })
+      .withMessage('Numele hotelului trebuie s« aib« åntre 1 ?i 200 de caractere.'),
+    body('adres«')
+      .isString()
+      .trim()
+      .isLength({ min: 5, max: 500 })
+      .withMessage('Adresa hotelului trebuie s« aib« åntre 5 ?i 500 de caractere.'),
+    body('facilit«?i')
+      .optional({ values: 'null' })
+      .isArray()
+      .withMessage('Facilit«?ile trebuie s« fie o list«.'),
+    body('facilit«?i.*')
+      .optional()
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('Fiecare facilitate trebuie s« fie un ?ir de caractere nevid.'),
+    body('telefon')
+      .optional({ values: 'null' })
+      .isString()
+      .withMessage('Telefonul trebuie s« fie un ?ir de caractere.'),
+    body('email')
+      .optional({ values: 'null' })
+      .isEmail()
+      .withMessage('Adresa de email nu este valid«.')
+      .normalizeEmail(),
+    body('descriere')
+      .optional({ values: 'null' })
+      .isString()
+      .isLength({ max: 2000 })
+      .withMessage('Descrierea poate avea maximum 2000 de caractere.'),
+    body('status')
+      .optional()
+      .isIn(VALID_HOTEL_STATUSES)
+      .withMessage(`Statusul trebuie s« fie unul dintre: ${VALID_HOTEL_STATUSES.join(', ')}.`),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
+    try {
+      const { nume, adres«, facilit«?i, configurareCamere, pre?uriSezoniere, telefon, email, descriere, status } = req.body;
+
+      // Determinare tenantId
+      const tenantId = resolveTenantId(req);
+
+      if (!tenantId) {
+        return next(new AppError(
+          'Nu po?i crea un hotel f«r« un tenant asociat.',
+          400,
+          'MISSING_TENANT_ID'
+        ));
+      }
+
+      const hotelData = {
+        nume,
+        adres«,
+        facilit«?i: facilit«?i || [],
+        configurareCamere: configurareCamere || [],
+        pre?uriSezoniere: pre?uriSezoniere || [],
+        telefon: telefon || '',
+        email: email || '',
+        descriere: descriere || '',
+        status: status || 'active',
+        tenantId,
+      };
+
+      const newHotel = await createHotel(hotelData);
+
+      res.status(201).json({
+        success: true,
+        data: {
+          hotel: newHotel,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// PUT /api/hotels/:id
+// ---------------------------------------------------------------------------
+
+/**
+ * @route   PUT /api/hotels/:id
+ * @desc    Actualizeaz« un hotel existent
+ * @access  Privat (autentificare + rol manager, owner sau super_admin)
+ *
+ * Body (JSON) - cel pu?in un cÉmp obligatoriu:
+ *   - nume        {string}  op?ional
+ *   - adres«      {string}  op?ional
+ *   - facilit«?i  {string[]} op?ional
+ *   - configurareCamere {Object[]} op?ional
+ *   - pre?uriSezoniere  {Object[]} op?ional
+ *   - telefon     {string}  op?ional
+ *   - email       {string}  op?ional
+ *   - descriere   {string}  op?ional
+ *   - status      {string}  op?ional
+ *
+ * R«spuns (200):
+ *   { success: true, data: { hotel } }
+ */
+router.put(
+  '/:id',
+  authenticate,
+  authorizeMinLevel('manager'),
+  [
+    param('id')
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('ID-ul hotelului este obligatoriu.'),
+    body('nume')
+      .optional()
+      .isString()
+      .trim()
+      .isLength({ min: 1, max: 200 })
+      .withMessage('Numele hotelului trebuie s« aib« åntre 1 ?i 200 de caractere.'),
+    body('adres«')
+      .optional()
+      .isString()
+      .trim()
+      .isLength({ min: 5, max: 500 })
+      .withMessage('Adresa hotelului trebuie s« aib« åntre 5 ?i 500 de caractere.'),
+    body('facilit«?i')
+      .optional({ values: 'null' })
+      .isArray()
+      .withMessage('Facilit«?ile trebuie s« fie o list«.'),
+    body('facilit«?i.*')
+      .optional()
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('Fiecare facilitate trebuie s« fie un ?ir de caractere nevid.'),
+    body('telefon')
+      .optional({ values: 'null' })
+      .isString()
+      .withMessage('Telefonul trebuie s« fie un ?ir de caractere.'),
+    body('email')
+      .optional({ values: 'null' })
+      .isEmail()
+      .withMessage('Adresa de email nu este valid«.')
+      .normalizeEmail(),
+    body('descriere')
+      .optional({ values: 'null' })
+      .isString()
+      .isLength({ max: 2000 })
+      .withMessage('Descrierea poate avea maximum 2000 de caractere.'),
+    body('status')
+      .optional()
+      .isIn(VALID_HOTEL_STATUSES)
+      .withMessage(`Statusul trebuie s« fie unul dintre: ${VALID_HOTEL_STATUSES.join(', ')}.`),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+
+      // Verificare existen?« ?i acces la hotel
+      const existingHotel = await getHotelById(id);
+      if (!existingHotel) {
+        return next(new AppError(
+          'Hotelul nu a fost g«sit.',
+          404,
+          'HOTEL_NOT_FOUND'
+        ));
+      }
+
+      // Verificare acces tenant
+      if (req.user.role !== 'super_admin') {
+        if (String(existingHotel.tenantId) !== String(req.user.tenantId)) {
+          return next(new AppError(
+            'Nu ai acces la acest hotel.',
+            403,
+            'TENANT_MISMATCH'
+          ));
+        }
+      }
+
+      // Construim obiectul doar cu cÉmpurile prezente ån body
+      const allowedFields = [
+        'nume', 'adres«', 'facilit«?i', 'configurareCamere',
+        'pre?uriSezoniere', 'telefon', 'email', 'descriere', 'status',
+      ];
+      const updateData = {};
+
+      for (const field of allowedFields) {
+        if (req.body[field] !== undefined) {
+          updateData[field] = req.body[field];
+        }
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return next(new AppError(
+          'Nu s-au furnizat cÉmpuri pentru actualizare.',
+          400,
+          'EMPTY_UPDATE_DATA'
+        ));
+      }
+
+      const updatedHotel = await updateHotel(id, updateData);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          hotel: updatedHotel,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// PATCH /api/hotels/:id/status
+// ---------------------------------------------------------------------------
+
+/**
+ * @route   PATCH /api/hotels/:id/status
+ * @desc    Actualizeaz« statusul unui hotel
+ * @access  Privat (autentificare + rol manager, owner sau super_admin)
+ *
+ * Body (JSON):
+ *   - status  {string}  obligatoriu - noul status
+ *
+ * R«spuns (200):
+ *   { success: true, data: { hotel } }
+ */
+router.patch(
+  '/:id/status',
+  authenticate,
+  authorizeMinLevel('manager'),
+  [
+    param('id')
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('ID-ul hotelului este obligatoriu.'),
+    body('status')
+      .isString()
+      .trim()
+      .notEmpty()
+      .isIn(VALID_HOTEL_STATUSES)
+      .withMessage(`Statusul trebuie s« fie unul dintre: ${VALID_HOTEL_STATUSES.join(', ')}.`),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      // Verificare existen?« ?i acces
+      const existingHotel = await getHotelById(id);
+      if (!existingHotel) {
+        return next(new AppError(
+          'Hotelul nu a fost g«sit.',
+          404,
+          'HOTEL_NOT_FOUND'
+        ));
+      }
+
+      if (req.user.role !== 'super_admin') {
+        if (String(existingHotel.tenantId) !== String(req.user.tenantId)) {
+          return next(new AppError(
+            'Nu ai acces la acest hotel.',
+            403,
+            'TENANT_MISMATCH'
+          ));
+        }
+      }
+
+      const updatedHotel = await updateHotel(id, { status });
+
+      res.status(200).json({
+        success: true,
+        data: {
+          hotel: updatedHotel,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// PATCH /api/hotels/:id/facilities
+// ---------------------------------------------------------------------------
+
+/**
+ * @route   PATCH /api/hotels/:id/facilities
+ * @desc    Actualizeaz« lista de facilit«?i a unui hotel
+ * @access  Privat (autentificare + rol manager, owner sau super_admin)
+ *
+ * Body (JSON):
+ *   - facilit«?i  {string[]}  obligatoriu - noua list« de facilit«?i
+ *
+ * R«spuns (200):
+ *   { success: true, data: { hotel } }
+ */
+router.patch(
+  '/:id/facilities',
+  authenticate,
+  authorizeMinLevel('manager'),
+  [
+    param('id')
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('ID-ul hotelului este obligatoriu.'),
+    body('facilit«?i')
+      .isArray({ min: 1 })
+      .withMessage('Lista de facilit«?i trebuie s« con?in« cel pu?in un element.'),
+    body('facilit«?i.*')
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('Fiecare facilitate trebuie s« fie un ?ir de caractere nevid.'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const { facilit«?i } = req.body;
+
+      // Verificare existen?« ?i acces
+      const existingHotel = await getHotelById(id);
+      if (!existingHotel) {
+        return next(new AppError(
+          'Hotelul nu a fost g«sit.',
+          404,
+          'HOTEL_NOT_FOUND'
+        ));
+      }
+
+      if (req.user.role !== 'super_admin') {
+        if (String(existingHotel.tenantId) !== String(req.user.tenantId)) {
+          return next(new AppError(
+            'Nu ai acces la acest hotel.',
+            403,
+            'TENANT_MISMATCH'
+          ));
+        }
+      }
+
+      const updatedHotel = await updateHotel(id, {
+        facilit«?i: facilit«?i.map((f) => f.trim()),
+      });
+
+      res.status(200).json({
+        success: true,
+        data: {
+          hotel: updatedHotel,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// DELETE /api/hotels/:id
+// ---------------------------------------------------------------------------
+
+/**
+ * @route   DELETE /api/hotels/:id
+ * @desc    ?terge un hotel
+ * @access  Privat (autentificare + rol owner sau super_admin)
+ *
+ * R«spuns (200):
+ *   { success: true, data: { message: 'Hotelul a fost ?ters cu succes.' } }
+ */
+router.delete(
+  '/:id',
+  authenticate,
+  authorize('super_admin', 'owner'),
+  [
+    param('id')
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('ID-ul hotelului este obligatoriu.'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+
+      // Verificare existen?«
+      const existingHotel = await getHotelById(id);
+      if (!existingHotel) {
+        return next(new AppError(
+          'Hotelul nu a fost g«sit.',
+          404,
+          'HOTEL_NOT_FOUND'
+        ));
+      }
+
+      // Verificare acces tenant
+      if (req.user.role !== 'super_admin') {
+        if (String(existingHotel.tenantId) !== String(req.user.tenantId)) {
+          return next(new AppError(
+            'Nu ai acces la acest hotel.',
+            403,
+            'TENANT_MISMATCH'
+          ));
+        }
+      }
+
+      await deleteHotel(id);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          message: 'Hotelul a fost ?ters cu succes.',
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// GET /api/hotels/:id/rooms
+// ---------------------------------------------------------------------------
+
+/**
+ * @route   GET /api/hotels/:id/rooms
+ * @desc    Listare camere ale unui hotel
+ * @access  Privat (autentificare necesar«)
+ *
+ * R«spuns (200):
+ *   { success: true, data: { rooms } }
+ */
+router.get(
+  '/:id/rooms',
+  authenticate,
+  authorizeMinLevel('recep?ie'),
+  [
+    param('id')
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('ID-ul hotelului este obligatoriu.'),
+    query('status')
+      .optional()
+      .isIn(VALID_ROOM_STATUSES)
+      .withMessage(`Statusul camerei trebuie s« fie unul dintre: ${VALID_ROOM_STATUSES.join(', ')}.`),
+    query('tip')
+      .optional()
+      .isIn(VALID_ROOM_TYPES)
+      .withMessage(`Tipul camerei trebuie s« fie unul dintre: ${VALID_ROOM_TYPES.join(', ')}.`),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const { status, tip } = req.query;
+
+      // Verificare existen?« ?i acces hotel
+      const hotel = await getHotelById(id);
+      if (!hotel) {
+        return next(new AppError(
+          'Hotelul nu a fost g«sit.',
+          404,
+          'HOTEL_NOT_FOUND'
+        ));
+      }
+
+      if (req.user.role !== 'super_admin') {
+        if (String(hotel.tenantId) !== String(req.user.tenantId)) {
+          return next(new AppError(
+            'Nu ai acces la acest hotel.',
+            403,
+            'TENANT_MISMATCH'
+          ));
+        }
+      }
+
+      let rooms;
+      if (status && tip) {
+        // Filtr«m dup« hotel, status ?i tip
+        const allRooms = await roomModel.findByHotel(id);
+        rooms = allRooms.filter((room) => room.status === status && room.tip === tip);
+      } else if (status) {
+        // Filtr«m doar dup« hotel ?i status
+        rooms = await roomModel.findByHotelAndStatus(id, status);
+      } else if (tip) {
+        // Filtr«m doar dup« hotel ?i tip
+        rooms = await roomModel.findByHotelAndType(id, tip);
+      } else {
+        // F«r« filtre - toate camerele hotelului
+        rooms = await roomModel.findByHotel(id);
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          rooms,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// GET /api/hotels/:id/rooms/available
+// ---------------------------------------------------------------------------
+
+/**
+ * @route   GET /api/hotels/:id/rooms/available
+ * @desc    Listare camere disponibile ale unui hotel
+ * @access  Privat (autentificare necesar«)
+ *
+ * R«spuns (200):
+ *   { success: true, data: { rooms } }
+ */
+router.get(
+  '/:id/rooms/available',
+  authenticate,
+  authorizeMinLevel('recep?ie'),
+  [
+    param('id')
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('ID-ul hotelului este obligatoriu.'),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+
+      // Verificare existen?« ?i acces hotel
+      const hotel = await getHotelById(id);
+      if (!hotel) {
+        return next(new AppError(
+          'Hotelul nu a fost g«sit.',
+          404,
+          'HOTEL_NOT_FOUND'
+        ));
+      }
+
+      if (req.user.role !== 'super_admin') {
+        if (String(hotel.tenantId) !== String(req.user.tenantId)) {
+          return next(new AppError(
+            'Nu ai acces la acest hotel.',
+            403,
+            'TENANT_MISMATCH'
+          ));
+        }
+      }
+
+      const rooms = await roomModel.findByHotelAndStatus(id, 'available');
+
+      res.status(200).json({
+        success: true,
+        data: {
+          rooms,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// POST /api/hotels/:id/rooms
+// ---------------------------------------------------------------------------
+
+/**
+ * @route   POST /api/hotels/:id/rooms
+ * @desc    Adaug« o camer« nou« åntr-un hotel
+ * @access  Privat (autentificare + rol manager, owner sau super_admin)
+ *
+ * Body (JSON):
+ *   - tip              {string}   obligatoriu - tipul camerei
+ *   - num«r            {number}   obligatoriu - num«rul camerei
+ *   - pre?uriSezoniere {Object[]} op?ional - pre?uri sezoniere
+ *   - status           {string}   op?ional - statusul (implicit 'available')
+ *
+ * R«spuns (201):
+ *   { success: true, data: { room } }
+ */
+router.post(
+  '/:id/rooms',
+  authenticate,
+  authorizeMinLevel('manager'),
+  [
+    param('id')
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('ID-ul hotelului este obligatoriu.'),
+    body('tip')
+      .isString()
+      .trim()
+      .notEmpty()
+      .isIn(VALID_ROOM_TYPES)
+      .withMessage(`Tipul camerei trebuie s« fie unul dintre: ${VALID_ROOM_TYPES.join(', ')}.`),
+    body('num«r')
+      .isInt({ min: 1 })
+      .withMessage('Num«rul camerei trebuie s« fie un num«r åntreg pozitiv.'),
+    body('pre?uriSezoniere')
+      .optional({ values: 'null' })
+      .isArray()
+      .withMessage('Pre?urile sezoniere trebuie s« fie o list«.'),
+    body('pre?uriSezoniere.*.sezon')
+      .optional()
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('Denumirea sezonului este obligatorie pentru fiecare pre? sezonier.'),
+    body('pre?uriSezoniere.*.pre?')
+      .optional()
+      .isFloat({ min: 0 })
+      .withMessage('Pre?ul sezonier trebuie s« fie un num«r pozitiv.'),
+    body('status')
+      .optional()
+      .isIn(VALID_ROOM_STATUSES)
+      .withMessage(`Statusul camerei trebuie s« fie unul dintre: ${VALID_ROOM_STATUSES.join(', ')}.`),
+  ],
+  handleValidationErrors,
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const { tip, num«r, pre?uriSezoniere, status } = req.body;
+
+      // Verificare existen?« ?i acces hotel
+      const hotel = await getHotelById(id);
+      if (!hotel) {
+        return next(new AppError(
+          'Hotelul nu a fost g«sit.',
+          404,
+          'HOTEL_NOT_FOUND'
+        ));
+      }
+
+      if (req.user.role !== 'super_admin') {
+        if (String(hotel.tenantId) !== String(req.user.tenantId)) {
+          return next(new AppError(
+            'Nu ai acces la acest hotel.',
+            403,
+            'TENANT_MISMATCH'
+          ));
+        }
+      }
+
+      const roomData = {
+        tip,
+        num«r,
+        pre?uriSezoniere: pre?uriSezoniere || [],
+        status: status || 'available',
+        hotelId: id,
+        tenantId: hotel.tenantId,
+      };
+
+      const newRoom = await roomModel.create(roomData);
+
+      res.status(201).json({
+        success: true,
+        data: {
+          room: newRoom,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------
+
+module.exports = router;
