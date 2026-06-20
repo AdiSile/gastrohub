@@ -37,14 +37,22 @@ const { authorizeMinLevel } = require('../middleware/roles');
  */
 function renderView(view, extraData = {}) {
   return (req, res) => {
-    res.render(view, {
-      title: extraData.title || 'Portal Client',
-      currentPage: extraData.currentPage || '',
-      user: req.user || null,
-      isAuthenticated: !!req.user,
-      customer: req.user || null,
-      ...extraData,
-    });
+    try {
+      res.render(view, {
+        title: extraData.title || 'Portal Client',
+        currentPage: extraData.currentPage || '',
+        user: req.user || null,
+        isAuthenticated: !!req.user,
+        customer: req.user || null,
+        ...extraData,
+      });
+    } catch (renderErr) {
+      console.error(`[customer/routes] Eroare la randarea view-ului "${view}":`, renderErr.message);
+      // Fallback: dacă fișierul EJS lipsește, trimite un răspuns text simplu
+      if (!res.headersSent) {
+        res.status(500).send(`Eroare la încărcarea paginii. Vă rugăm încercați din nou. (View: ${view})`);
+      }
+    }
   };
 }
 
@@ -57,19 +65,91 @@ function renderView(view, extraData = {}) {
  */
 function renderWithLayout(view, extraData = {}) {
   return (req, res) => {
-    res.render(view, {
-      title: extraData.title || 'Portal Client',
-      currentPage: extraData.currentPage || '',
-      user: req.user || null,
-      isAuthenticated: !!req.user,
-      customer: req.user || null,
-      pendingOrdersCount: extraData.pendingOrdersCount || 0,
-      pageIcon: extraData.pageIcon || 'home',
-      headerButtons: extraData.headerButtons || [],
-      head: extraData.head || '',
-      ...extraData,
-    });
+    try {
+      res.render(view, {
+        title: extraData.title || 'Portal Client',
+        currentPage: extraData.currentPage || '',
+        user: req.user || null,
+        isAuthenticated: !!req.user,
+        customer: req.user || null,
+        pendingOrdersCount: extraData.pendingOrdersCount || 0,
+        pageIcon: extraData.pageIcon || 'home',
+        headerButtons: extraData.headerButtons || [],
+        head: extraData.head || '',
+        ...extraData,
+      });
+    } catch (renderErr) {
+      console.error(`[customer/routes] Eroare la randarea view-ului "${view}":`, renderErr.message);
+      if (!res.headersSent) {
+        res.status(500).send(`Eroare la încărcarea paginii. Vă rugăm încercați din nou. (View: ${view})`);
+      }
+    }
   };
+}
+
+// ---------------------------------------------------------------------------
+// Helper: construire URL intern pentru fetch
+// ---------------------------------------------------------------------------
+
+/**
+ * Construiește un URL intern pentru apeluri API, folosind variabilele
+ * de mediu ca fallback pentru req.hostname și req.protocol.
+ *
+ * @param {Object} req - obiectul request Express
+ * @param {string} apiPath - calea API (ex: /api/orders/customer/...)
+ * @returns {string} URL complet
+ */
+function buildInternalUrl(req, apiPath) {
+  const protocol = req.protocol || 'http';
+  const host = req.hostname || req.get('host') || 'localhost';
+  const port = process.env.PORT || process.env.API_PORT || 3000;
+  return `${protocol}://${host}:${port}${apiPath}`;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: fetch intern cu timeout și parsing JSON robust
+// ---------------------------------------------------------------------------
+
+/**
+ * Execută un fetch intern cu timeout și parsing JSON sigur.
+ * Returnează null la orice eroare (network, timeout, parsing, HTTP !ok).
+ *
+ * @param {string} url - URL-ul apelului
+ * @param {number} [timeoutMs=5000] - timeout în milisecunde
+ * @returns {Promise<Object|null>} obiectul JSON parsat sau null
+ */
+async function safeInternalFetch(url, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+
+    if (!response.ok) {
+      console.warn(`[customer/routes] Fetch intern eșuat (HTTP ${response.status}): ${url}`);
+      return null;
+    }
+
+    // Parsare JSON sigură
+    let data;
+    try {
+      data = await response.json();
+    } catch (parseErr) {
+      console.warn(`[customer/routes] Răspuns invalid JSON de la: ${url}`, parseErr.message);
+      return null;
+    }
+
+    return data;
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      console.warn(`[customer/routes] Timeout (${timeoutMs}ms) la fetch: ${url}`);
+    } else {
+      console.warn(`[customer/routes] Eroare rețea la fetch: ${url}`, err.message);
+    }
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ===========================================================================
@@ -118,74 +198,121 @@ router.get('/register', optionalAuth, renderView('register', { title: 'Înregist
  * @route   GET /customer/dashboard
  * @desc    Dashboard principal pentru client – ultimele comenzi, puncte loialitate, rezervări active
  * @access  Privat (orice utilizator autentificat)
+ *
+ * NOTĂ: Dashboard-ul folosește safeInternalFetch pentru a prelua date de la API-urile
+ * interne. Toate fetch-urile sunt izolate: eșecul unuia nu le afectează pe celelalte.
+ * Dacă TOATE fetch-urile eșuează, dashboard-ul se randează cu array-uri goale
+ * și un indicator de eroare pentru interfață. Timpul maxim de așteptare per fetch
+ * este de 5 secunde, după care se abandonează.
  */
 router.get('/dashboard', authenticate, async (req, res) => {
+  // -------------------------------------------------------------------------
+  // Bază date dashboard – comune atât pentru success cât și fallback
+  // -------------------------------------------------------------------------
+  const baseDashboardData = {
+    title: 'Dashboard',
+    currentPage: 'customer-dashboard',
+    user: req.user,
+    isAuthenticated: true,
+    customer: req.user,
+    pageIcon: 'th-large',
+    headerButtons: [
+      { href: '/customer/orders/new', label: 'Comandă nouă', icon: 'plus' },
+      { href: '/customer/reservations/new', label: 'Rezervare nouă', icon: 'calendar-plus' },
+    ],
+    // Valori implicite – pot fi suprascrise de fetch-uri reușite
+    recentOrders: [],
+    activeReservations: [],
+    loyaltyPoints: 0,
+    pendingOrdersCount: 0,
+    // Indicator pentru UI: arată un banner dacă datele sunt incomplete
+    fetchErrors: [],
+  };
+
+  // -------------------------------------------------------------------------
+  // Validare date utilizator – fără tenantId/userId, sărim fetch-urile
+  // -------------------------------------------------------------------------
+  const tenantId = req.user && req.user.tenantId;
+  const customerId = req.user && req.user._id;
+
+  if (!tenantId || !customerId) {
+    console.warn('[customer/routes] Dashboard: lipsă tenantId sau customerId pe req.user');
+    baseDashboardData.fetchErrors.push('Identitate utilizator incompletă. Unele date pot fi indisponibile.');
+
+    try {
+      return res.render('dashboard', baseDashboardData);
+    } catch (renderErr) {
+      console.error('[customer/routes] Eroare randare dashboard (fallback identitate):', renderErr.message);
+      if (!res.headersSent) {
+        return res.status(500).send('Eroare la încărcarea dashboard-ului. Vă rugăm încercați din nou.');
+      }
+    }
+    return;
+  }
+
+  // -------------------------------------------------------------------------
+  // Fetch-uri paralele izolate cu Promise.allSettled
+  // Fiecare fetch are propriul timeout (5s) și parsing JSON sigur.
+  // -------------------------------------------------------------------------
+  const ordersUrl = buildInternalUrl(req, `/api/orders/customer/${customerId}?tenantId=${tenantId}&limit=5`);
+  const reservationsUrl = buildInternalUrl(req, `/api/reservations/customer/${customerId}?tenantId=${tenantId}&status=confirmată,check-in&limit=5`);
+  const loyaltyUrl = buildInternalUrl(req, `/api/loyalty/account/${customerId}?tenantId=${tenantId}`);
+
+  const results = await Promise.allSettled([
+    safeInternalFetch(ordersUrl),
+    safeInternalFetch(reservationsUrl),
+    safeInternalFetch(loyaltyUrl),
+  ]);
+
+  // -------------------------------------------------------------------------
+  // Procesare rezultate – fiecare settled promise este tratat independent
+  // -------------------------------------------------------------------------
+  const [ordersResult, reservationsResult, loyaltyResult] = results;
+
+  // Comenzi recente
+  if (ordersResult.status === 'fulfilled' && ordersResult.value) {
+    const ordersData = ordersResult.value;
+    if (ordersData.success) {
+      baseDashboardData.recentOrders = ordersData.data.orders || [];
+      baseDashboardData.pendingOrdersCount = baseDashboardData.recentOrders.filter(
+        o => o.status === 'deschisă' || o.status === 'în preparare'
+      ).length;
+    }
+  } else {
+    baseDashboardData.fetchErrors.push('Comenzi recente indisponibile momentan.');
+  }
+
+  // Rezervări active
+  if (reservationsResult.status === 'fulfilled' && reservationsResult.value) {
+    const reservationsData = reservationsResult.value;
+    if (reservationsData.success) {
+      baseDashboardData.activeReservations = reservationsData.data.reservations || [];
+    }
+  } else {
+    baseDashboardData.fetchErrors.push('Rezervări active indisponibile momentan.');
+  }
+
+  // Cont loialitate
+  if (loyaltyResult.status === 'fulfilled' && loyaltyResult.value) {
+    const loyaltyData = loyaltyResult.value;
+    if (loyaltyData.success) {
+      const loyaltyAccount = loyaltyData.data.account || null;
+      baseDashboardData.loyaltyPoints = loyaltyAccount ? loyaltyAccount.totalPoints || 0 : 0;
+    }
+  } else {
+    baseDashboardData.fetchErrors.push('Puncte loialitate indisponibile momentan.');
+  }
+
+  // -------------------------------------------------------------------------
+  // Randare dashboard – cu date disponibile și eventuale erori
+  // -------------------------------------------------------------------------
   try {
-    const tenantId = req.user.tenantId;
-    const customerId = req.user._id;
-
-    // Fetch-uri paralele pentru date dashboard
-    const [ordersRes, reservationsRes, loyaltyRes] = await Promise.all([
-      fetch(`${req.protocol}://${req.hostname}:${process.env.PORT || 3000}/api/orders/customer/${customerId}?tenantId=${tenantId}&limit=5`).catch(() => null),
-      fetch(`${req.protocol}://${req.hostname}:${process.env.PORT || 3000}/api/reservations/customer/${customerId}?tenantId=${tenantId}&status=confirmată,check-in&limit=5`).catch(() => null),
-      fetch(`${req.protocol}://${req.hostname}:${process.env.PORT || 3000}/api/loyalty/account/${customerId}?tenantId=${tenantId}`).catch(() => null),
-    ]);
-
-    let recentOrders = [];
-    let activeReservations = [];
-    let loyaltyAccount = null;
-
-    if (ordersRes && ordersRes.ok) {
-      const ordersData = await ordersRes.json();
-      if (ordersData.success) recentOrders = ordersData.data.orders || [];
+    res.render('dashboard', baseDashboardData);
+  } catch (renderErr) {
+    console.error('[customer/routes] Eroare critică la randarea dashboard:', renderErr.message);
+    if (!res.headersSent) {
+      res.status(500).send('Eroare la încărcarea dashboard-ului. Vă rugăm încercați din nou.');
     }
-
-    if (reservationsRes && reservationsRes.ok) {
-      const reservationsData = await reservationsRes.json();
-      if (reservationsData.success) activeReservations = reservationsData.data.reservations || [];
-    }
-
-    if (loyaltyRes && loyaltyRes.ok) {
-      const loyaltyData = await loyaltyRes.json();
-      if (loyaltyData.success) loyaltyAccount = loyaltyData.data.account || null;
-    }
-
-    const loyaltyPoints = loyaltyAccount ? loyaltyAccount.totalPoints || 0 : 0;
-
-    res.render('dashboard', {
-      title: 'Dashboard',
-      currentPage: 'customer-dashboard',
-      user: req.user,
-      isAuthenticated: true,
-      customer: req.user,
-      pageIcon: 'th-large',
-      headerButtons: [
-        { href: '/customer/orders/new', label: 'Comandă nouă', icon: 'plus' },
-        { href: '/customer/reservations/new', label: 'Rezervare nouă', icon: 'calendar-plus' },
-      ],
-      recentOrders,
-      activeReservations,
-      loyaltyPoints,
-      pendingOrdersCount: (recentOrders.filter(o => o.status === 'deschisă' || o.status === 'în preparare')).length,
-    });
-  } catch (err) {
-    // Fallback la dashboard simplu fără date
-    res.render('dashboard', {
-      title: 'Dashboard',
-      currentPage: 'customer-dashboard',
-      user: req.user,
-      isAuthenticated: true,
-      customer: req.user,
-      pageIcon: 'th-large',
-      headerButtons: [
-        { href: '/customer/orders/new', label: 'Comandă nouă', icon: 'plus' },
-        { href: '/customer/reservations/new', label: 'Rezervare nouă', icon: 'calendar-plus' },
-      ],
-      recentOrders: [],
-      activeReservations: [],
-      loyaltyPoints: 0,
-      pendingOrdersCount: 0,
-    });
   }
 });
 

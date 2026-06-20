@@ -1,0 +1,650 @@
+<%
+  // ============================================================
+  // customer/views/dashboard.ejs
+  // Dashboard minimalist client
+  // Folosește layout.ejs ca wrapper
+  // ============================================================
+
+  const customer = locals.customer || locals.user || {};
+  const recentOrders = locals.recentOrders || [];
+  const activeReservations = locals.activeReservations || [];
+  const loyaltyPoints = locals.loyaltyPoints || 0;
+  const pendingOrdersCount = locals.pendingOrdersCount || 0;
+%>
+
+<style>
+  /* ============================================================
+     DASHBOARD CLIENT — Minimalist
+     ============================================================ */
+
+  /* Welcome banner */
+  .welcome-banner {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+    color: #fff;
+    border-radius: var(--radius-lg);
+    padding: 28px 32px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .welcome-banner::after {
+    content: '';
+    position: absolute;
+    top: -60px;
+    right: -40px;
+    width: 200px;
+    height: 200px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  .welcome-banner .welcome-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    font-weight: 700;
+    flex-shrink: 0;
+    z-index: 1;
+  }
+
+  .welcome-banner .welcome-text {
+    z-index: 1;
+  }
+
+  .welcome-banner .welcome-text h1 {
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .welcome-banner .welcome-text h1 i {
+    font-size: 20px;
+  }
+
+  .welcome-banner .welcome-text .welcome-sub {
+    font-size: 14px;
+    opacity: 0.85;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .welcome-banner .welcome-text .welcome-sub .welcome-date {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    opacity: 0.75;
+  }
+
+  /* Stat cards */
+  .dash-stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .dash-stat {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--color-border);
+    transition: all var(--transition);
+    text-align: center;
+  }
+
+  .dash-stat:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+  }
+
+  .dash-stat .stat-icon-circle {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 12px;
+    font-size: 20px;
+  }
+
+  .dash-stat .stat-icon-circle.orders   { background: #e8f0fe; color: var(--color-primary); }
+  .dash-stat .stat-icon-circle.reserve  { background: #e6f4ea; color: var(--color-success); }
+  .dash-stat .stat-icon-circle.points   { background: #fff3cd; color: #664d03; }
+  .dash-stat .stat-icon-circle.active   { background: #cff4fc; color: #055160; }
+
+  .dash-stat .stat-value {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--color-text);
+    line-height: 1.2;
+  }
+
+  .dash-stat .stat-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-top: 2px;
+  }
+
+  .dash-stat .stat-hint {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-top: 4px;
+  }
+
+  /* Quick links */
+  .quick-links-section {
+    margin-bottom: 24px;
+  }
+
+  .quick-links-section h2 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-text);
+  }
+
+  .quick-links-section h2 i {
+    color: var(--color-primary);
+  }
+
+  .quick-links-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+
+  .quick-link-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 20px 16px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    color: var(--color-text);
+    transition: all var(--transition);
+    cursor: pointer;
+  }
+
+  .quick-link-card:hover {
+    border-color: var(--color-primary);
+    background: rgba(13, 110, 253, 0.03);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+    text-decoration: none;
+    color: var(--color-text);
+  }
+
+  .quick-link-card .ql-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: var(--color-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: var(--color-primary);
+    transition: all var(--transition);
+  }
+
+  .quick-link-card:hover .ql-icon {
+    background: var(--color-primary);
+    color: #fff;
+  }
+
+  .quick-link-card .ql-label {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  .quick-link-card .ql-desc {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    text-align: center;
+  }
+
+  /* Two-column layout for lists */
+  .dash-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+
+  /* Mini list */
+  .dash-mini-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .dash-mini-list .dash-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--color-border);
+    transition: background var(--transition);
+  }
+
+  .dash-mini-list .dash-item:last-child {
+    border-bottom: none;
+  }
+
+  .dash-mini-list .dash-item:hover {
+    background: rgba(0,0,0,0.015);
+  }
+
+  .dash-mini-list .dash-item .item-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .dash-mini-list .dash-item .item-dot.active   { background: var(--color-primary); }
+  .dash-mini-list .dash-item .item-dot.success  { background: var(--color-success); }
+  .dash-mini-list .dash-item .item-dot.warning  { background: var(--color-warning); }
+  .dash-mini-list .dash-item .item-dot.pending  { background: #f5a623; }
+  .dash-mini-list .dash-item .item-dot.info     { background: var(--color-info); }
+  .dash-mini-list .dash-item .item-dot.muted    { background: var(--color-text-muted); }
+
+  .dash-mini-list .dash-item .item-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .dash-mini-list .dash-item .item-info .item-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dash-mini-list .dash-item .item-info .item-meta {
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+
+  .dash-mini-list .dash-item .item-extra {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+    white-space: nowrap;
+  }
+
+  /* Empty state inline */
+  .dash-empty-inline {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--color-text-muted);
+  }
+
+  .dash-empty-inline i {
+    font-size: 32px;
+    opacity: 0.25;
+    margin-bottom: 8px;
+  }
+
+  .dash-empty-inline p {
+    font-size: 13px;
+    margin: 0;
+  }
+
+  /* ============================================================
+     RESPONSIVE
+     ============================================================ */
+  @media (max-width: 1024px) {
+    .dash-stats-row {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .quick-links-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .dash-columns {
+      grid-template-columns: 1fr;
+    }
+
+    .welcome-banner {
+      flex-direction: column;
+      text-align: center;
+      padding: 24px 20px;
+    }
+
+    .welcome-banner .welcome-text .welcome-sub {
+      justify-content: center;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .dash-stats-row {
+      grid-template-columns: 1fr;
+    }
+
+    .quick-links-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .welcome-banner .welcome-text h1 {
+      font-size: 18px;
+    }
+  }
+</style>
+
+<!-- ============================================================
+     CUSTOMER DASHBOARD
+     ============================================================ -->
+<div class="customer-dashboard-page" data-page="customer-dashboard">
+
+  <!-- ============================================================
+       WELCOME BANNER
+       ============================================================ -->
+  <div class="welcome-banner">
+    <div class="welcome-avatar">
+      <%= customer.nume ? customer.nume.charAt(0).toUpperCase() : (customer.name ? customer.name.charAt(0).toUpperCase() : '👤') %>
+    </div>
+    <div class="welcome-text">
+      <h1>
+        <i class="fas fa-hand-sparkles"></i>
+        Bun venit în contul tău<%= customer.nume ? ', ' + customer.nume : (customer.name ? ', ' + customer.name : '') %>!
+      </h1>
+      <div class="welcome-sub">
+        <span>Explorează comenzile, rezervările și ofertele tale.</span>
+        <span class="welcome-date">
+          <i class="far fa-calendar-alt"></i>
+          <%= new Date().toLocaleDateString('ro-RO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) %>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       STATISTICS ROW
+       ============================================================ -->
+  <div class="dash-stats-row">
+    <!-- Total comenzi -->
+    <div class="dash-stat">
+      <div class="stat-icon-circle orders">
+        <i class="fas fa-receipt"></i>
+      </div>
+      <div class="stat-value"><%= recentOrders.length %></div>
+      <div class="stat-label">Comenzi recente</div>
+      <div class="stat-hint">
+        <% if (pendingOrdersCount > 0) { %>
+          <span style="color:var(--color-primary);"><%= pendingOrdersCount %> în curs</span>
+        <% } else { %>
+          <span>Nicio comandă activă</span>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- Rezervări active -->
+    <div class="dash-stat">
+      <div class="stat-icon-circle reserve">
+        <i class="fas fa-calendar-check"></i>
+      </div>
+      <div class="stat-value"><%= activeReservations.length %></div>
+      <div class="stat-label">Rezervări active</div>
+      <div class="stat-hint">
+        <% if (activeReservations.length > 0) { %>
+          <span style="color:var(--color-success);">Confirmate</span>
+        <% } else { %>
+          <span>Nicio rezervare</span>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- Puncte loialitate -->
+    <div class="dash-stat">
+      <div class="stat-icon-circle points">
+        <i class="fas fa-gem"></i>
+      </div>
+      <div class="stat-value"><%= loyaltyPoints %></div>
+      <div class="stat-label">Puncte loialitate</div>
+      <div class="stat-hint">
+        <span>Disponibile</span>
+      </div>
+    </div>
+
+    <!-- Comenzi active (placeholder calculat) -->
+    <div class="dash-stat">
+      <div class="stat-icon-circle active">
+        <i class="fas fa-spinner"></i>
+      </div>
+      <div class="stat-value"><%= pendingOrdersCount %></div>
+      <div class="stat-label">În desfășurare</div>
+      <div class="stat-hint">
+        <span>Comenzi active</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       QUICK LINKS
+       ============================================================ -->
+  <div class="quick-links-section">
+    <h2>
+      <i class="fas fa-bolt"></i>
+      Acțiuni rapide
+    </h2>
+    <div class="quick-links-grid">
+      <a href="/customer/orders/new" class="quick-link-card">
+        <div class="ql-icon"><i class="fas fa-plus-circle"></i></div>
+        <div class="ql-label">Comandă nouă</div>
+        <div class="ql-desc">Plasează o comandă</div>
+      </a>
+
+      <a href="/customer/reservations/new" class="quick-link-card">
+        <div class="ql-icon"><i class="fas fa-calendar-plus"></i></div>
+        <div class="ql-label">Rezervare nouă</div>
+        <div class="ql-desc">Rezervă o masă</div>
+      </a>
+
+      <a href="/customer/orders" class="quick-link-card">
+        <div class="ql-icon"><i class="fas fa-history"></i></div>
+        <div class="ql-label">Istoric comenzi</div>
+        <div class="ql-desc">Vezi comenzile tale</div>
+      </a>
+
+      <a href="/customer/loyalty" class="quick-link-card">
+        <div class="ql-icon"><i class="fas fa-gift"></i></div>
+        <div class="ql-label">Loialitate</div>
+        <div class="ql-desc">Puncte &amp; cupoane</div>
+      </a>
+
+      <a href="/customer/favorites" class="quick-link-card">
+        <div class="ql-icon"><i class="fas fa-heart"></i></div>
+        <div class="ql-label">Favorite</div>
+        <div class="ql-desc">Preparate salvate</div>
+      </a>
+
+      <a href="/customer/restaurants" class="quick-link-card">
+        <div class="ql-icon"><i class="fas fa-store"></i></div>
+        <div class="ql-label">Restaurante</div>
+        <div class="ql-desc">Descoperă localuri</div>
+      </a>
+
+      <a href="/customer/profile" class="quick-link-card">
+        <div class="ql-icon"><i class="fas fa-user-edit"></i></div>
+        <div class="ql-label">Profil</div>
+        <div class="ql-desc">Editează contul</div>
+      </a>
+
+      <a href="/customer/addresses" class="quick-link-card">
+        <div class="ql-icon"><i class="fas fa-map-marker-alt"></i></div>
+        <div class="ql-label">Adrese</div>
+        <div class="ql-desc">Gestionează adresele</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       TWO-COLUMN: Comenzi recente & Rezervări active
+       ============================================================ -->
+  <div class="dash-columns">
+    <!-- Comenzi recente -->
+    <div class="card">
+      <div class="card-header">
+        <i class="fas fa-receipt" style="color:var(--color-primary);margin-right:8px;"></i>
+        Comenzi recente
+        <a href="/customer/orders" class="btn btn-sm btn-secondary" style="margin-left:auto;">
+          Vezi toate <i class="fas fa-chevron-right" style="font-size:10px;"></i>
+        </a>
+      </div>
+      <div class="card-body">
+        <% if (recentOrders.length === 0) { %>
+          <div class="dash-empty-inline">
+            <i class="fas fa-receipt"></i>
+            <p>Nu ai încă nicio comandă.</p>
+            <a href="/customer/orders/new" class="btn btn-primary btn-sm mt-2">
+              <i class="fas fa-plus"></i> Plasează prima comandă
+            </a>
+          </div>
+        <% } else { %>
+          <ul class="dash-mini-list">
+            <% recentOrders.forEach(function(order) { %>
+              <%
+                var dotClass = 'muted';
+                var orderStatus = order.status || '';
+                if (orderStatus === 'deschisă' || orderStatus === 'processing') dotClass = 'active';
+                else if (orderStatus === 'în preparare' || orderStatus === 'preparing') dotClass = 'warning';
+                else if (orderStatus === 'finalizată' || orderStatus === 'livrată' || orderStatus === 'achitată' || orderStatus === 'completed' || orderStatus === 'delivered') dotClass = 'success';
+                else if (orderStatus === 'anulată' || orderStatus === 'cancelled') dotClass = 'muted';
+                else dotClass = 'pending';
+
+                var statusLabels = {
+                  'deschisă': 'Deschisă',
+                  'în preparare': 'În preparare',
+                  'finalizată': 'Finalizată',
+                  'livrată': 'Livrată',
+                  'achitată': 'Achitată',
+                  'anulată': 'Anulată',
+                  'processing': 'În procesare',
+                  'preparing': 'În preparare',
+                  'completed': 'Finalizat',
+                  'delivered': 'Livrat',
+                  'cancelled': 'Anulat',
+                  'pending': 'În așteptare',
+                  'confirmed': 'Confirmat'
+                };
+                var statusLabel = statusLabels[orderStatus] || orderStatus || '—';
+                var restaurantName = (order.restaurantId && order.restaurantId.name) ? order.restaurantId.name : (order.restaurantName || 'Restaurant');
+                var orderTotal = order.total || 0;
+                var orderDate = order.createdAt || order.date || '';
+              %>
+              <li class="dash-item" style="cursor:pointer;" onclick="window.location.href='/customer/orders/<%= order._id %>'">
+                <div class="item-dot <%= dotClass %>"></div>
+                <div class="item-info">
+                  <div class="item-title"><%= restaurantName %></div>
+                  <div class="item-meta">
+                    <%= statusLabel %>
+                    <% if (orderDate) { %> · <%= new Date(orderDate).toLocaleDateString('ro-RO', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) %><% } %>
+                  </div>
+                </div>
+                <div class="item-extra"><%= Number(orderTotal).toFixed(2) %> lei</div>
+              </li>
+            <% }); %>
+          </ul>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- Rezervări active -->
+    <div class="card">
+      <div class="card-header">
+        <i class="fas fa-calendar-check" style="color:var(--color-success);margin-right:8px;"></i>
+        Rezervări active
+        <a href="/customer/reservations" class="btn btn-sm btn-secondary" style="margin-left:auto;">
+          Vezi toate <i class="fas fa-chevron-right" style="font-size:10px;"></i>
+        </a>
+      </div>
+      <div class="card-body">
+        <% if (activeReservations.length === 0) { %>
+          <div class="dash-empty-inline">
+            <i class="fas fa-calendar-check"></i>
+            <p>Nu ai nicio rezervare activă.</p>
+            <a href="/customer/reservations/new" class="btn btn-primary btn-sm mt-2">
+              <i class="fas fa-plus"></i> Fă o rezervare
+            </a>
+          </div>
+        <% } else { %>
+          <ul class="dash-mini-list">
+            <% activeReservations.forEach(function(rez) { %>
+              <%
+                var rezStatus = rez.status || '';
+                var dotClass = 'info';
+                if (rezStatus === 'confirmată' || rezStatus === 'confirmed') dotClass = 'success';
+                else if (rezStatus === 'check-in') dotClass = 'active';
+                else if (rezStatus === 'anulată' || rezStatus === 'cancelled') dotClass = 'muted';
+
+                var rezStatusLabels = {
+                  'confirmată': 'Confirmată',
+                  'check-in': 'Check-in',
+                  'anulată': 'Anulată',
+                  'confirmed': 'Confirmată',
+                  'cancelled': 'Anulată',
+                  'pending': 'În așteptare',
+                };
+                var rezLabel = rezStatusLabels[rezStatus] || rezStatus || '—';
+                var rezDate = rez.data || rez.date || rez.checkInDate || '';
+                var rezLocation = rez.restaurantId && rez.restaurantId.name ? rez.restaurantId.name : (rez.restaurantName || (rez.hotelId && rez.hotelId.nume ? rez.hotelId.nume : 'Locație'));
+              %>
+              <li class="dash-item" style="cursor:pointer;" onclick="window.location.href='/customer/reservations/<%= rez._id %>'">
+                <div class="item-dot <%= dotClass %>"></div>
+                <div class="item-info">
+                  <div class="item-title"><%= rezLocation %></div>
+                  <div class="item-meta">
+                    <%= rezLabel %>
+                    <% if (rezDate) { %> · <%= new Date(rezDate).toLocaleDateString('ro-RO', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) %><% } %>
+                  </div>
+                </div>
+                <div class="item-extra">
+                  <% if (rez.nrPersoane || rez.guests) { %>
+                    <i class="fas fa-user-friends" style="font-size:11px;margin-right:2px;"></i>
+                    <%= rez.nrPersoane || rez.guests %>
+                  <% } %>
+                </div>
+              </li>
+            <% }); %>
+          </ul>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+</div>
