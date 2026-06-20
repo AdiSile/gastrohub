@@ -1,32 +1,3 @@
-**Linii cu markdown identificate:**
-
-| Linia | Tip markdown | Conținut |
-|-------|-------------|----------|
-| 15 | Listă (`- `) | ` *  - Configurarea şi expunerea conexiunilor NeDB pentru:` |
-| 16 | Sub-listă numerotată | ` *      1. users.db   – colecţia globală de utilizatori` |
-| 17 | Sub-listă numerotată | ` *      2. tenants.db – colecţia globală de tenant-i (organizaţii)` |
-| 18 | Listă + inline code | ` *  - Încărcare la primul \`require\` – singleton pattern` |
-| 41 | Inline code | ` * Citeşte variabila de mediu \`DB_PATH\` sau implicit \`./data/\`.` |
-| 62 | Inline code | ` * În teste sau când \`NODE_ENV === 'test'\` se preferă baza în-memory` |
-| 77 | Em-dash (nu markdown) | ` * Colecţia de utilizatori (globală – toţi tenant-ii).` |
-| 87 | Em-dash (nu markdown) | ` * Colecţia de tenant-i (organizaţii).` |
-| 166 | Separator `---` | `// ---------------------------------------------------------------------------` |
-| 168 | Separator `---` | `// ---------------------------------------------------------------------------` |
-| 182 | Fenced code block (`` ``` ``) | ``   CREATE TABLE IF NOT EXISTS reservations (`` |
-| 199 | Fenced code block (`` ``` ``) | `` \`); `` |
-| 203 | Listă (`- `) + arrow | ` *  - db.run(sql, params)   => returnează { changes, lastInsertRowid }` |
-| 204 | Listă (`- `) + arrow | ` *  - db.get(sql, params)   => returnează primul rând sau undefined` |
-| 205 | Listă (`- `) + arrow | ` *  - db.all(sql, params)   => returnează toate rândurile (Array)` |
-| 229 | Inline code | ` * Indexare implicită pe câmpul \`email\` – previne duplicarea utilizatorilor.` |
-| 239 | Inline code (×2) | ` * \`sparse: true\` permite documentelor fără câmpul \`slug\` să nu fie indexate.` |
-
-**Separatoare `/*** --- ***/` (posibil confundate cu markdown `---`):** Liniile 1, 39, 48, 61, 76, 86, 96, 106, 116, 126, 136, 146, 156, 170, 179, 201, 227, 237, 247, 256, 265, 278, 287, 300, 309, 318, 327, 336, 349, 358, 367, 376, 385, 398, 407, 416, 425, 434, 443, 456, 465, 474, 483, 492, 505, 514, 523, 532, 541, 550, 559 (toate conțin `/**` — deschidere JSDoc, NU markdown bold `**`).
-
-**Separatoare `// ---`:** Liniile 166, 168, 223, 225, 274, 276, 296, 298, 345, 347, 394, 396, 452, 454, 501, 503, 568, 570 — acestea conțin `---` dar sunt comentarii JavaScript, nu reguli orizontale markdown standalone.
-
-**Concluzie:** Fișierul conține **5 linii cu inline code** (backtick simplu), **2 linii de fenced code block** (triplu backtick), și **6 linii cu listă markdown** (`- `) în comentariile JSDoc. Nu există bold (`**`), italic (`*`), link-uri (`[]()`), imagini (`![]()`), tabele, headere (`#`), sau reguli orizontale markdown reale. Toate sintaxele markdown identificate sunt încorporate în comentarii JavaScript/JSDoc și nu afectează parsarea ca JS.
-
-### temp_db_original.js
 /**
  * ============================================================
  * config/db.js - Ini╚Ťializare NeDB (embedded document database)
