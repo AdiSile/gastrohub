@@ -820,7 +820,7 @@ function countInventoryItems(tenantId, options) {
 
     const whereClause = conditions.join(' AND ');
 
-    const row = get(
+    const row = db.get(
       'SELECT COUNT(*) AS cnt FROM inventory_items WHERE ' + whereClause,
       params
     );
@@ -848,7 +848,7 @@ function findInventoryItemsBySupplier(supplierId) {
   try {
     const db = getDb();
 
-    const rows = all(
+    const rows = db.all(
       'SELECT id AS _id, name, category, quantity, unit, minQuantity AS minThreshold, location, supplierId, tenantId, createdAt, updatedAt FROM inventory_items WHERE supplierId = ? ORDER BY name ASC',
       [supplierId]
     );
@@ -876,7 +876,7 @@ function getInventorySummary(tenantId) {
   try {
     const db = getDb();
 
-    const rows = all(
+    const rows = db.all(
       'SELECT category, COUNT(*) AS count, SUM(quantity) AS totalQuantity FROM inventory_items WHERE tenantId = ? GROUP BY category ORDER BY category ASC',
       [tenantId]
     );

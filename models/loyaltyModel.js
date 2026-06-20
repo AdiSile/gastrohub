@@ -598,7 +598,7 @@ async function useCoupon(code, userId, orderDetails = {}) {
  */
 async function cancelCoupon(code, userId) {
   if (!isValidCouponCode(code)) {
-    throw new Error('Codul cuponului este invalid.');
+    throw Error('Codul cuponului este invalid.');
   }
 
   if (!isValidUserId(userId)) {
@@ -674,25 +674,20 @@ async function getActiveCoupons(userId) {
  * @param {string} userId
  * @returns {Promise<Array>} Lista completă a cupoanelor
  */
-function getAllCouponsForUser(userId) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!isValidUserId(userId)) {
-        return reject(new Error('ID-ul utilizatorului este invalid.'));
-      }
+async function getAllCouponsForUser(userId) {
+  if (!isValidUserId(userId)) {
+    throw new Error('ID-ul utilizatorului este invalid.');
+  }
 
-      ensureTables();
+  const db = await getDb();
+  ensureTables(db);
 
-      const rows = all(
-        'SELECT * FROM loyalty_coupons WHERE userId = ? ORDER BY createdAt DESC',
-        [userId]
-      );
+  const rows = _queryAll(db,
+    'SELECT * FROM loyalty_coupons WHERE userId = ? ORDER BY createdAt DESC',
+    [userId]
+  );
 
-      resolve(rows);
-    } catch (err) {
-      reject(err);
-    }
-  });
+  return rows;
 }
 
 /**
@@ -700,41 +695,36 @@ function getAllCouponsForUser(userId) {
  * @param {string} userId
  * @returns {Promise<number>} Numărul de cupoane curățate
  */
-function cleanupExpiredCoupons(userId) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!isValidUserId(userId)) {
-        return reject(new Error('ID-ul utilizatorului este invalid.'));
-      }
+async function cleanupExpiredCoupons(userId) {
+  if (!isValidUserId(userId)) {
+    throw new Error('ID-ul utilizatorului este invalid.');
+  }
 
-      ensureTables();
+  const db = await getDb();
+  ensureTables(db);
 
-      const now = new Date().toISOString();
+  const now = new Date().toISOString();
 
-      // Marcăm cupoanele active expirate
-      const result = run(
-        "UPDATE loyalty_coupons SET status = 'expired' WHERE userId = ? AND status = 'active' AND expiresAt <= ?",
-        [userId, now]
+  // Marcăm cupoanele active expirate
+  const result = _execute(db,
+    "UPDATE loyalty_coupons SET status = 'expired' WHERE userId = ? AND status = 'active' AND expiresAt <= ?",
+    [userId, now]
+  );
+
+  const cleanedCount = result.changes || 0;
+
+  // Actualizăm contorul activ
+  if (cleanedCount > 0) {
+    const account = _queryOne(db, 'SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
+    if (account) {
+      _execute(db,
+        'UPDATE loyalty_accounts SET activeCoupons = MAX(0, activeCoupons - ?), updatedAt = ? WHERE userId = ?',
+        [cleanedCount, now, userId]
       );
-
-      const cleanedCount = result.changes || 0;
-
-      // Actualizăm contorul activ
-      if (cleanedCount > 0) {
-        const account = get('SELECT * FROM loyalty_accounts WHERE userId = ?', [userId]);
-        if (account) {
-          run(
-            'UPDATE loyalty_accounts SET activeCoupons = MAX(0, activeCoupons - ?), updatedAt = ? WHERE userId = ?',
-            [cleanedCount, now, userId]
-          );
-        }
-      }
-
-      resolve(cleanedCount);
-    } catch (err) {
-      reject(err);
     }
-  });
+  }
+
+  return cleanedCount;
 }
 
 /**
@@ -744,78 +734,72 @@ function cleanupExpiredCoupons(userId) {
  * @param {string} userId - ID-ul utilizatorului
  * @returns {Promise<Object>} Detalii discount
  */
-function calculateDiscount(couponCode, orderAmount, userId) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!isValidPositiveNumber(orderAmount)) {
-        return reject(new Error('Suma comenzii trebuie să fie un număr pozitiv.'));
-      }
+async function calculateDiscount(couponCode, orderAmount, userId) {
+  if (!isValidPositiveNumber(orderAmount)) {
+    throw new Error('Suma comenzii trebuie să fie un număr pozitiv.');
+  }
 
-      if (!isValidCouponCode(couponCode)) {
-        return reject(new Error('Codul cuponului este invalid.'));
-      }
+  if (!isValidCouponCode(couponCode)) {
+    throw new Error('Codul cuponului este invalid.');
+  }
 
-      if (!isValidUserId(userId)) {
-        return reject(new Error('ID-ul utilizatorului este invalid.'));
-      }
+  if (!isValidUserId(userId)) {
+    throw new Error('ID-ul utilizatorului este invalid.');
+  }
 
-      ensureTables();
+  const db = await getDb();
+  ensureTables(db);
 
-      const normalizedCode = couponCode.trim().toUpperCase();
-      const cupon = get('SELECT * FROM loyalty_coupons WHERE UPPER(code) = ?', [normalizedCode]);
+  const normalizedCode = couponCode.trim().toUpperCase();
+  const cupon = _queryOne(db, 'SELECT * FROM loyalty_coupons WHERE UPPER(code) = ?', [normalizedCode]);
 
-      if (!cupon) {
-        return reject(new Error('Cuponul nu există.'));
-      }
+  if (!cupon) {
+    throw new Error('Cuponul nu există.');
+  }
 
-      if (cupon.userId !== userId) {
-        return reject(new Error('Acest cupon nu aparține utilizatorului curent.'));
-      }
+  if (cupon.userId !== userId) {
+    throw new Error('Acest cupon nu aparține utilizatorului curent.');
+  }
 
-      if (isCouponExpired(cupon)) {
-        return reject(new Error('Cuponul a expirat.'));
-      }
+  if (isCouponExpired(cupon)) {
+    throw new Error('Cuponul a expirat.');
+  }
 
-      if (isCouponUsed(cupon)) {
-        return reject(new Error('Cuponul a fost deja folosit.'));
-      }
+  if (isCouponUsed(cupon)) {
+    throw new Error('Cuponul a fost deja folosit.');
+  }
 
-      if (isCouponCancelled(cupon)) {
-        return reject(new Error('Cuponul a fost anulat.'));
-      }
+  if (isCouponCancelled(cupon)) {
+    throw new Error('Cuponul a fost anulat.');
+  }
 
-      const discountAmount = (orderAmount * cupon.discountPercent) / 100;
-      const finalAmount = orderAmount - discountAmount;
+  const discountAmount = (orderAmount * cupon.discountPercent) / 100;
+  const finalAmount = orderAmount - discountAmount;
 
-      resolve({
-        originalAmount: orderAmount,
-        discountPercent: cupon.discountPercent,
-        discountAmount: Math.round(discountAmount * 100) / 100,
-        finalAmount: Math.round(finalAmount * 100) / 100,
-        couponCode: cupon.code,
-      });
-    } catch (err) {
-      reject(err);
-    }
-  });
+  return {
+    originalAmount: orderAmount,
+    discountPercent: cupon.discountPercent,
+    discountAmount: Math.round(discountAmount * 100) / 100,
+    finalAmount: Math.round(finalAmount * 100) / 100,
+    couponCode: cupon.code,
+  };
 }
 
 /**
  * Resetează toate datele (pentru testare).
  * @returns {Promise<boolean>}
  */
-function resetAllData() {
-  return new Promise((resolve) => {
-    try {
-      ensureTables();
-      run('DELETE FROM loyalty_coupons');
-      run('DELETE FROM loyalty_accounts');
-      resolve(true);
-    } catch (err) {
-      // Dacă tabelele nu există încă, ignorăm eroarea
-      resolve(true);
-    }
-  });
+async function resetAllData() {
+  try {
+    const db = await getDb();
+    ensureTables(db);
+    _execute(db, 'DELETE FROM loyalty_coupons');
+    _execute(db, 'DELETE FROM loyalty_accounts');
+    return true;
+  } catch (err) {
+    // Dacă tabelele nu există încă, ignorăm eroarea
+    return true;
+  }
 }
 
 // ---------------------------------------------------------------------------
