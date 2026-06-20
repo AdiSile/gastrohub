@@ -541,7 +541,7 @@
       color: #c39bff;
     }
 
-    /* Form-level generic error alert (populated by client-side fetch) */
+    /* Form-level generic error alert (client-side validation summary) */
     .form-alert {
       padding: 12px 16px;
       border-radius: var(--radius-sm);
@@ -663,14 +663,14 @@
         </div>
       <% } %>
 
-      <!-- Generic form alert (populated by client-side fetch errors) -->
+      <!-- Generic form alert (client-side validation summary) -->
       <div class="form-alert" id="formAlert">
         <i class="fas fa-exclamation-circle"></i>
         <span id="formAlertText"></span>
       </div>
 
       <!-- Login Form -->
-      <form id="loginForm" action="/api/auth/login" method="POST" novalidate>
+      <form id="loginForm" action="/customer/login" method="POST" novalidate>
         <!-- Email -->
         <div class="form-group">
           <label for="email">Adresă de email</label>
@@ -914,15 +914,13 @@
       }
 
       // =================================================================
-      // Submit handler — uses fetch to call API, then redirects on success
+      // Submit handler — client-side validation then normal form submit
       // =================================================================
       if (form) {
         form.addEventListener('submit', function(e) {
-          // Prevent default always — we handle submission via fetch
-          e.preventDefault();
-
           // Client-side validation
           if (!validateForm()) {
+            e.preventDefault();
             // Scroll to first error
             var firstError = form.querySelector('.form-error.show');
             if (firstError) {
@@ -932,6 +930,7 @@
           }
 
           if (isSubmitting) {
+            e.preventDefault();
             return;
           }
 
@@ -939,93 +938,9 @@
           setLoading(true);
           hideFormAlert();
 
-          // Build request body
-          var body = {
-            email: emailInput ? emailInput.value.trim() : '',
-            password: passwordInput ? passwordInput.value : ''
-          };
-
-          // Include remember-me flag if checked
-          if (rememberCheckbox && rememberCheckbox.checked) {
-            body.remember = true;
-          }
-
-          // Send login request to API
-          fetch(form.action, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-            credentials: 'same-origin'  // Send cookies along
-          })
-            .then(function(response) {
-              return response.json().then(function(data) {
-                return { status: response.status, ok: response.ok, data: data };
-              });
-            })
-            .then(function(result) {
-              if (result.ok && result.data.success) {
-                // Login successful — redirect to dashboard
-                window.location.href = '/customer/dashboard';
-                return;
-              }
-
-              // Server returned an error
-              var errorMsg = result.data.message || result.data.error || 'Eroare la autentificare.';
-              if (result.data.errors && Array.isArray(result.data.errors) && result.data.errors.length > 0) {
-                errorMsg = result.data.errors.map(function(e) { return e.msg || e; }).join('; ');
-              }
-
-              // Map specific field errors if provided by server
-              var hasFieldError = false;
-              if (result.data.fieldErrors) {
-                if (result.data.fieldErrors.email && emailError && emailErrorText) {
-                  emailErrorText.textContent = result.data.fieldErrors.email;
-                  emailError.classList.add('show');
-                  hasFieldError = true;
-                }
-                if (result.data.fieldErrors.password && passwordError && passwordErrorText) {
-                  passwordErrorText.textContent = result.data.fieldErrors.password;
-                  passwordError.classList.add('show');
-                  hasFieldError = true;
-                }
-              }
-
-              // Special handling for common HTTP status codes
-              if (result.status === 401) {
-                // Unauthorized — likely wrong credentials
-                if (passwordError && passwordErrorText && !hasFieldError) {
-                  passwordErrorText.textContent = errorMsg || 'Email sau parolă incorecte.';
-                  passwordError.classList.add('show');
-                  hasFieldError = true;
-                }
-              } else if (result.status === 404) {
-                // Account not found
-                if (emailError && emailErrorText && !hasFieldError) {
-                  emailErrorText.textContent = errorMsg || 'Nu există un cont asociat acestui email.';
-                  emailError.classList.add('show');
-                  hasFieldError = true;
-                }
-              }
-
-              // Show generic error in form alert if no field was specifically highlighted
-              if (!hasFieldError && formAlert && formAlertText) {
-                formAlertText.textContent = errorMsg;
-                formAlert.classList.add('show');
-              }
-
-              // Reset loading state
-              setLoading(false);
-              isSubmitting = false;
-            })
-            .catch(function(err) {
-              // Network error or unexpected issue
-              if (formAlert && formAlertText) {
-                formAlertText.textContent = 'Eroare de rețea sau server indisponibil. Verifică conexiunea și încearcă din nou.';
-                formAlert.classList.add('show');
-              }
-              setLoading(false);
-              isSubmitting = false;
-            });
+          // Let the form submit normally to /customer/login
+          // The server will handle the request and render the response
+          // (success redirect or re-render with errors)
         });
       }
 

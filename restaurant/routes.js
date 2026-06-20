@@ -55,6 +55,12 @@ const MIN_STAFF_ROLE = 'ospătar';
  */
 const DASHBOARD_FETCH_TIMEOUT_MS = 5000;
 
+/**
+ * Durata maximă (ms) pentru fetch-urile interne de login.
+ * @type {number}
+ */
+const LOGIN_FETCH_TIMEOUT_MS = 10000;
+
 // ---------------------------------------------------------------------------
 // Helper: randare pagină EJS pentru restaurant
 // ---------------------------------------------------------------------------
@@ -119,7 +125,7 @@ function renderRestaurantView(view, extraData = {}) {
  */
 function requireStaff(req, res, next) {
   if (!req.user) {
-    return res.redirect('/customer/login');
+    return res.redirect('/restaurant/login');
   }
 
   if (!isStaffRole(req.user.role)) {
@@ -256,9 +262,301 @@ async function safeInternalFetch(url, timeoutMs = DASHBOARD_FETCH_TIMEOUT_MS) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Helper: fetch intern cu suport pentru POST și forward de cookie-uri
+// ---------------------------------------------------------------------------
+
+/**
+ * Execută un fetch intern folosind modulul nativ Node.js http/https,
+ * cu suport pentru metode HTTP arbitrare, corp și header-e personalizate.
+ *
+ * Compatibil cu Node.js < 18 (nu depinde de fetch global).
+ *
+ * @param {string} url - URL-ul apelului (complet, cu protocol)
+ * @param {Object} [options] - Opțiuni suplimentare
+ * @param {string} [options.method='GET'] - Metoda HTTP
+ * @param {Object} [options.headers={}] - Header-e adiționale
+ * @param {string|null} [options.body=null] - Corpul request-ului (pentru POST/PUT)
+ * @param {number} [options.timeoutMs=10000] - timeout în milisecunde
+ * @returns {Promise<{statusCode: number, headers: Object, data: Object}>} obiectul cu status, headers și date
+ */
+function internalFetch(url, options = {}) {
+  const {
+    method = 'GET',
+    headers = {},
+    body = null,
+    timeoutMs = LOGIN_FETCH_TIMEOUT_MS,
+  } = options;
+
+  return new Promise((resolve, reject) => {
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch (parseErr) {
+      return reject(new Error(`URL invalid: ${url} - ${parseErr.message}`));
+    }
+
+    const isHttps = parsedUrl.protocol === 'https:';
+    const transport = isHttps ? https : http;
+
+    const defaultHeaders = {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    };
+
+    const reqOptions = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (isHttps ? 443 : 80),
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: method,
+      headers: { ...defaultHeaders, ...headers },
+      timeout: timeoutMs,
+    };
+
+    if (body) {
+      const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
+      reqOptions.headers['Content-Length'] = Buffer.byteLength(bodyStr);
+    }
+
+    const req = transport.request(reqOptions, (res) => {
+      let rawData = '';
+
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        rawData += chunk;
+      });
+
+      res.on('end', () => {
+        let data;
+        try {
+          data = JSON.parse(rawData);
+        } catch (parseErr) {
+          data = { raw: rawData };
+        }
+
+        resolve({
+          statusCode: res.statusCode,
+          headers: res.headers,
+          data,
+        });
+      });
+    });
+
+    req.on('error', (err) => {
+      reject(err);
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error(`Timeout (${timeoutMs}ms) la fetch: ${url}`));
+    });
+
+    if (body) {
+      const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
+      req.write(bodyStr);
+    }
+
+    req.end();
+  });
+}
+
 // ===========================================================================
 // RUTE PUBLICE
 // ===========================================================================
+
+// ---------------------------------------------------------------------------
+// GET /restaurant/login – Formular de autentificare pentru Restaurant
+// ---------------------------------------------------------------------------
+
+/**
+ * @route   GET /restaurant/login
+ * @desc    Servește formularul de login pentru modulul Restaurant
+ * @access  Public
+ */
+router.get('/login', optionalAuth, (req, res) => {
+  // Dacă utilizatorul este deja autentificat și e staff, redirect la dashboard
+  if (req.user && isStaffRole(req.user.role)) {
+    return res.redirect('/restaurant/dashboard');
+  }
+
+  return renderRestaurantView('login', {
+    title: 'Autentificare Restaurant – GastroHub',
+    currentPage: 'restaurant-login',
+    error: req.query.error || null,
+    flash: req.query.flash ? { type: req.query.flashType || 'info', message: req.query.flash } : null,
+    email: req.query.email || '',
+  })(req, res);
+});
+
+// ---------------------------------------------------------------------------
+// POST /restaurant/login – Procesare autentificare Restaurant
+// ---------------------------------------------------------------------------
+
+/**
+ * @route   POST /restaurant/login
+ * @desc    Procesează autentificarea delegând la /api/auth/login prin fetch intern.
+ *          Verifică rolul de staff. La succes redirecționează către /restaurant/dashboard.
+ *          La eroare reafișează formularul cu mesajul de eroare.
+ * @access  Public
+ */
+router.post('/login', optionalAuth, async (req, res) => {
+  const { email, password } = req.body;
+
+  // -------------------------------------------------------------------------
+  // Validare de bază server-side
+  // -------------------------------------------------------------------------
+  const errors = [];
+
+  if (!email || typeof email !== 'string' || email.trim().length === 0) {
+    errors.push('Adresa de email este obligatorie.');
+  }
+
+  if (!password || typeof password !== 'string' || password.length === 0) {
+    errors.push('Parola este obligatorie.');
+  }
+
+  if (errors.length > 0) {
+    return renderRestaurantView('login', {
+      title: 'Autentificare Restaurant – GastroHub',
+      currentPage: 'restaurant-login',
+      error: errors.join(' '),
+      email: email || '',
+    })(req, res);
+  }
+
+  // -------------------------------------------------------------------------
+  // Construire URL intern pentru /api/auth/login
+  // -------------------------------------------------------------------------
+  const loginUrl = buildInternalUrl(req, '/api/auth/login');
+
+  // -------------------------------------------------------------------------
+  // Pregătire corp request
+  // -------------------------------------------------------------------------
+  const requestBody = {
+    email: email.trim().toLowerCase(),
+    password,
+  };
+
+  // -------------------------------------------------------------------------
+  // Forward cookies de la clientul original (dacă există)
+  // pentru ca răspunsul să poată seta cookie-ul de sesiune
+  // -------------------------------------------------------------------------
+  const forwardHeaders = {};
+
+  // Forward cookie-ul original pentru a menține orice sesiune existentă
+  if (req.headers.cookie) {
+    forwardHeaders['Cookie'] = req.headers.cookie;
+  }
+
+  // Forward X-Forwarded-For și User-Agent pentru logging
+  if (req.headers['x-forwarded-for']) {
+    forwardHeaders['X-Forwarded-For'] = req.headers['x-forwarded-for'];
+  }
+  if (req.headers['user-agent']) {
+    forwardHeaders['User-Agent'] = req.headers['user-agent'];
+  }
+
+  // -------------------------------------------------------------------------
+  // Execuție fetch intern
+  // -------------------------------------------------------------------------
+  try {
+    const result = await internalFetch(loginUrl, {
+      method: 'POST',
+      headers: forwardHeaders,
+      body: requestBody,
+      timeoutMs: LOGIN_FETCH_TIMEOUT_MS,
+    });
+
+    const { statusCode, headers: responseHeaders, data } = result;
+
+    // -----------------------------------------------------------------------
+    // Autentificare reușită (2xx)
+    // -----------------------------------------------------------------------
+    if (statusCode >= 200 && statusCode < 300 && data.success) {
+      // Extragere date utilizator din răspuns
+      const userData = data.data && data.data.user ? data.data.user : null;
+
+      if (!userData) {
+        return renderRestaurantView('login', {
+          title: 'Autentificare Restaurant – GastroHub',
+          currentPage: 'restaurant-login',
+          error: 'Răspuns invalid de la serverul de autentificare.',
+          email: email || '',
+        })(req, res);
+      }
+
+      // -------------------------------------------------------------------
+      // Verificare rol de staff
+      // -------------------------------------------------------------------
+      if (!isStaffRole(userData.role)) {
+        return renderRestaurantView('login', {
+          title: 'Autentificare Restaurant – GastroHub',
+          currentPage: 'restaurant-login',
+          error: 'Nu ai permisiunile necesare pentru a accesa panoul de restaurant. Este necesar un cont de staff (ospătar, bucătar, recepție, manager, owner, super_admin).',
+          email: email || '',
+        })(req, res);
+      }
+
+      // -------------------------------------------------------------------
+      // Forward set-cookie de la răspunsul API către client
+      // -------------------------------------------------------------------
+      if (responseHeaders && responseHeaders['set-cookie']) {
+        const setCookieHeaders = Array.isArray(responseHeaders['set-cookie'])
+          ? responseHeaders['set-cookie']
+          : [responseHeaders['set-cookie']];
+
+        setCookieHeaders.forEach((cookie) => {
+          res.setHeader('Set-Cookie', cookie);
+        });
+      }
+
+      // -------------------------------------------------------------------
+      // Redirect la dashboard-ul restaurantului
+      // -------------------------------------------------------------------
+      return res.redirect('/restaurant/dashboard');
+    }
+
+    // -----------------------------------------------------------------------
+    // Eroare de autentificare (401, 404 etc.)
+    // -----------------------------------------------------------------------
+    let errorMessage = 'Email sau parolă incorectă.';
+
+    if (data && data.error) {
+      if (typeof data.error === 'string') {
+        errorMessage = data.error;
+      } else if (data.error.message) {
+        errorMessage = data.error.message;
+      }
+    } else if (data && data.message) {
+      errorMessage = data.message;
+    }
+
+    // Dacă API-ul returnează erori de validare
+    if (data && data.errors && Array.isArray(data.errors)) {
+      errorMessage = data.errors.map((e) => (e.msg || e)).join('; ');
+    }
+
+    return renderRestaurantView('login', {
+      title: 'Autentificare Restaurant – GastroHub',
+      currentPage: 'restaurant-login',
+      error: errorMessage,
+      email: email || '',
+    })(req, res);
+
+  } catch (fetchErr) {
+    // -----------------------------------------------------------------------
+    // Eroare de rețea / server indisponibil
+    // -----------------------------------------------------------------------
+    console.error('[restaurant/routes] Eroare fetch intern login:', fetchErr.message);
+
+    return renderRestaurantView('login', {
+      title: 'Autentificare Restaurant – GastroHub',
+      currentPage: 'restaurant-login',
+      error: 'Eroare de rețea sau server indisponibil. Verifică conexiunea și încearcă din nou.',
+      email: email || '',
+    })(req, res);
+  }
+});
 
 // ---------------------------------------------------------------------------
 // GET /restaurant/ – Redirect la dashboard
@@ -273,7 +571,7 @@ router.get('/', optionalAuth, (req, res) => {
   if (req.user && isStaffRole(req.user.role)) {
     return res.redirect('/restaurant/dashboard');
   }
-  res.redirect('/customer/login');
+  res.redirect('/restaurant/login');
 });
 
 // ===========================================================================
@@ -777,8 +1075,8 @@ router.get('*', optionalAuth, (req, res) => {
     return res.redirect('/restaurant/dashboard');
   }
 
-  // Altfel, redirect la login
-  res.redirect('/customer/login');
+  // Altfel, redirect la login-ul de restaurant
+  res.redirect('/restaurant/login');
 });
 
 // ===========================================================================

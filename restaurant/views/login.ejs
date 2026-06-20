@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title><%= locals.title || 'Înregistrare' %> – GastroHub</title>
+  <title><%= locals.title || 'Autentificare Restaurant' %> – GastroHub</title>
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -46,7 +46,6 @@
       --btn-primary-active: #6a1fb8;
       --error-color: #ff6b8a;
       --success-color: #4cd9a7;
-      --warning-color: #ffb347;
       --radius-sm: 8px;
       --radius-md: 14px;
       --radius-lg: 20px;
@@ -160,22 +159,22 @@
     }
 
     /* ============================================================
-       REGISTER CONTAINER
+       LOGIN CONTAINER
        ============================================================ */
-    .register-wrapper {
+    .login-wrapper {
       position: relative;
       z-index: 1;
       width: 100%;
-      max-width: 480px;
+      max-width: 440px;
     }
 
     /* Logo / Brand */
-    .register-brand {
+    .login-brand {
       text-align: center;
       margin-bottom: 28px;
     }
 
-    .register-brand .brand-icon {
+    .login-brand .brand-icon {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -190,14 +189,14 @@
       box-shadow: 0 8px 32px rgba(123, 45, 204, 0.35);
     }
 
-    .register-brand .brand-name {
+    .login-brand .brand-name {
       font-size: 24px;
       font-weight: 700;
       letter-spacing: 0.5px;
       color: #fff;
     }
 
-    .register-brand .brand-sub {
+    .login-brand .brand-sub {
       font-size: 13px;
       color: var(--text-secondary);
       font-weight: 400;
@@ -224,7 +223,7 @@
 
     .glass-card .card-header {
       text-align: center;
-      margin-bottom: 24px;
+      margin-bottom: 28px;
     }
 
     .glass-card .card-header h2 {
@@ -243,7 +242,7 @@
        FORM STYLES
        ============================================================ */
     .form-group {
-      margin-bottom: 18px;
+      margin-bottom: 20px;
     }
 
     .form-group label {
@@ -268,7 +267,6 @@
       color: var(--text-muted);
       pointer-events: none;
       transition: color var(--transition);
-      z-index: 1;
     }
 
     .form-group input {
@@ -312,36 +310,6 @@
       display: flex;
     }
 
-    .form-group .form-hint {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-top: 5px;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    /* Form-level generic error alert (populated by client-side fetch) */
-    .form-alert {
-      padding: 12px 16px;
-      border-radius: var(--radius-sm);
-      font-size: 13px;
-      font-weight: 500;
-      margin-bottom: 20px;
-      display: none;
-      align-items: center;
-      gap: 10px;
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      background: rgba(255, 107, 138, 0.15);
-      border: 1px solid rgba(255, 107, 138, 0.3);
-      color: #ffb3c3;
-    }
-
-    .form-alert.show {
-      display: flex;
-    }
-
     /* Password toggle */
     .password-toggle {
       position: absolute;
@@ -361,60 +329,33 @@
       color: var(--purple-300);
     }
 
-    /* Password strength meter */
-    .password-strength {
-      display: flex;
-      gap: 4px;
-      margin-top: 8px;
-    }
-
-    .password-strength .strength-bar {
-      height: 4px;
-      flex: 1;
-      border-radius: 2px;
-      background: rgba(255, 255, 255, 0.1);
-      transition: background var(--transition);
-    }
-
-    .strength-bar.weak    { background: var(--error-color); }
-    .strength-bar.medium  { background: var(--warning-color); }
-    .strength-bar.strong  { background: var(--success-color); }
-
-    .strength-text {
-      font-size: 11px;
-      margin-top: 4px;
-      font-weight: 500;
-    }
-
-    .strength-text.weak   { color: var(--error-color); }
-    .strength-text.medium { color: var(--warning-color); }
-    .strength-text.strong { color: var(--success-color); }
-
     /* ============================================================
-       TERMS CHECKBOX
+       OPTIONS ROW (remember + forgot)
        ============================================================ */
     .form-options {
-      margin-bottom: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      font-size: 13px;
     }
 
-    .terms-check {
+    .remember-me {
       display: flex;
-      align-items: flex-start;
-      gap: 10px;
+      align-items: center;
+      gap: 8px;
       cursor: pointer;
       color: var(--text-secondary);
       user-select: none;
-      font-size: 13px;
-      line-height: 1.5;
     }
 
-    .terms-check input[type="checkbox"] {
+    .remember-me input[type="checkbox"] {
       display: none;
     }
 
-    .terms-check .checkmark {
-      width: 20px;
-      height: 20px;
+    .remember-me .checkmark {
+      width: 18px;
+      height: 18px;
       border-radius: 4px;
       border: 2px solid var(--input-border);
       display: flex;
@@ -422,47 +363,34 @@
       justify-content: center;
       transition: all var(--transition);
       flex-shrink: 0;
-      margin-top: 1px;
     }
 
-    .terms-check .checkmark i {
+    .remember-me .checkmark i {
       font-size: 10px;
       color: #fff;
       opacity: 0;
       transition: opacity var(--transition);
     }
 
-    .terms-check input:checked + .checkmark {
+    .remember-me input:checked + .checkmark {
       background: var(--purple-500);
       border-color: var(--purple-500);
     }
 
-    .terms-check input:checked + .checkmark i {
+    .remember-me input:checked + .checkmark i {
       opacity: 1;
     }
 
-    .terms-check a {
+    .forgot-password {
       color: var(--purple-300);
       text-decoration: none;
       font-weight: 500;
+      transition: color var(--transition);
     }
 
-    .terms-check a:hover {
+    .forgot-password:hover {
+      color: var(--purple-200);
       text-decoration: underline;
-    }
-
-    .terms-error {
-      font-size: 12px;
-      color: var(--error-color);
-      margin-top: 6px;
-      margin-left: 30px;
-      display: none;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .terms-error.show {
-      display: flex;
     }
 
     /* ============================================================
@@ -554,24 +482,47 @@
     }
 
     /* ============================================================
-       LOGIN LINK
+       ALTERNATE LINK
        ============================================================ */
-    .login-link {
+    .alternate-link {
       text-align: center;
       font-size: 14px;
       color: var(--text-secondary);
     }
 
-    .login-link a {
+    .alternate-link a {
       color: var(--purple-300);
       text-decoration: none;
       font-weight: 600;
       transition: color var(--transition);
     }
 
-    .login-link a:hover {
+    .alternate-link a:hover {
       color: var(--purple-200);
       text-decoration: underline;
+    }
+
+    /* ============================================================
+       BACK LINK
+       ============================================================ */
+    .back-link {
+      text-align: center;
+      margin-top: 16px;
+      font-size: 13px;
+    }
+
+    .back-link a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .back-link a:hover {
+      color: var(--text-secondary);
     }
 
     /* ============================================================
@@ -608,38 +559,38 @@
       color: #c39bff;
     }
 
-    .alert-warning {
-      background: rgba(255, 179, 71, 0.12);
-      border: 1px solid rgba(255, 179, 71, 0.3);
-      color: #ffcc80;
+    /* Form-level generic error alert (populated by client-side fetch) */
+    .form-alert {
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 20px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      background: rgba(255, 107, 138, 0.15);
+      border: 1px solid rgba(255, 107, 138, 0.3);
+      color: #ffb3c3;
     }
 
-    /* ============================================================
-       INLINE FIELD ROW (for two columns on wider screens)
-       ============================================================ */
-    .form-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px;
-    }
-
-    @media (max-width: 420px) {
-      .form-row {
-        grid-template-columns: 1fr;
-      }
+    .form-alert.show {
+      display: flex;
     }
 
     /* ============================================================
        FOOTER
        ============================================================ */
-    .register-footer {
+    .login-footer {
       text-align: center;
       margin-top: 24px;
       font-size: 12px;
       color: var(--text-muted);
     }
 
-    .register-footer span {
+    .login-footer span {
       opacity: 0.6;
     }
 
@@ -662,14 +613,20 @@
         font-size: 20px;
       }
 
-      .register-brand .brand-icon {
+      .login-brand .brand-icon {
         width: 52px;
         height: 52px;
         font-size: 24px;
       }
 
-      .register-brand .brand-name {
+      .login-brand .brand-name {
         font-size: 20px;
+      }
+
+      .form-options {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
       }
     }
 
@@ -691,24 +648,24 @@
   <div class="glow-orb glow-orb--center"></div>
 
   <!-- ============================================================
-       REGISTER WRAPPER
+       LOGIN WRAPPER
        ============================================================ -->
-  <div class="register-wrapper">
+  <div class="login-wrapper">
     <!-- Brand -->
-    <div class="register-brand">
-      <div class="brand-icon">GH</div>
+    <div class="login-brand">
+      <div class="brand-icon"><i class="fas fa-utensils"></i></div>
       <div class="brand-name">GastroHub</div>
-      <div class="brand-sub">Creează-ți contul tău</div>
+      <div class="brand-sub">Panou Administrare Restaurant</div>
     </div>
 
     <!-- Glass Card -->
     <div class="glass-card">
       <div class="card-header">
-        <h2><i class="fas fa-user-plus" style="margin-right: 8px;"></i>Înregistrare</h2>
-        <p>Completează datele de mai jos pentru a-ți crea contul de client.</p>
+        <h2><i class="fas fa-sign-in-alt" style="margin-right: 8px;"></i>Autentificare</h2>
+        <p>Conectează-te la panoul de administrare al restaurantului.</p>
       </div>
 
-      <!-- Flash Messages -->
+      <!-- Flash Messages (ex: redirect după logout) -->
       <% if (locals.flash && flash.message) { %>
         <div class="alert alert-<%= flash.type || 'info' %>">
           <i class="fas fa-<%= flash.type === 'success' ? 'check-circle' : flash.type === 'error' ? 'exclamation-circle' : 'info-circle' %>"></i>
@@ -720,7 +677,7 @@
       <% if (locals.error && error) { %>
         <div class="alert alert-error">
           <i class="fas fa-exclamation-triangle"></i>
-          <%= typeof error === 'string' ? error : (error.message || 'Eroare la înregistrare') %>
+          <%= typeof error === 'string' ? error : (error.message || 'Eroare la autentificare') %>
         </div>
       <% } %>
 
@@ -730,53 +687,8 @@
         <span id="formAlertText"></span>
       </div>
 
-      <!-- Register Form -->
-      <form id="registerForm" action="/customer/register" method="POST" novalidate>
-        <!-- Nume și Prenume - pe același rând -->
-        <div class="form-row">
-          <!-- Prenume -->
-          <div class="form-group">
-            <label for="prenume">Prenume</label>
-            <div class="input-wrapper">
-              <i class="fas fa-user"></i>
-              <input
-                type="text"
-                id="prenume"
-                name="prenume"
-                placeholder="Prenumele tău"
-                value="<%= locals.prenume || '' %>"
-                autocomplete="given-name"
-                required
-              />
-            </div>
-            <div class="form-error" id="prenumeError">
-              <i class="fas fa-exclamation-circle"></i>
-              <span id="prenumeErrorText"></span>
-            </div>
-          </div>
-
-          <!-- Nume -->
-          <div class="form-group">
-            <label for="nume">Nume</label>
-            <div class="input-wrapper">
-              <i class="fas fa-user"></i>
-              <input
-                type="text"
-                id="nume"
-                name="nume"
-                placeholder="Numele tău"
-                value="<%= locals.nume || '' %>"
-                autocomplete="family-name"
-                required
-              />
-            </div>
-            <div class="form-error" id="numeError">
-              <i class="fas fa-exclamation-circle"></i>
-              <span id="numeErrorText"></span>
-            </div>
-          </div>
-        </div>
-
+      <!-- Login Form -->
+      <form id="loginForm" action="/restaurant/login" method="POST" novalidate>
         <!-- Email -->
         <div class="form-group">
           <label for="email">Adresă de email</label>
@@ -790,31 +702,12 @@
               value="<%= locals.email || '' %>"
               autocomplete="email"
               required
+              autofocus
             />
           </div>
           <div class="form-error" id="emailError">
             <i class="fas fa-exclamation-circle"></i>
             <span id="emailErrorText"></span>
-          </div>
-        </div>
-
-        <!-- Telefon -->
-        <div class="form-group">
-          <label for="telefon">Telefon <span style="font-weight:400;color:var(--text-muted);">(opțional)</span></label>
-          <div class="input-wrapper">
-            <i class="fas fa-phone"></i>
-            <input
-              type="tel"
-              id="telefon"
-              name="telefon"
-              placeholder="07xx xxx xxx"
-              value="<%= locals.telefon || '' %>"
-              autocomplete="tel"
-            />
-          </div>
-          <div class="form-error" id="telefonError">
-            <i class="fas fa-exclamation-circle"></i>
-            <span id="telefonErrorText"></span>
           </div>
         </div>
 
@@ -827,69 +720,34 @@
               type="password"
               id="password"
               name="password"
-              placeholder="Minim 6 caractere"
-              autocomplete="new-password"
+              placeholder="••••••••"
+              autocomplete="current-password"
               required
-              minlength="6"
             />
             <button type="button" class="password-toggle" id="passwordToggle" tabindex="-1" aria-label="Arată/ascunde parola">
               <i class="fas fa-eye"></i>
             </button>
           </div>
-          <!-- Password strength indicator -->
-          <div class="password-strength" id="passwordStrength">
-            <div class="strength-bar" id="bar1"></div>
-            <div class="strength-bar" id="bar2"></div>
-            <div class="strength-bar" id="bar3"></div>
-            <div class="strength-bar" id="bar4"></div>
-          </div>
-          <div class="strength-text" id="strengthText"></div>
           <div class="form-error" id="passwordError">
             <i class="fas fa-exclamation-circle"></i>
             <span id="passwordErrorText"></span>
           </div>
         </div>
 
-        <!-- Confirmă Parola -->
-        <div class="form-group">
-          <label for="confirmPassword">Confirmă parola</label>
-          <div class="input-wrapper">
-            <i class="fas fa-lock"></i>
-            <input
-              type="password"
-              id="confirmPassword"
-              name="confirmPassword"
-              placeholder="Reintrodu parola"
-              autocomplete="new-password"
-              required
-            />
-            <button type="button" class="password-toggle" id="confirmPasswordToggle" tabindex="-1" aria-label="Arată/ascunde parola">
-              <i class="fas fa-eye"></i>
-            </button>
-          </div>
-          <div class="form-error" id="confirmPasswordError">
-            <i class="fas fa-exclamation-circle"></i>
-            <span id="confirmPasswordErrorText"></span>
-          </div>
-        </div>
-
-        <!-- Termeni și condiții -->
+        <!-- Remember me + Forgot password -->
         <div class="form-options">
-          <label class="terms-check" id="termsLabel">
-            <input type="checkbox" name="terms" id="terms" <%= locals.terms ? 'checked' : '' %> />
+          <label class="remember-me">
+            <input type="checkbox" name="remember" id="remember" <%= locals.remember ? 'checked' : '' %> />
             <span class="checkmark"><i class="fas fa-check"></i></span>
-            Sunt de acord cu <a href="/terms" target="_blank">Termenii și condițiile</a> și <a href="/privacy" target="_blank">Politica de confidențialitate</a>.
+            Ține-mă minte
           </label>
-          <div class="terms-error" id="termsError">
-            <i class="fas fa-exclamation-circle"></i>
-            <span id="termsErrorText">Trebuie să accepți termenii și condițiile.</span>
-          </div>
+          <a href="/restaurant/login" class="forgot-password">Ai uitat parola?</a>
         </div>
 
         <!-- Submit -->
         <button type="submit" class="btn-submit" id="submitBtn">
           <span class="spinner-btn"></span>
-          <span class="btn-text"><i class="fas fa-user-plus"></i> Creează cont</span>
+          <span class="btn-text"><i class="fas fa-sign-in-alt"></i> Conectează-te</span>
         </button>
       </form>
 
@@ -898,14 +756,19 @@
         <span>sau</span>
       </div>
 
-      <!-- Login link -->
-      <div class="login-link">
-        Ai deja cont? <a href="/customer/login">Conectează-te aici</a>
+      <!-- Alternate links -->
+      <div class="alternate-link">
+        Ești client? <a href="/customer/login">Accesează portalul clienți</a>
+      </div>
+
+      <!-- Back to main site -->
+      <div class="back-link">
+        <a href="/"><i class="fas fa-arrow-left"></i> Înapoi la pagina principală</a>
       </div>
     </div>
 
     <!-- Footer -->
-    <div class="register-footer">
+    <div class="login-footer">
       <span>&copy; <%= new Date().getFullYear() %> GastroHub. Toate drepturile rezervate.</span>
     </div>
   </div>
@@ -931,10 +794,10 @@
           var particle = document.createElement('div');
           particle.className = 'bg-particle';
 
-          var size = Math.random() * 6 + 3;
+          var size = Math.random() * 6 + 3; // 3px - 9px
           var left = Math.random() * 100;
           var delay = Math.random() * 14;
-          var duration = Math.random() * 8 + 10;
+          var duration = Math.random() * 8 + 10; // 10s - 18s
           var opacity = Math.random() * 0.04 + 0.02;
 
           particle.style.cssText =
@@ -955,59 +818,35 @@
       // =================================================================
       // DOM references
       // =================================================================
-      var form = document.getElementById('registerForm');
-      var prenumeInput = document.getElementById('prenume');
-      var numeInput = document.getElementById('nume');
+      var form = document.getElementById('loginForm');
       var emailInput = document.getElementById('email');
-      var telefonInput = document.getElementById('telefon');
       var passwordInput = document.getElementById('password');
-      var confirmPasswordInput = document.getElementById('confirmPassword');
-      var termsCheckbox = document.getElementById('terms');
+      var rememberCheckbox = document.getElementById('remember');
       var submitBtn = document.getElementById('submitBtn');
+      var passwordToggle = document.getElementById('passwordToggle');
 
-      var prenumeError = document.getElementById('prenumeError');
-      var prenumeErrorText = document.getElementById('prenumeErrorText');
-      var numeError = document.getElementById('numeError');
-      var numeErrorText = document.getElementById('numeErrorText');
       var emailError = document.getElementById('emailError');
       var emailErrorText = document.getElementById('emailErrorText');
-      var telefonError = document.getElementById('telefonError');
-      var telefonErrorText = document.getElementById('telefonErrorText');
       var passwordError = document.getElementById('passwordError');
       var passwordErrorText = document.getElementById('passwordErrorText');
-      var confirmPasswordError = document.getElementById('confirmPasswordError');
-      var confirmPasswordErrorText = document.getElementById('confirmPasswordErrorText');
-      var termsError = document.getElementById('termsError');
+
       var formAlert = document.getElementById('formAlert');
       var formAlertText = document.getElementById('formAlertText');
-
-      var passwordToggle = document.getElementById('passwordToggle');
-      var confirmPasswordToggle = document.getElementById('confirmPasswordToggle');
-
-      var bar1 = document.getElementById('bar1');
-      var bar2 = document.getElementById('bar2');
-      var bar3 = document.getElementById('bar3');
-      var bar4 = document.getElementById('bar4');
-      var strengthText = document.getElementById('strengthText');
 
       var isSubmitting = false;
 
       // =================================================================
       // Password toggle visibility
       // =================================================================
-      function setupPasswordToggle(toggleBtn, inputEl) {
-        if (!toggleBtn || !inputEl) return;
-        toggleBtn.addEventListener('click', function() {
-          var isPassword = inputEl.type === 'password';
-          inputEl.type = isPassword ? 'text' : 'password';
-          toggleBtn.innerHTML = isPassword
+      if (passwordToggle && passwordInput) {
+        passwordToggle.addEventListener('click', function() {
+          var isPassword = passwordInput.type === 'password';
+          passwordInput.type = isPassword ? 'text' : 'password';
+          passwordToggle.innerHTML = isPassword
             ? '<i class="fas fa-eye-slash"></i>'
             : '<i class="fas fa-eye"></i>';
         });
       }
-
-      setupPasswordToggle(passwordToggle, passwordInput);
-      setupPasswordToggle(confirmPasswordToggle, confirmPasswordInput);
 
       // =================================================================
       // Clear errors on input
@@ -1020,185 +859,63 @@
         if (formAlert) formAlert.classList.remove('show');
       }
 
-      if (prenumeInput) {
-        prenumeInput.addEventListener('input', function() { hideError(prenumeError); hideFormAlert(); });
-      }
-      if (numeInput) {
-        numeInput.addEventListener('input', function() { hideError(numeError); hideFormAlert(); });
-      }
       if (emailInput) {
-        emailInput.addEventListener('input', function() { hideError(emailError); hideFormAlert(); });
+        emailInput.addEventListener('input', function() {
+          hideError(emailError);
+          hideFormAlert();
+        });
       }
-      if (telefonInput) {
-        telefonInput.addEventListener('input', function() { hideError(telefonError); hideFormAlert(); });
-      }
+
       if (passwordInput) {
         passwordInput.addEventListener('input', function() {
           hideError(passwordError);
           hideFormAlert();
-          updatePasswordStrength();
         });
       }
-      if (confirmPasswordInput) {
-        confirmPasswordInput.addEventListener('input', function() { hideError(confirmPasswordError); hideFormAlert(); });
-      }
-      if (termsCheckbox) {
-        termsCheckbox.addEventListener('change', function() { hideError(termsError); hideFormAlert(); });
-      }
 
-      // =================================================================
-      // Password strength meter
-      // =================================================================
-      function updatePasswordStrength() {
-        var password = passwordInput ? passwordInput.value : '';
-        var bars = [bar1, bar2, bar3, bar4];
-
-        // Reset all bars
-        bars.forEach(function(bar) {
-          if (bar) {
-            bar.className = 'strength-bar';
-          }
+      if (rememberCheckbox) {
+        rememberCheckbox.addEventListener('change', function() {
+          hideFormAlert();
         });
-        if (strengthText) {
-          strengthText.textContent = '';
-          strengthText.className = 'strength-text';
-        }
-
-        if (!password) return;
-
-        var score = 0;
-
-        // Length checks
-        if (password.length >= 6) score += 1;
-        if (password.length >= 12) score += 1;
-
-        // Complexity checks
-        if (/[a-z]/.test(password)) score += 1;
-        if (/[A-Z]/.test(password)) score += 1;
-        if (/[0-9]/.test(password)) score += 1;
-        if (/[^a-zA-Z0-9]/.test(password)) score += 1;
-
-        // Determine level
-        var level, label, cssClass;
-        if (score <= 2) {
-          level = 1;
-          label = 'Slabă';
-          cssClass = 'weak';
-        } else if (score <= 4) {
-          level = 2;
-          label = 'Medie';
-          cssClass = 'medium';
-        } else {
-          level = 4;
-          label = 'Puternică';
-          cssClass = 'strong';
-        }
-
-        // Color bars
-        for (var i = 0; i < bars.length; i++) {
-          if (bars[i] && i < level) {
-            bars[i].classList.add(cssClass);
-          }
-        }
-
-        if (strengthText) {
-          strengthText.textContent = 'Putere parolă: ' + label;
-          strengthText.classList.add(cssClass);
-        }
       }
 
       // =================================================================
       // Client-side validation
       // =================================================================
       function validateForm() {
+        var errors = [];
         var valid = true;
 
-        // Prenume
-        var prenume = prenumeInput ? prenumeInput.value.trim() : '';
-        if (!prenume) {
-          if (prenumeErrorText) prenumeErrorText.textContent = 'Prenumele este obligatoriu.';
-          if (prenumeError) prenumeError.classList.add('show');
-          valid = false;
-        } else if (prenume.length < 2) {
-          if (prenumeErrorText) prenumeErrorText.textContent = 'Prenumele trebuie să aibă cel puțin 2 caractere.';
-          if (prenumeError) prenumeError.classList.add('show');
-          valid = false;
-        } else {
-          hideError(prenumeError);
-        }
-
-        // Nume
-        var nume = numeInput ? numeInput.value.trim() : '';
-        if (!nume) {
-          if (numeErrorText) numeErrorText.textContent = 'Numele este obligatoriu.';
-          if (numeError) numeError.classList.add('show');
-          valid = false;
-        } else if (nume.length < 2) {
-          if (numeErrorText) numeErrorText.textContent = 'Numele trebuie să aibă cel puțin 2 caractere.';
-          if (numeError) numeError.classList.add('show');
-          valid = false;
-        } else {
-          hideError(numeError);
-        }
-
-        // Email
+        // Email validation
         var email = emailInput ? emailInput.value.trim() : '';
         if (!email) {
           if (emailErrorText) emailErrorText.textContent = 'Adresa de email este obligatorie.';
           if (emailError) emailError.classList.add('show');
+          errors.push('email');
           valid = false;
         } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
           if (emailErrorText) emailErrorText.textContent = 'Adresa de email nu este validă.';
           if (emailError) emailError.classList.add('show');
+          errors.push('email');
           valid = false;
         } else {
           hideError(emailError);
         }
 
-        // Telefon (opțional, dar validat dacă este introdus)
-        var telefon = telefonInput ? telefonInput.value.trim() : '';
-        if (telefon && !/^(\+4|004)?0?7\d{8}$/.test(telefon.replace(/\s/g, ''))) {
-          if (telefonErrorText) telefonErrorText.textContent = 'Numărul de telefon nu este valid (ex: 07xx xxx xxx).';
-          if (telefonError) telefonError.classList.add('show');
-          valid = false;
-        } else {
-          hideError(telefonError);
-        }
-
-        // Password
+        // Password validation
         var password = passwordInput ? passwordInput.value : '';
         if (!password) {
           if (passwordErrorText) passwordErrorText.textContent = 'Parola este obligatorie.';
           if (passwordError) passwordError.classList.add('show');
+          errors.push('password');
           valid = false;
         } else if (password.length < 6) {
-          if (passwordErrorText) passwordErrorText.textContent = 'Parola trebuie să aibă cel puțin 8 caractere.';
+          if (passwordErrorText) passwordErrorText.textContent = 'Parola trebuie să aibă cel puțin 6 caractere.';
           if (passwordError) passwordError.classList.add('show');
+          errors.push('password');
           valid = false;
         } else {
           hideError(passwordError);
-        }
-
-        // Confirm password
-        var confirmPassword = confirmPasswordInput ? confirmPasswordInput.value : '';
-        if (!confirmPassword) {
-          if (confirmPasswordErrorText) confirmPasswordErrorText.textContent = 'Confirmarea parolei este obligatorie.';
-          if (confirmPasswordError) confirmPasswordError.classList.add('show');
-          valid = false;
-        } else if (password && confirmPassword !== password) {
-          if (confirmPasswordErrorText) confirmPasswordErrorText.textContent = 'Parolele nu coincid.';
-          if (confirmPasswordError) confirmPasswordError.classList.add('show');
-          valid = false;
-        } else {
-          hideError(confirmPasswordError);
-        }
-
-        // Terms
-        if (termsCheckbox && !termsCheckbox.checked) {
-          if (termsError) termsError.classList.add('show');
-          valid = false;
-        } else {
-          hideError(termsError);
         }
 
         return valid;
@@ -1220,7 +937,7 @@
       }
 
       // =================================================================
-      // Submit handler — uses fetch to call API, then redirects on success
+      // Submit handler — uses fetch to call server-side POST handler
       // =================================================================
       if (form) {
         form.addEventListener('submit', function(e) {
@@ -1230,7 +947,7 @@
           // Client-side validation
           if (!validateForm()) {
             // Scroll to first error
-            var firstError = form.querySelector('.form-error.show, .terms-error.show');
+            var firstError = form.querySelector('.form-error.show');
             if (firstError) {
               firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
@@ -1248,54 +965,96 @@
           // Build request body
           var body = {
             email: emailInput ? emailInput.value.trim() : '',
-            password: passwordInput ? passwordInput.value : '',
-            role: 'client'
+            password: passwordInput ? passwordInput.value : ''
           };
 
-          // Optional fields
-          var prenume = prenumeInput ? prenumeInput.value.trim() : '';
-          var nume = numeInput ? numeInput.value.trim() : '';
-          if (prenume || nume) {
-            body.name = (prenume + ' ' + nume).trim();
+          // Include remember-me flag if checked
+          if (rememberCheckbox && rememberCheckbox.checked) {
+            body.remember = true;
           }
 
-          var telefon = telefonInput ? telefonInput.value.trim() : '';
-          if (telefon) {
-            body.phone = telefon;
-          }
-
-          // Send register request to API
+          // Send login request to the server-side POST handler
           fetch(form.action, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
-            credentials: 'same-origin'  // Send cookies along
+            credentials: 'same-origin'
           })
             .then(function(response) {
-              return response.json().then(function(data) {
-                return { status: response.status, ok: response.ok, data: data };
+              var contentType = response.headers.get('content-type') || '';
+
+              // If redirected, follow the redirect
+              if (response.redirected || (response.status >= 300 && response.status < 400)) {
+                window.location.href = response.url;
+                return null;
+              }
+
+              if (contentType.indexOf('application/json') !== -1) {
+                return response.json().then(function(data) {
+                  return { status: response.status, ok: response.ok, data: data, isJson: true };
+                });
+              }
+
+              // HTML response (re-rendered form) — reload the page
+              return response.text().then(function(html) {
+                document.open();
+                document.write(html);
+                document.close();
+                return null;
               });
             })
             .then(function(result) {
-              if (result.ok && result.data.success) {
-                // Registration successful — redirect to dashboard
-                window.location.href = '/customer/dashboard';
+              if (!result) return; // Already handled (redirected or re-rendered)
+
+              if (result.isJson && result.ok && result.data && result.data.success) {
+                // Login successful — redirect to dashboard
+                window.location.href = '/restaurant/dashboard';
                 return;
               }
 
-              // Server returned an error
-              var errorMsg = result.data.message || result.data.error || 'Eroare la înregistrare.';
-              if (result.data.errors && Array.isArray(result.data.errors) && result.data.errors.length > 0) {
-                errorMsg = result.data.errors.map(function(e) { return e.msg || e; }).join('; ');
-              }
+              // Error handling for JSON response
+              if (result.isJson && result.data) {
+                var errorMsg = result.data.message || result.data.error || 'Eroare la autentificare.';
 
-              // Check for duplicate email
-              if (result.status === 409) {
-                if (emailErrorText) emailErrorText.textContent = errorMsg;
-                if (emailError) emailError.classList.add('show');
-                emailInput.focus();
-              } else {
-                if (formAlert && formAlertText) {
+                if (result.data.error && result.data.error.message) {
+                  errorMsg = result.data.error.message;
+                }
+
+                if (result.data.errors && Array.isArray(result.data.errors) && result.data.errors.length > 0) {
+                  errorMsg = result.data.errors.map(function(e) { return e.msg || e; }).join('; ');
+                }
+
+                // Map specific field errors
+                var hasFieldError = false;
+                if (result.data.fieldErrors) {
+                  if (result.data.fieldErrors.email && emailError && emailErrorText) {
+                    emailErrorText.textContent = result.data.fieldErrors.email;
+                    emailError.classList.add('show');
+                    hasFieldError = true;
+                  }
+                  if (result.data.fieldErrors.password && passwordError && passwordErrorText) {
+                    passwordErrorText.textContent = result.data.fieldErrors.password;
+                    passwordError.classList.add('show');
+                    hasFieldError = true;
+                  }
+                }
+
+                // Special handling for common HTTP status codes
+                if (result.status === 401 && !hasFieldError) {
+                  if (passwordError && passwordErrorText) {
+                    passwordErrorText.textContent = errorMsg || 'Email sau parolă incorecte.';
+                    passwordError.classList.add('show');
+                    hasFieldError = true;
+                  }
+                } else if (result.status === 403 && !hasFieldError) {
+                  if (formAlert && formAlertText) {
+                    formAlertText.textContent = errorMsg || 'Nu ai permisiunile necesare pentru a accesa panoul de restaurant.';
+                    formAlert.classList.add('show');
+                    hasFieldError = true;
+                  }
+                }
+
+                if (!hasFieldError && formAlert && formAlertText) {
                   formAlertText.textContent = errorMsg;
                   formAlert.classList.add('show');
                 }
@@ -1335,18 +1094,11 @@
       document.addEventListener('DOMContentLoaded', function() {
         createParticles();
 
-        // Sync password strength on load if value pre-filled
-        if (passwordInput && passwordInput.value) {
-          updatePasswordStrength();
-        }
-
-        // Focus first empty field
-        if (prenumeInput && !prenumeInput.value) {
-          prenumeInput.focus();
-        } else if (numeInput && !numeInput.value) {
-          numeInput.focus();
-        } else if (emailInput && !emailInput.value) {
+        // Focus first empty field or email
+        if (emailInput && !emailInput.value) {
           emailInput.focus();
+        } else if (passwordInput && !passwordInput.value) {
+          passwordInput.focus();
         }
       });
     })();

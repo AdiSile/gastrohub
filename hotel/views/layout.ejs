@@ -1,6 +1,7 @@
 <%
   // Hotel Layout – Extinde layout-ul principal restaurant/views/layout
   // Se ocupă de adăugarea secțiunii Hotel în sidebar și variabile hotel
+  // Gestionare stare autentificare: afișează link login sau link-uri complete hotel
 %>
 
 <!-- Adaugă script pentru activarea tab-ului hotel în sidebar -->
@@ -32,6 +33,23 @@
   }
 
   .sidebar-nav a.hotel-link i {
+    color: #1abc9c;
+  }
+
+  /* Hotel login link – evidențiat pentru utilizatori neautentificați */
+  .sidebar-nav a.hotel-login-link {
+    border-left-color: transparent;
+    color: #1abc9c !important;
+    font-weight: 600;
+  }
+
+  .sidebar-nav a.hotel-login-link:hover,
+  .sidebar-nav a.hotel-login-link.active {
+    border-left-color: #1abc9c;
+    background: rgba(26, 188, 156, 0.12);
+  }
+
+  .sidebar-nav a.hotel-login-link i {
     color: #1abc9c;
   }
 
@@ -185,6 +203,56 @@
     border: 1px solid var(--color-border);
   }
 
+  /* ============================================================
+     UNAUTHENTICATED BANNER (header area)
+     ============================================================ */
+  .hotel-unauth-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 18px;
+    margin-bottom: 16px;
+    border-radius: var(--radius-sm);
+    background: rgba(26, 188, 156, 0.08);
+    border: 1px solid rgba(26, 188, 156, 0.2);
+    font-size: 13px;
+    color: var(--color-text);
+    backdrop-filter: blur(6px);
+  }
+
+  .hotel-unauth-banner i {
+    color: #1abc9c;
+    font-size: 18px;
+  }
+
+  .hotel-unauth-banner .banner-text {
+    flex: 1;
+    font-weight: 500;
+  }
+
+  .hotel-unauth-banner .banner-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    background: linear-gradient(135deg, #1abc9c, #16a085);
+    color: #fff;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all var(--transition);
+    white-space: nowrap;
+    border: none;
+    cursor: pointer;
+  }
+
+  .hotel-unauth-banner .banner-link:hover {
+    background: linear-gradient(135deg, #48d1b5, #1abc9c);
+    color: #fff;
+    box-shadow: 0 4px 16px rgba(26, 188, 156, 0.3);
+  }
+
   /* Responsive adjustments for hotel pages */
   @media (max-width: 768px) {
     .hotel-actions-bar {
@@ -196,52 +264,143 @@
       margin: 0 8px 8px;
       padding: 4px 8px;
     }
+
+    .hotel-unauth-banner {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      text-align: left;
+    }
+
+    .hotel-unauth-banner .banner-link {
+      width: 100%;
+      justify-content: center;
+    }
   }
 </style>
 
-<!-- Injectează link-urile Hotel în sidebar după secțiunea "Administrare" -->
+<!-- Injectează link-urile Hotel în sidebar în funcție de starea de autentificare -->
 <script>
   (function() {
-    // Această funcție adaugă link-urile hotel în sidebar după încărcarea paginii
-    document.addEventListener('DOMContentLoaded', function() {
-      // Găsim ultimul link din secțiunea "Administrare" din sidebar
-      var adminSection = document.querySelector('.sidebar-nav .nav-section:last-child');
+    // ----------------------------------------------------------------
+    // Determină starea de autentificare din variabilele EJS locale
+    // ----------------------------------------------------------------
+    var isAuthenticated = <%= locals.isAuthenticated ? 'true' : 'false' %>;
+    var currentPage = '<%= locals.currentPage || "" %>';
+
+    /**
+     * Injectează secțiunea Hotel în sidebar.
+     * - Dacă utilizatorul este autentificat: afișează link-urile complete
+     *   (Dashboard, Camere, Rezervări, Oaspeți, Setări)
+     * - Dacă utilizatorul NU este autentificat: afișează un singur link
+     *   de autentificare către /hotel/login
+     */
+    function injectHotelSidebar() {
+      // Găsim ultima nav-section din sidebar (ar trebui să fie "Administrare")
+      var allNavSections = document.querySelectorAll('.sidebar-nav .nav-section');
+      var adminSection = allNavSections.length > 0 ? allNavSections[allNavSections.length - 1] : null;
       if (!adminSection) return;
 
-      // Găsim grupul de link-uri existente
       var navContainer = adminSection.parentNode;
+      if (!navContainer) return;
 
       // Verificăm dacă secțiunea hotel există deja
       var existingHotelSection = navContainer.querySelector('.nav-section.hotel');
       if (existingHotelSection) return;
 
-      // Adăugăm separator și secțiunea Hotel
+      // --------------------------------------------------------------
+      // Secțiunea Hotel – titlul secțiunii
+      // --------------------------------------------------------------
       var hotelSection = document.createElement('div');
       hotelSection.className = 'nav-section hotel';
       hotelSection.textContent = 'Hotel';
-
-      var hotelLinks = [
-        { href: '/hotel/dashboard', icon: 'fa-hotel', label: 'Dashboard', page: 'hotel' },
-        { href: '/hotel/rooms', icon: 'fa-door-open', label: 'Camere', page: 'hotel-rooms' },
-        { href: '/hotel/reservations', icon: 'fa-calendar-check', label: 'Rezervări', page: 'hotel-reservations' },
-        { href: '/hotel/guests', icon: 'fa-users', label: 'Oaspeți', page: 'hotel-guests' },
-        { href: '/hotel/settings', icon: 'fa-cog', label: 'Setări', page: 'hotel-settings' },
-      ];
-
       navContainer.appendChild(hotelSection);
 
-      var currentPage = '<%= locals.currentPage || "" %>';
+      if (isAuthenticated) {
+        // ============================================================
+        // UTILIZATOR AUTENTIFICAT – link-uri complete
+        // ============================================================
+        var hotelLinks = [
+          { href: '/hotel/dashboard', icon: 'fa-hotel', label: 'Dashboard', page: 'hotel' },
+          { href: '/hotel/rooms', icon: 'fa-door-open', label: 'Camere', page: 'hotel-rooms' },
+          { href: '/hotel/reservations', icon: 'fa-calendar-check', label: 'Rezervări', page: 'hotel-reservations' },
+          { href: '/hotel/guests', icon: 'fa-users', label: 'Oaspeți', page: 'hotel-guests' },
+          { href: '/hotel/settings', icon: 'fa-cog', label: 'Setări', page: 'hotel-settings' },
+        ];
 
-      hotelLinks.forEach(function(link) {
-        var a = document.createElement('a');
-        a.href = link.href;
-        a.className = 'hotel-link';
-        if (currentPage === link.page) {
-          a.classList.add('active');
+        hotelLinks.forEach(function(link) {
+          var a = document.createElement('a');
+          a.href = link.href;
+          a.className = 'hotel-link';
+          if (currentPage === link.page) {
+            a.classList.add('active');
+          }
+          a.innerHTML = '<i class="fas ' + link.icon + '"></i> ' + link.label;
+          navContainer.appendChild(a);
+        });
+      } else {
+        // ============================================================
+        // UTILIZATOR NEAUTENTIFICAT – link de autentificare
+        // ============================================================
+        var loginLink = document.createElement('a');
+        loginLink.href = '/hotel/login';
+        loginLink.className = 'hotel-login-link';
+        if (currentPage === 'hotel-login') {
+          loginLink.classList.add('active');
         }
-        a.innerHTML = '<i class="fas ' + link.icon + '"></i> ' + link.label;
-        navContainer.appendChild(a);
-      });
+        loginLink.innerHTML = '<i class="fas fa-sign-in-alt"></i> Autentificare Hotel';
+        navContainer.appendChild(loginLink);
+      }
+    }
+
+    /**
+     * Injectează un banner de autentificare în zona de conținut
+     * atunci când utilizatorul nu este autentificat și se află pe
+     * o pagină hotel (dar nu pe pagina de login).
+     */
+    function injectUnauthBanner() {
+      if (isAuthenticated) return;
+
+      // Nu afișa banner-ul pe pagina de login
+      if (currentPage === 'hotel-login') return;
+
+      // Găsim containerul de conținut principal
+      var contentEl = document.querySelector('.content');
+      if (!contentEl) return;
+
+      // Verificăm dacă banner-ul există deja
+      if (contentEl.querySelector('.hotel-unauth-banner')) return;
+
+      // Verificăm dacă suntem pe o pagină relevantă pentru hotel
+      var isHotelPage = currentPage && (
+        currentPage.startsWith('hotel') ||
+        currentPage === 'dashboard' ||
+        currentPage === ''
+      );
+
+      if (!isHotelPage) return;
+
+      var banner = document.createElement('div');
+      banner.className = 'hotel-unauth-banner';
+      banner.innerHTML =
+        '<i class="fas fa-hotel"></i>' +
+        '<span class="banner-text">' +
+          '<strong>Panou Administrare Hotel</strong> – Autentifică-te pentru a gestiona camere, rezervări și oaspeți.' +
+        '</span>' +
+        '<a href="/hotel/login" class="banner-link">' +
+          '<i class="fas fa-sign-in-alt"></i> Conectează-te' +
+        '</a>';
+
+      // Inserează banner-ul la începutul conținutului
+      contentEl.insertBefore(banner, contentEl.firstChild);
+    }
+
+    // ----------------------------------------------------------------
+    // Execuție la DOM ready
+    // ----------------------------------------------------------------
+    document.addEventListener('DOMContentLoaded', function() {
+      injectHotelSidebar();
+      injectUnauthBanner();
     });
   })();
 </script>

@@ -23,8 +23,9 @@ const path = require('path');
 const http = require('http');
 const https = require('https');
 
-const { authenticate, optionalAuth } = require('../middleware/auth');
+const { authenticate, optionalAuth, generateToken, setTokenCookie } = require('../middleware/auth');
 const { authorizeMinLevel } = require('../middleware/roles');
+const { findUserByEmail, comparePassword, createUser } = require('../models/userModel');
 
 // ---------------------------------------------------------------------------
 // Constante
@@ -235,11 +236,245 @@ router.get('/', optionalAuth, (req, res) => {
 router.get('/login', optionalAuth, renderView('login', { title: 'Autentificare', currentPage: 'customer-login' }));
 
 /**
+ * @route   POST /customer/login
+ * @desc    Procesează autentificarea server-side (bcrypt + JWT + cookie)
+ * @access  Public
+ *
+ * Body (application/x-www-form-urlencoded sau JSON):
+ *   - email      {string}  obligatoriu
+ *   - password   {string}  obligatoriu
+ *
+ * Răspuns:
+ *   - Succes:  redirect 302 → /customer/dashboard (cu cookie JWT setat)
+ *   - Eroare:  re-randare pagină login cu mesaj de eroare
+ */
+router.post('/login', optionalAuth, async (req, res) => {
+  // -------------------------------------------------------------------
+  // 1. Extragere email și parolă din body
+  //    Suportă atât form-urlencoded (req.body direct) cât și JSON
+  // -------------------------------------------------------------------
+  const email = (req.body && req.body.email) ? req.body.email.trim() : '';
+  const password = (req.body && req.body.password) ? req.body.password : '';
+
+  // -------------------------------------------------------------------
+  // 2. Validare prezență câmpuri
+  // -------------------------------------------------------------------
+  const errors = [];
+
+  if (!email) {
+    errors.push('Adresa de email este obligatorie.');
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.push('Adresa de email nu este validă.');
+  }
+
+  if (!password) {
+    errors.push('Parola este obligatorie.');
+  } else if (password.length < 6) {
+    errors.push('Parola trebuie să aibă minimum 6 caractere.');
+  }
+
+  if (errors.length > 0) {
+    return res.render('login', {
+      title: 'Autentificare',
+      currentPage: 'customer-login',
+      user: req.user || null,
+      isAuthenticated: !!req.user,
+      customer: req.user || null,
+      email,
+      error: errors.join(' '),
+    });
+  }
+
+  // -------------------------------------------------------------------
+  // 3. Delegare la logica de autentificare (bcrypt + JWT + cookie)
+  //    Aceeași logică folosită de POST /api/auth/login
+  // -------------------------------------------------------------------
+  try {
+    // 3a. Căutare utilizator după email
+    const user = await findUserByEmail(email);
+    if (!user) {
+      return res.render('login', {
+        title: 'Autentificare',
+        currentPage: 'customer-login',
+        user: null,
+        isAuthenticated: false,
+        customer: null,
+        email,
+        error: 'Email sau parolă incorectă.',
+      });
+    }
+
+    // 3b. Verificare parolă (bcrypt)
+    const isPasswordValid = await comparePassword(password, user.password);
+    if (!isPasswordValid) {
+      return res.render('login', {
+        title: 'Autentificare',
+        currentPage: 'customer-login',
+        user: null,
+        isAuthenticated: false,
+        customer: null,
+        email,
+        error: 'Email sau parolă incorectă.',
+      });
+    }
+
+    // 3c. Pregătire date utilizator fără parolă
+    const safeUser = { ...user };
+    delete safeUser.password;
+
+    // 3d. Generare token JWT
+    const token = generateToken(safeUser);
+
+    // 3e. Setare cookie JWT (httpOnly, secure, sameSite strict)
+    setTokenCookie(res, token);
+
+    // 3f. Redirect către dashboard
+    return res.redirect('/customer/dashboard');
+  } catch (err) {
+    console.error('[customer/routes] Eroare la autentificare (POST /customer/login):', err.message);
+
+    return res.render('login', {
+      title: 'Autentificare',
+      currentPage: 'customer-login',
+      user: null,
+      isAuthenticated: false,
+      customer: null,
+      email,
+      error: 'Eroare internă la autentificare. Vă rugăm încercați din nou.',
+    });
+  }
+});
+
+/**
  * @route   GET /customer/register
  * @desc    Pagina de înregistrare
  * @access  Public
  */
 router.get('/register', optionalAuth, renderView('register', { title: 'Înregistrare', currentPage: 'customer-register' }));
+
+/**
+ * @route   POST /customer/register
+ * @desc    Procesează înregistrarea server-side (validare, creare user, token, redirect dashboard)
+ * @access  Public
+ *
+ * Body (application/x-www-form-urlencoded sau JSON):
+ *   - email             {string}  obligatoriu
+ *   - password          {string}  obligatoriu (minim 6 caractere)
+ *   - confirmPassword   {string}  obligatoriu (trebuie să coincidă cu password)
+ *   - name              {string}  opțional
+ *   - phone             {string}  opțional
+ *
+ * Răspuns:
+ *   - Succes:  redirect 302 → /customer/dashboard (cu cookie JWT setat)
+ *   - Eroare:  re-randare pagină register cu mesaj de eroare
+ */
+router.post('/register', optionalAuth, async (req, res) => {
+  // -------------------------------------------------------------------
+  // 1. Extragere câmpuri din body
+  //    Suportă atât form-urlencoded (req.body direct) cât și JSON
+  // -------------------------------------------------------------------
+  const email = (req.body && req.body.email) ? req.body.email.trim() : '';
+  const password = (req.body && req.body.password) ? req.body.password : '';
+  const confirmPassword = (req.body && req.body.confirmPassword) ? req.body.confirmPassword : '';
+  const name = (req.body && req.body.name) ? req.body.name.trim() : '';
+  const phone = (req.body && req.body.phone) ? req.body.phone.trim() : '';
+
+  // -------------------------------------------------------------------
+  // 2. Validare câmpuri
+  // -------------------------------------------------------------------
+  const errors = [];
+
+  // Validare email
+  if (!email) {
+    errors.push('Adresa de email este obligatorie.');
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.push('Adresa de email nu este validă.');
+  }
+
+  // Validare parolă
+  if (!password) {
+    errors.push('Parola este obligatorie.');
+  } else if (password.length < 6) {
+    errors.push('Parola trebuie să aibă minimum 6 caractere.');
+  } else if (password.length > 128) {
+    errors.push('Parola trebuie să aibă maximum 128 de caractere.');
+  }
+
+  // Validare confirmare parolă
+  if (!confirmPassword) {
+    errors.push('Confirmarea parolei este obligatorie.');
+  } else if (password && confirmPassword && password !== confirmPassword) {
+    errors.push('Parolele nu coincid.');
+  }
+
+  if (errors.length > 0) {
+    return res.render('register', {
+      title: 'Înregistrare',
+      currentPage: 'customer-register',
+      user: req.user || null,
+      isAuthenticated: !!req.user,
+      customer: req.user || null,
+      email,
+      name,
+      phone,
+      error: errors.join(' '),
+    });
+  }
+
+  // -------------------------------------------------------------------
+  // 3. Creare utilizator prin userModel.createUser
+  // -------------------------------------------------------------------
+  try {
+    const userData = {
+      email: email,
+      password: password,
+      role: 'client',
+    };
+
+    // Adăugăm câmpuri opționale doar dacă sunt completate
+    if (name) {
+      userData.name = name;
+    }
+    if (phone) {
+      userData.phone = phone;
+    }
+
+    const newUser = await createUser(userData);
+
+    // 4. Generare token JWT
+    const safeUser = { ...newUser };
+    delete safeUser.password;
+    const token = generateToken(safeUser);
+
+    // 5. Setare cookie JWT (httpOnly, secure, sameSite strict)
+    setTokenCookie(res, token);
+
+    // 6. Redirect către dashboard
+    return res.redirect('/customer/dashboard');
+  } catch (err) {
+    console.error('[customer/routes] Eroare la înregistrare (POST /customer/register):', err.message);
+
+    // Dacă e AppError cu cod de eroare, folosim mesajul său
+    let errorMessage = 'Eroare internă la înregistrare. Vă rugăm încercați din nou.';
+    if (err.statusCode === 409) {
+      errorMessage = 'Există deja un cont cu această adresă de email.';
+    } else if (err.statusCode === 400) {
+      errorMessage = err.message;
+    }
+
+    return res.render('register', {
+      title: 'Înregistrare',
+      currentPage: 'customer-register',
+      user: req.user || null,
+      isAuthenticated: !!req.user,
+      customer: req.user || null,
+      email,
+      name,
+      phone,
+      error: errorMessage,
+    });
+  }
+});
 
 // ===========================================================================
 // RUTE PROTEJATE (autentificare obligatorie)

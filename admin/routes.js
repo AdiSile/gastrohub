@@ -24,12 +24,11 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
-const bcrypt = require('bcryptjs');
 
 const { authenticate, optionalAuth, generateToken, setTokenCookie, clearTokenCookie } = require('../middleware/auth');
 const { authorize, authorizeMinLevel, isAdminRole } = require('../middleware/roles');
 const { getDb } = require('../config/db');
-const { findUserByEmail: modelFindUserByEmail, findUserById: modelFindUserById } = require('../models/userModel');
+const { findUserByEmail: modelFindUserByEmail, findUserById: modelFindUserById, comparePassword } = require('../models/userModel');
 const { AppError } = require('../middleware/errorHandler');
 
 // ---------------------------------------------------------------------------
@@ -255,7 +254,9 @@ router.get('/login', optionalAuth, async (req, res) => {
 
 /**
  * @route   POST /admin/login
- * @desc    Procesează autentificarea super admin-ului
+ * @desc    Procesează autentificarea super admin-ului.
+ *          Folosește comparePassword din userModel (același API ca /api/auth/login)
+ *          și menține verificarea rolului super_admin după autentificare.
  * @access  Public
  */
 router.post('/login', async (req, res, next) => {
@@ -338,9 +339,9 @@ router.post('/login', async (req, res, next) => {
     }
 
     // -----------------------------------------------------------------------
-    // 4. Verificare parolă
+    // 4. Verificare parolă (folosește același API ca /api/auth/login)
     // -----------------------------------------------------------------------
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = await comparePassword(password, user.password);
 
     if (!isPasswordValid) {
       return res.render(ADMIN_VIEWS.LOGIN, {
