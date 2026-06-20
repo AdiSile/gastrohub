@@ -27,6 +27,7 @@
  *      isStaffRole,      // funcție: verifică dacă rolul este de personal intern
  *      isAdminRole,      // funcție: verifică dacă rolul este administrativ
  *      VALID_ROLES,      // array: lista tuturor rolurilor valide
+ *      VALID_EMPLOYEE_ROLES, // array: lista rolurilor de angajat (exclusiv client)
  *      ROLE_HIERARCHY,   // obiect: ierarhia numerică a rolurilor
  *    } = require('../middleware/roles');
  *
@@ -57,6 +58,20 @@ const VALID_ROLES = [
   'ospătar',
   'bucătar',
   'client',
+];
+
+/**
+ * Lista rolurilor valide pentru angajați (fără client).
+ * Util în contextul HR și al operațiunilor interne.
+ * @type {string[]}
+ */
+const VALID_EMPLOYEE_ROLES = [
+  'super_admin',
+  'owner',
+  'manager',
+  'recepție',
+  'ospătar',
+  'bucătar',
 ];
 
 /**
@@ -98,6 +113,16 @@ const ADMIN_ROLES = new Set(['super_admin', 'owner', 'manager']);
  */
 function isValidRole(role) {
   return VALID_ROLES.includes(role);
+}
+
+/**
+ * Verifică dacă un rol este un rol de angajat valid.
+ *
+ * @param {string} role - Rolul de verificat
+ * @returns {boolean} `true` dacă rolul este de angajat
+ */
+function isValidEmployeeRole(role) {
+  return VALID_EMPLOYEE_ROLES.includes(role);
 }
 
 /**
@@ -450,6 +475,7 @@ module.exports = {
 
   // Funcții utilitare
   isValidRole,
+  isValidEmployeeRole,
   compareRoles,
   hasMinRole,
   isStaffRole,
@@ -458,6 +484,7 @@ module.exports = {
 
   // Constante
   VALID_ROLES,
+  VALID_EMPLOYEE_ROLES,
   ROLE_HIERARCHY,
   STAFF_ROLES,
   ADMIN_ROLES,

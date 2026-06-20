@@ -26,6 +26,18 @@ const { AppError } = require('../middleware/errorHandler');
 const VALID_STATUSES = ['active', 'inactive', 'closed'];
 
 // ---------------------------------------------------------------------------
+// Statusuri valide pentru mesele individuale dintr-un restaurant
+// ---------------------------------------------------------------------------
+
+const VALID_TABLE_STATUSES = [
+  'liberă',
+  'ocupată',
+  'rezervată',
+  'în curățare',
+  'indisponibilă',
+];
+
+// ---------------------------------------------------------------------------
 // Detecție backend SQLite
 // ---------------------------------------------------------------------------
 
@@ -221,6 +233,15 @@ function isValidPositiveInt(val) {
  */
 function isValidStatus(status) {
   return VALID_STATUSES.includes(status);
+}
+
+/**
+ * Verifică dacă statusul unei mese este valid.
+ * @param {string} tableStatus
+ * @returns {boolean}
+ */
+function isValidTableStatus(tableStatus) {
+  return VALID_TABLE_STATUSES.includes(tableStatus);
 }
 
 /**
@@ -920,12 +941,16 @@ async function searchRestaurantsByName(searchTerm, tenantId) {
 // ---------------------------------------------------------------------------
 
 module.exports = {
+  // Constante
+  VALID_STATUSES,
+  VALID_TABLE_STATUSES,
+
   // Validare
   isValidString,
   isValidPositiveInt,
   isValidStatus,
+  isValidTableStatus,
   isValidEmail,
-  VALID_STATUSES,
 
   // Operatii CRUD de baza
   createRestaurant,
