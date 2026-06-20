@@ -27,6 +27,8 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
+const http = require('http');
+const https = require('https');
 
 const { authenticate, optionalAuth } = require('../middleware/auth');
 const { authorizeMinLevel, isStaffRole } = require('../middleware/roles');
@@ -170,44 +172,88 @@ function buildInternalUrl(req, apiPath) {
 // ---------------------------------------------------------------------------
 
 /**
- * Execută un fetch intern cu timeout și parsing JSON sigur.
+ * Execută un fetch intern folosind modulul nativ Node.js http/https,
+ * cu suport pentru timeout și parsing JSON sigur.
  * Returnează null la orice eroare.
  *
- * @param {string} url - URL-ul apelului
+ * Compatibil cu Node.js < 18 (nu depinde de fetch global).
+ *
+ * @param {string} url - URL-ul apelului (complet, cu protocol)
  * @param {number} [timeoutMs=5000] - timeout în milisecunde
  * @returns {Promise<Object|null>} obiectul JSON parsat sau null
  */
 async function safeInternalFetch(url, timeoutMs = DASHBOARD_FETCH_TIMEOUT_MS) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-
-    if (!response.ok) {
-      console.warn(`[restaurant/routes] Fetch intern eșuat (HTTP ${response.status}): ${url}`);
-      return null;
-    }
-
-    let data;
+  return new Promise((resolve) => {
+    let parsedUrl;
     try {
-      data = await response.json();
+      parsedUrl = new URL(url);
     } catch (parseErr) {
-      console.warn(`[restaurant/routes] Răspuns invalid JSON de la: ${url}`, parseErr.message);
-      return null;
+      console.warn(`[restaurant/routes] URL invalid: ${url}`, parseErr.message);
+      return resolve(null);
     }
 
-    return data;
-  } catch (err) {
-    if (err.name === 'AbortError') {
+    const isHttps = parsedUrl.protocol === 'https:';
+    const transport = isHttps ? https : http;
+
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (isHttps ? 443 : 80),
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+      timeout: timeoutMs,
+    };
+
+    const req = transport.request(options, (res) => {
+      let rawData = '';
+
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        rawData += chunk;
+      });
+
+      res.on('end', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          console.warn(
+            `[restaurant/routes] Fetch intern eșuat (HTTP ${res.statusCode}): ${url}`
+          );
+          return resolve(null);
+        }
+
+        let data;
+        try {
+          data = JSON.parse(rawData);
+        } catch (parseErr) {
+          console.warn(
+            `[restaurant/routes] Răspuns invalid JSON de la: ${url}`,
+            parseErr.message
+          );
+          return resolve(null);
+        }
+
+        resolve(data);
+      });
+    });
+
+    req.on('error', (err) => {
+      if (err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT') {
+        console.warn(`[restaurant/routes] Timeout (${timeoutMs}ms) la fetch: ${url}`);
+      } else {
+        console.warn(`[restaurant/routes] Eroare rețea la fetch: ${url}`, err.message);
+      }
+      resolve(null);
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
       console.warn(`[restaurant/routes] Timeout (${timeoutMs}ms) la fetch: ${url}`);
-    } else {
-      console.warn(`[restaurant/routes] Eroare rețea la fetch: ${url}`, err.message);
-    }
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+      resolve(null);
+    });
+
+    req.end();
+  });
 }
 
 // ===========================================================================

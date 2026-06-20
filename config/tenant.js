@@ -20,16 +20,16 @@ const { getDb, get, run, all } = require('./db');
  *
  * @param {string}  tenantSlug - Identificatorul unic al tenant-ului (păstrat pentru compatibilitate)
  * @param {boolean} [forceNew=false] - Ignorat; păstrat pentru compatibilitate
- * @returns {Object} Instanța sql.js Database
+ * @returns {Promise<Object>} Instanța sql.js Database
  */
-function getTenantDb(tenantSlug, forceNew = false) {
+async function getTenantDb(tenantSlug, forceNew = false) {
   // Validare parametru (păstrată pentru compatibilitate)
   if (!tenantSlug || typeof tenantSlug !== 'string') {
     throw new Error('[tenant] getTenantDb: tenantSlug trebuie să fie un string nevid.');
   }
 
   // Returnează instanța SQLite partajată
-  return getDb();
+  return await getDb();
 }
 
 // ---------------------------------------------------------------------------

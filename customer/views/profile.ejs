@@ -236,7 +236,7 @@
     <!-- Sidebar -->
     <div class="profile-sidebar-card">
       <div class="profile-avatar" id="sidebarAvatar">
-        <%= customer.nume ? customer.nume.charAt(0).toUpperCase() : (customer.prenume ? customer.prenume.charAt(0).toUpperCase() : '?') %>
+        <%= customer.prenume ? customer.prenume.charAt(0).toUpperCase() : (customer.nume ? customer.nume.charAt(0).toUpperCase() : '?') %>
       </div>
       <div>
         <div class="profile-name" id="sidebarName">
@@ -247,9 +247,9 @@
         </div>
       </div>
       <div class="profile-meta">
-        <% if (customer.telefon) { %>
-          <span><i class="fas fa-phone"></i> <%= customer.telefon %></span>
-        <% } %>
+        <span id="sidebarTelefon" style="<%= customer.telefon ? '' : 'display:none;' %>">
+          <i class="fas fa-phone"></i> <span id="sidebarTelefonValue"><%= customer.telefon || '' %></span>
+        </span>
         <% if (customer.createdAt) { %>
           <span><i class="fas fa-calendar"></i> Client din <%= new Date(customer.createdAt).toLocaleDateString('ro-RO', { year: 'numeric', month: 'long' }) %></span>
         <% } %>
@@ -460,10 +460,22 @@
           });
 
           if (data && data.success) {
-            // Update sidebar
+            // Update sidebar — nume
             document.getElementById('sidebarName').textContent = payload.prenume + ' ' + payload.nume;
+            // Update sidebar — email
             document.getElementById('sidebarEmail').textContent = payload.email;
+            // Update sidebar — avatar (prima literă din prenume)
             document.getElementById('sidebarAvatar').textContent = payload.prenume.charAt(0).toUpperCase();
+            // Update sidebar — telefon
+            var sidebarTel = document.getElementById('sidebarTelefon');
+            var sidebarTelVal = document.getElementById('sidebarTelefonValue');
+            if (payload.telefon) {
+              if (sidebarTelVal) sidebarTelVal.textContent = payload.telefon;
+              if (sidebarTel) sidebarTel.style.display = '';
+            } else {
+              if (sidebarTel) sidebarTel.style.display = 'none';
+              if (sidebarTelVal) sidebarTelVal.textContent = '';
+            }
 
             // Update original values
             originalValues.prenume = payload.prenume;

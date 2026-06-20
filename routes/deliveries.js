@@ -186,7 +186,15 @@ router.get(
       if (skip) options.skip = parseInt(skip, 10);
 
       const deliveries = await findDeliveriesByTenant(tenantId, options);
-      const total = await countDeliveries(tenantId, { status });
+
+      // Folosim aceleași filtre (fără sortare/paginare) pentru total
+      const countFilters = {};
+      if (status) countFilters.status = status;
+      if (supplierId) countFilters.supplierId = supplierId;
+      if (locationId) countFilters.locationId = locationId;
+      if (locationType) countFilters.locationType = locationType;
+
+      const total = await countDeliveries(tenantId, countFilters);
 
       res.status(200).json({
         success: true,
@@ -362,12 +370,14 @@ router.get(
       .isString()
       .trim()
       .notEmpty()
-      .withMessage('Data de început (startDate) este obligatorie.'),
+      .isISO8601()
+      .withMessage('Data de început (startDate) trebuie să fie un string ISO 8601 valid.'),
     query('endDate')
       .isString()
       .trim()
       .notEmpty()
-      .withMessage('Data de sfârșit (endDate) este obligatorie.'),
+      .isISO8601()
+      .withMessage('Data de sfârșit (endDate) trebuie să fie un string ISO 8601 valid.'),
   ],
   handleValidationErrors,
   async (req, res, next) => {
@@ -533,6 +543,7 @@ router.post(
     body('notes')
       .optional()
       .isString()
+      .trim()
       .isLength({ max: 2000 })
       .withMessage('Notele pot avea maximum 2000 de caractere.'),
     body('locationId')
@@ -691,6 +702,7 @@ router.put(
     body('notes')
       .optional()
       .isString()
+      .trim()
       .isLength({ max: 2000 })
       .withMessage('Notele pot avea maximum 2000 de caractere.'),
     body('locationId')
@@ -851,7 +863,7 @@ router.patch(
  * @access  Privat (autentificare + rol manager, owner, super_admin)
  *
  * Răspuns (200):
- *   { success: true, message: 'Livrarea a fost ștearsă cu succes.' }
+ *   { success: true, data: { message: 'Livrarea a fost ștearsă cu succes.' } }
  */
 router.delete(
   '/:id',
@@ -894,7 +906,9 @@ router.delete(
 
       res.status(200).json({
         success: true,
-        message: 'Livrarea a fost ștearsă cu succes.',
+        data: {
+          message: 'Livrarea a fost ștearsă cu succes.',
+        },
       });
     } catch (err) {
       next(err);

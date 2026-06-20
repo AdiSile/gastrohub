@@ -827,10 +827,10 @@
               type="password"
               id="password"
               name="password"
-              placeholder="Minim 8 caractere"
+              placeholder="Minim 6 caractere"
               autocomplete="new-password"
               required
-              minlength="8"
+              minlength="6"
             />
             <button type="button" class="password-toggle" id="passwordToggle" tabindex="-1" aria-label="Arată/ascunde parola">
               <i class="fas fa-eye"></i>
@@ -1069,7 +1069,7 @@
         var score = 0;
 
         // Length checks
-        if (password.length >= 8) score += 1;
+        if (password.length >= 6) score += 1;
         if (password.length >= 12) score += 1;
 
         // Complexity checks
@@ -1171,7 +1171,7 @@
           if (passwordErrorText) passwordErrorText.textContent = 'Parola este obligatorie.';
           if (passwordError) passwordError.classList.add('show');
           valid = false;
-        } else if (password.length < 8) {
+        } else if (password.length < 6) {
           if (passwordErrorText) passwordErrorText.textContent = 'Parola trebuie să aibă cel puțin 8 caractere.';
           if (passwordError) passwordError.classList.add('show');
           valid = false;

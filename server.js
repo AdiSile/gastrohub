@@ -94,6 +94,74 @@ app.use('/api/suppliers', require('./routes/suppliers'));
 app.use('/api/loyalty', require('./routes/loyalty'));
 
 // ---------------------------------------------------------------------------
+// Contact – formular de contact
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/contact?name=...&email=...&message=...
+ *
+ * Procesează formularul de contact:
+ *  1. Validează câmpurile obligatorii (name, email, message).
+ *  2. Salvează mesajul în tabela `contact_messages` prin `config/db.js`.
+ *  3. Returnează răspuns JSON `{ success: true/false, ... }`.
+ */
+app.get('/api/contact', async (req, res) => {
+  try {
+    const { name, email, message } = req.query;
+
+    // --- Validare câmpuri ---
+    const errors = [];
+
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      errors.push('Numele este obligatoriu.');
+    } else if (name.trim().length > 128) {
+      errors.push('Numele nu poate depăși 128 de caractere.');
+    }
+
+    if (!email || typeof email !== 'string' || email.trim().length === 0) {
+      errors.push('Adresa de email este obligatorie.');
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      errors.push('Adresa de email nu este validă.');
+    } else if (email.trim().length > 254) {
+      errors.push('Adresa de email nu poate depăși 254 de caractere.');
+    }
+
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
+      errors.push('Mesajul este obligatoriu.');
+    } else if (message.trim().length > 4096) {
+      errors.push('Mesajul nu poate depăși 4096 de caractere.');
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json({ success: false, errors });
+    }
+
+    // --- Salvare în baza de date ---
+    const dbHelpers = require('./config/db');
+    const result = await dbHelpers.run(
+      'INSERT INTO contact_messages (name, email, message) VALUES (?, ?, ?)',
+      [name.trim(), email.trim().toLowerCase(), message.trim()]
+    );
+
+    console.log(
+      `[GastroHub] Mesaj de contact salvat cu id=${result.lastInsertRowid} de la ${email.trim().toLowerCase()}`
+    );
+
+    return res.json({
+      success: true,
+      id: result.lastInsertRowid,
+      message: 'Mesajul a fost trimis cu succes. Vă mulțumim!'
+    });
+  } catch (err) {
+    console.error('[GastroHub] Eroare la procesarea formularului de contact:', err.message);
+    return res.status(500).json({
+      success: false,
+      errors: ['Eroare internă la procesarea mesajului. Vă rugăm încercați din nou.']
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Rute de vizualizare (EJS) – portal client
 // ---------------------------------------------------------------------------
 
@@ -124,11 +192,11 @@ app.use('/hotel', require('./hotel/routes'));
 app.use('/restaurant', require('./restaurant/routes'));
 
 // ---------------------------------------------------------------------------
-// Ruta rădăcină – redirect automat către portalul client
+// Ruta rădăcină – landing page (public/index.html)
 // ---------------------------------------------------------------------------
 
 app.get('/', (req, res) => {
-  res.redirect('/customer');
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // ---------------------------------------------------------------------------

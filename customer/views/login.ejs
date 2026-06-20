@@ -541,6 +541,27 @@
       color: #c39bff;
     }
 
+    /* Form-level generic error alert (populated by client-side fetch) */
+    .form-alert {
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 20px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      background: rgba(255, 107, 138, 0.15);
+      border: 1px solid rgba(255, 107, 138, 0.3);
+      color: #ffb3c3;
+    }
+
+    .form-alert.show {
+      display: flex;
+    }
+
     /* ============================================================
        FOOTER
        ============================================================ */
@@ -641,6 +662,12 @@
           <%= typeof error === 'string' ? error : (error.message || 'Eroare la autentificare') %>
         </div>
       <% } %>
+
+      <!-- Generic form alert (populated by client-side fetch errors) -->
+      <div class="form-alert" id="formAlert">
+        <i class="fas fa-exclamation-circle"></i>
+        <span id="formAlertText"></span>
+      </div>
 
       <!-- Login Form -->
       <form id="loginForm" action="/api/auth/login" method="POST" novalidate>
@@ -771,6 +798,7 @@
       var form = document.getElementById('loginForm');
       var emailInput = document.getElementById('email');
       var passwordInput = document.getElementById('password');
+      var rememberCheckbox = document.getElementById('remember');
       var submitBtn = document.getElementById('submitBtn');
       var passwordToggle = document.getElementById('passwordToggle');
 
@@ -778,6 +806,9 @@
       var emailErrorText = document.getElementById('emailErrorText');
       var passwordError = document.getElementById('passwordError');
       var passwordErrorText = document.getElementById('passwordErrorText');
+
+      var formAlert = document.getElementById('formAlert');
+      var formAlertText = document.getElementById('formAlertText');
 
       var isSubmitting = false;
 
@@ -801,15 +832,27 @@
         if (errorEl) errorEl.classList.remove('show');
       }
 
+      function hideFormAlert() {
+        if (formAlert) formAlert.classList.remove('show');
+      }
+
       if (emailInput) {
         emailInput.addEventListener('input', function() {
           hideError(emailError);
+          hideFormAlert();
         });
       }
 
       if (passwordInput) {
         passwordInput.addEventListener('input', function() {
           hideError(passwordError);
+          hideFormAlert();
+        });
+      }
+
+      if (rememberCheckbox) {
+        rememberCheckbox.addEventListener('change', function() {
+          hideFormAlert();
         });
       }
 
@@ -856,30 +899,133 @@
       }
 
       // =================================================================
-      // Submit handler
+      // Set loading state
+      // =================================================================
+      function setLoading(loading) {
+        if (submitBtn) {
+          if (loading) {
+            submitBtn.classList.add('loading');
+            submitBtn.disabled = true;
+          } else {
+            submitBtn.classList.remove('loading');
+            submitBtn.disabled = false;
+          }
+        }
+      }
+
+      // =================================================================
+      // Submit handler — uses fetch to call API, then redirects on success
       // =================================================================
       if (form) {
         form.addEventListener('submit', function(e) {
+          // Prevent default always — we handle submission via fetch
+          e.preventDefault();
+
           // Client-side validation
           if (!validateForm()) {
-            e.preventDefault();
+            // Scroll to first error
+            var firstError = form.querySelector('.form-error.show');
+            if (firstError) {
+              firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
             return;
           }
 
           if (isSubmitting) {
-            e.preventDefault();
             return;
           }
 
           isSubmitting = true;
-          if (submitBtn) {
-            submitBtn.classList.add('loading');
-            submitBtn.disabled = true;
+          setLoading(true);
+          hideFormAlert();
+
+          // Build request body
+          var body = {
+            email: emailInput ? emailInput.value.trim() : '',
+            password: passwordInput ? passwordInput.value : ''
+          };
+
+          // Include remember-me flag if checked
+          if (rememberCheckbox && rememberCheckbox.checked) {
+            body.remember = true;
           }
 
-          // Allow form to submit normally (POST to /api/auth/login)
-          // The loading state shows the spinner while the request is in flight.
-          // After server response, the page will either redirect or re-render with errors.
+          // Send login request to API
+          fetch(form.action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            credentials: 'same-origin'  // Send cookies along
+          })
+            .then(function(response) {
+              return response.json().then(function(data) {
+                return { status: response.status, ok: response.ok, data: data };
+              });
+            })
+            .then(function(result) {
+              if (result.ok && result.data.success) {
+                // Login successful — redirect to dashboard
+                window.location.href = '/customer/dashboard';
+                return;
+              }
+
+              // Server returned an error
+              var errorMsg = result.data.message || result.data.error || 'Eroare la autentificare.';
+              if (result.data.errors && Array.isArray(result.data.errors) && result.data.errors.length > 0) {
+                errorMsg = result.data.errors.map(function(e) { return e.msg || e; }).join('; ');
+              }
+
+              // Map specific field errors if provided by server
+              var hasFieldError = false;
+              if (result.data.fieldErrors) {
+                if (result.data.fieldErrors.email && emailError && emailErrorText) {
+                  emailErrorText.textContent = result.data.fieldErrors.email;
+                  emailError.classList.add('show');
+                  hasFieldError = true;
+                }
+                if (result.data.fieldErrors.password && passwordError && passwordErrorText) {
+                  passwordErrorText.textContent = result.data.fieldErrors.password;
+                  passwordError.classList.add('show');
+                  hasFieldError = true;
+                }
+              }
+
+              // Special handling for common HTTP status codes
+              if (result.status === 401) {
+                // Unauthorized — likely wrong credentials
+                if (passwordError && passwordErrorText && !hasFieldError) {
+                  passwordErrorText.textContent = errorMsg || 'Email sau parolă incorecte.';
+                  passwordError.classList.add('show');
+                  hasFieldError = true;
+                }
+              } else if (result.status === 404) {
+                // Account not found
+                if (emailError && emailErrorText && !hasFieldError) {
+                  emailErrorText.textContent = errorMsg || 'Nu există un cont asociat acestui email.';
+                  emailError.classList.add('show');
+                  hasFieldError = true;
+                }
+              }
+
+              // Show generic error in form alert if no field was specifically highlighted
+              if (!hasFieldError && formAlert && formAlertText) {
+                formAlertText.textContent = errorMsg;
+                formAlert.classList.add('show');
+              }
+
+              // Reset loading state
+              setLoading(false);
+              isSubmitting = false;
+            })
+            .catch(function(err) {
+              // Network error or unexpected issue
+              if (formAlert && formAlertText) {
+                formAlertText.textContent = 'Eroare de rețea sau server indisponibil. Verifică conexiunea și încearcă din nou.';
+                formAlert.classList.add('show');
+              }
+              setLoading(false);
+              isSubmitting = false;
+            });
         });
       }
 

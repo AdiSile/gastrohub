@@ -1,0 +1,300 @@
+﻿    color: #fff;
+  }
+  .hotel-supplier-mini-list .sup-item .sup-actions .btn-order:hover {
+    background: #16a085;
+  }
+
+  /* Hotel supplier order mini list */
+  .hotel-sup-order-mini-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .hotel-sup-order-mini-list .so-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .hotel-sup-order-mini-list .so-item:last-child {
+    border-bottom: none;
+  }
+  .hotel-sup-order-mini-list .so-item .so-ref {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text);
+    min-width: 80px;
+  }
+  .hotel-sup-order-mini-list .so-item .so-supplier {
+    flex: 1;
+    font-size: 12px;
+    color: var(--color-text-muted);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .hotel-sup-order-mini-list .so-item .so-total {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+  }
+  .hotel-sup-order-mini-list .so-item .so-status {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+  .hotel-sup-order-mini-list .so-item .so-status.pending {
+    background: #fff8e1;
+    color: #f57f17;
+  }
+  .hotel-sup-order-mini-list .so-item .so-status.confirmed {
+    background: #e3f2fd;
+    color: #1565c0;
+  }
+  .hotel-sup-order-mini-list .so-item .so-status.delivered {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+  .hotel-sup-order-mini-list .so-item .so-status.cancelled {
+    background: #fce4ec;
+    color: #c62828;
+  }
+
+  @media (max-width: 480px) {
+    .stats-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .quick-actions {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<!-- HEADER -->
+<div class="hotel-dashboard-header">
+  <div>
+    <h1>
+      <i class="fas fa-hotel"></i>
+      Dashboard Hotel
+    </h1>
+    <div class="header-meta">
+      <% if (hotel) { %>
+        <span class="hotel-name"><i class="fas fa-building"></i> <%= hotel.nume %></span>
+        <span class="text-muted">•</span>
+      <% } %>
+      <span class="date-badge">
+        <i class="far fa-calendar-alt"></i>
+        <%= new Date().toLocaleDateString('ro-RO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) %>
+      </span>
+    </div>
+  </div>
+  <div class="hotel-actions-bar">
+    <% if (locals.hotels && hotels.length > 1) { %>
+      <div class="hotel-selector">
+        <select id="hotelSelect" onchange="switchHotel(this.value)">
+          <% hotels.forEach(function(h) { %>
+            <option value="<%= h._id %>" <%= hotel && hotel._id === h._id ? 'selected' : '' %>>
+              <%= h.nume %>
+            </option>
+          <% }); %>
+        </select>
+      </div>
+    <% } %>
+    <a href="/hotel/rooms?hotelId=<%= hotel ? hotel._id : '' %>" class="btn btn-primary btn-sm">
+      <i class="fas fa-door-open"></i> Camere
+    </a>
+    <a href="/hotel/reservations?hotelId=<%= hotel ? hotel._id : '' %>" class="btn btn-secondary btn-sm">
+      <i class="fas fa-calendar-alt"></i> Rezervări
+    </a>
+    <button class="btn btn-secondary btn-sm" onclick="location.reload()">
+      <i class="fas fa-sync-alt"></i> Reîmprospătare
+    </button>
+  </div>
+</div>
+
+<% if (loading) { %>
+  <div class="spinner"></div>
+<% } else { %>
+
+<!-- STATISTICS CARDS -->
+<div class="stats-grid">
+  <div class="stat-card total-rooms">
+    <div class="stat-icon"><i class="fas fa-door-closed"></i></div>
+    <div class="stat-label">Total camere</div>
+    <div class="stat-value"><%= stats.totalRooms || 0 %></div>
+    <div class="stat-sub"><%= stats.totalRooms > 0 ? 'Camere configurate' : 'Nicio cameră' %></div>
+  </div>
+
+  <div class="stat-card available">
+    <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+    <div class="stat-label">Disponibile</div>
+    <div class="stat-value"><%= stats.availableRooms || 0 %></div>
+    <div class="stat-sub"><i class="fas fa-circle" style="font-size:8px;color:var(--color-success);"></i> Libere pentru check-in</div>
+  </div>
+
+  <div class="stat-card occupied">
+    <div class="stat-icon"><i class="fas fa-user-friends"></i></div>
+    <div class="stat-label">Ocupate</div>
+    <div class="stat-value"><%= stats.occupiedRooms || 0 %></div>
+    <div class="stat-sub"><i class="fas fa-circle" style="font-size:8px;color:var(--color-warning);"></i> Cu clienți cazați</div>
+  </div>
+
+  <div class="stat-card maintenance">
+    <div class="stat-icon"><i class="fas fa-tools"></i></div>
+    <div class="stat-label">În mentenanță</div>
+    <div class="stat-value"><%= stats.maintenanceRooms || 0 %></div>
+    <div class="stat-sub"><i class="fas fa-circle" style="font-size:8px;color:var(--color-danger);"></i> Indisponibile temporar</div>
+  </div>
+
+  <div class="stat-card cleaning">
+    <div class="stat-icon"><i class="fas fa-broom"></i></div>
+    <div class="stat-label">În curățenie</div>
+    <div class="stat-value"><%= stats.cleaningRooms || 0 %></div>
+    <div class="stat-sub"><i class="fas fa-circle" style="font-size:8px;color:#9b59b6;"></i> În curs de igienizare</div>
+  </div>
+
+  <div class="stat-card reserved">
+    <div class="stat-icon"><i class="fas fa-calendar-check"></i></div>
+    <div class="stat-label">Rezervate</div>
+    <div class="stat-value"><%= stats.reservedRooms || 0 %></div>
+    <div class="stat-sub"><i class="fas fa-circle" style="font-size:8px;color:#1abc9c;"></i> Check-in așteptat</div>
+  </div>
+
+  <!-- REVENUE CARD -->
+  <div class="stat-card revenue">
+    <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
+    <div class="stat-label">Venituri</div>
+    <div class="stat-value">
+      <% if (revenue && revenue.total !== undefined) { %>
+        <%= new Intl.NumberFormat('ro-RO', { style: 'currency', currency: revenue.currency || 'RON', minimumFractionDigits: 0 }).format(revenue.total) %>
+      <% } else { %>
+        <%= stats.revenue ? new Intl.NumberFormat('ro-RO', { style: 'currency', currency: 'RON', minimumFractionDigits: 0 }).format(stats.revenue) : '0 RON' %>
+      <% } %>
+    </div>
+    <div class="stat-sub">
+      <i class="fas fa-circle" style="font-size:8px;color:#f39c12;"></i>
+      <% if (revenue && revenue.period) { %>
+        Venituri <%= revenue.period %>
+      <% } else { %>
+        Venituri totale
+      <% } %>
+      <% if (revenue && revenue.change !== undefined) { %>
+        • 
+        <% if (revenue.change > 0) { %>
+          <span style="color:var(--color-success);">+<%= revenue.change %>%</span>
+        <% } else if (revenue.change < 0) { %>
+          <span style="color:var(--color-danger);"><%= revenue.change %>%</span>
+        <% } else { %>
+          <span>0%</span>
+        <% } %>
+      <% } %>
+    </div>
+  </div>
+
+  <!-- EXPECTED CHECK-INS -->
+  <div class="stat-card check-in">
+    <div class="stat-icon"><i class="fas fa-sign-in-alt"></i></div>
+    <div class="stat-label">Check-in-uri așteptate</div>
+    <div class="stat-value"><%= stats.expectedCheckIns || expectedCheckIns.length || 0 %></div>
+    <div class="stat-sub">
+      <i class="fas fa-circle" style="font-size:8px;color:#3498db;"></i>
+      <%= stats.expectedCheckIns === 1 || expectedCheckIns.length === 1 ? 'Sosire programată astăzi' : 'Sosiri programate astăzi' %>
+    </div>
+  </div>
+
+  <!-- EXPECTED CHECK-OUTS -->
+  <div class="stat-card check-out">
+    <div class="stat-icon"><i class="fas fa-sign-out-alt"></i></div>
+    <div class="stat-label">Check-out-uri așteptate</div>
+    <div class="stat-value"><%= stats.expectedCheckOuts || expectedCheckOuts.length || 0 %></div>
+    <div class="stat-sub">
+      <i class="fas fa-circle" style="font-size:8px;color:#e67e22;"></i>
+      <%= stats.expectedCheckOuts === 1 || expectedCheckOuts.length === 1 ? 'Plecare programată astăzi' : 'Plecări programate astăzi' %>
+    </div>
+  </div>
+</div>
+
+<!-- OCCUPANCY RATE -->
+<div class="stats-grid" style="grid-template-columns:1fr;">
+  <div class="stat-card occupancy">
+    <div class="stat-icon"><i class="fas fa-chart-pie"></i></div>
+    <div class="stat-label">Rată de ocupare</div>
+    <div class="stat-value"><%= stats.occupancyRate || 0 %>%</div>
+    <div class="stat-sub">
+      <% if (stats.occupancyRate > 80) { %>
+        <span style="color:var(--color-warning);font-weight:600;"><i class="fas fa-exclamation-triangle"></i> Ocupare ridicată</span>
+      <% } else if (stats.occupancyRate > 50) { %>
+        <span style="color:var(--color-success);font-weight:600;"><i class="fas fa-check-circle"></i> Ocupare moderată</span>
+      <% } else { %>
+        <span style="color:var(--color-info);font-weight:600;"><i class="fas fa-info-circle"></i> Ocupare scăzută</span>
+      <% } %>
+      • <%= stats.occupiedRooms || 0 %> din <%= stats.totalRooms || 0 %> camere ocupate
+    </div>
+  </div>
+</div>
+
+<!-- DASHBOARD COLS -->
+<div class="dashboard-columns">
+  <!-- LEFT: Room type distribution -->
+  <div class="section-card">
+    <div class="section-header">
+      <h2>
+        <i class="fas fa-layer-group"></i>
+        Distribuție pe tipuri de camere
+      </h2>
+    </div>
+    <div class="section-body">
+      <% if (!hotel) { %>
+        <div class="empty-state">
+          <i class="fas fa-hotel"></i>
+          <h3>Selectează un hotel</h3>
+          <p>Nu există niciun hotel selectat. Alege un hotel din lista de mai sus.</p>
+        </div>
+      <% } else if (rooms.length === 0) { %>
+        <div class="empty-state">
+          <i class="fas fa-door-open"></i>
+          <h3>Nicio cameră configurată</h3>
+          <p>Adaugă camere pentru a vedea distribuția pe tipuri.</p>
+          <a href="/hotel/rooms?hotelId=<%= hotel._id %>" class="btn btn-primary btn-sm mt-2">
+            <i class="fas fa-plus"></i> Adaugă camere
+          </a>
+        </div>
+      <% } else { %>
+        <% 
+          var roomTypes = {};
+          rooms.forEach(function(r) {
+            if (!roomTypes[r.tip]) {
+              roomTypes[r.tip] = { total: 0, available: 0, occupied: 0, other: 0 };
+            }
+            roomTypes[r.tip].total++;
+            if (r.status === 'available') roomTypes[r.tip].available++;
+            else if (r.status === 'occupied') roomTypes[r.tip].occupied++;
+            else roomTypes[r.tip].other++;
+          });
+        %>
+        <ul class="room-type-list">
+          <% Object.keys(roomTypes).forEach(function(tip) { %>
+            <% var rt = roomTypes[tip]; %>
+            <% 
+              var iconClass = 'bed';
+              if (tip === 'single') iconClass = 'user';
+              else if (tip === 'double' || tip === 'twin') iconClass = 'users';
+              else if (tip === 'suite' || tip === 'penthouse' || tip === 'junior suite') iconClass = 'crown';
+              else if (tip === 'family room') iconClass = 'people-arrows';
+            %>
+            <li class="room-type-item">
+              <div class="type-icon">
+                <i class="fas fa-<%= iconClass %>"></i>
+              </div>
+              <div class="type-info">
+                <div class="type-name"><%= tip.charAt(0).toUpperCase() + tip.slice(1) %></div>
+                <div class="type-count"><%= rt.total %> camere</div>
+              </div>
+              <div class="type-stats">
+                <span class="free"><%= rt.available %> <i class="fas fa-check-circle" style="font-size:10px;"></i></span>
+                <span class="occ"><%= rt.occupied %> <i class="fas fa-user" style="font-size:10

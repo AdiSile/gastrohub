@@ -7,6 +7,13 @@
 // Câmpuri suportate: name, address, tableCount, tenantId, phone, email, status
 //
 // Backend: SQLite (prin getDb())
+//
+// NOTĂ: Coloanele din baza de date (snake_case) sunt mapate automat
+//   la camelCase în documentele returnate de _sqlRowToDoc():
+//     tenant_id  → tenantId
+//     capacity   → tableCount
+//     created_at → createdAt
+//     updated_at → updatedAt
 // ---------------------------------------------------------------------------
 
 const { getDb } = require('../config/db');
@@ -31,11 +38,61 @@ function _isSqlAvailable() {
 }
 
 // ---------------------------------------------------------------------------
+// Asigurare schemă – adaugă coloane lipsă din versiuni mai vechi
+// ---------------------------------------------------------------------------
+
+let _schemaEnsured = false;
+
+/**
+ * Adaugă coloanele lipsă în tabela `restaurants` dacă acestea nu există deja.
+ * Folosește ALTER TABLE în blocuri try/catch pentru a fi idempotent.
+ * @param {import('sql.js').Database} database
+ * @returns {void}
+ */
+function _ensureRestaurantSchema(database) {
+  try { database.run('ALTER TABLE restaurants ADD COLUMN email TEXT DEFAULT \'\''); } catch (_) { /* coloana există deja */ }
+  try { database.run('ALTER TABLE restaurants ADD COLUMN status TEXT DEFAULT \'active\''); } catch (_) { /* coloana există deja */ }
+  try { database.run('ALTER TABLE restaurants ADD COLUMN updated_at TEXT'); } catch (_) { /* coloana există deja */ }
+}
+
+/**
+ * Inițializează schema, o singură dată pe durata procesului.
+ * @returns {Promise<void>}
+ */
+async function _ensureSchema() {
+  if (_schemaEnsured) return;
+  const database = await getDb();
+  _ensureRestaurantSchema(database);
+  _schemaEnsured = true;
+}
+
+// ---------------------------------------------------------------------------
 // Helpers de conversie rând SQL → document compatibil
 // ---------------------------------------------------------------------------
 
 /**
- * Convertește un rând SQL (id INTEGER) într-un obiect cu _id string.
+ * Mapare nume coloană snake_case (DB) → camelCase (document).
+ * @type {Object<string, string>}
+ */
+const COLUMN_MAP = {
+  tenant_id: 'tenantId',
+  capacity: 'tableCount',
+  created_at: 'createdAt',
+  updated_at: 'updatedAt',
+};
+
+/**
+ * Mapare inversă: camelCase (document) → snake_case (DB).
+ * @type {Object<string, string>}
+ */
+const COLUMN_MAP_REVERSE = {};
+for (const [dbCol, docCol] of Object.entries(COLUMN_MAP)) {
+  COLUMN_MAP_REVERSE[docCol] = dbCol;
+}
+
+/**
+ * Convertește un rând SQL (snake_case) într-un document cu _id string
+ * și chei camelCase.
  * @param {Object} row
  * @returns {Object}
  */
@@ -44,10 +101,29 @@ function _sqlRowToDoc(row) {
   const doc = {};
   const keys = Object.keys(row);
   for (let i = 0; i < keys.length; i++) {
-    doc[keys[i]] = row[keys[i]];
+    const key = keys[i];
+    const mappedKey = COLUMN_MAP[key] || key;
+    doc[mappedKey] = row[key];
   }
   doc._id = String(row.id);
   return doc;
+}
+
+/**
+ * Convertește un obiect cu chei camelCase într-un obiect cu chei
+ * snake_case pentru interogări SQL (INSERT/UPDATE).
+ * @param {Object} doc
+ * @returns {Object}
+ */
+function _docToSqlParams(doc) {
+  const sql = {};
+  const keys = Object.keys(doc);
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    const mappedKey = COLUMN_MAP_REVERSE[key] || key;
+    sql[mappedKey] = doc[key];
+  }
+  return sql;
 }
 
 // ---------------------------------------------------------------------------
@@ -257,12 +333,15 @@ async function createRestaurant(restaurantData) {
   const finalPhone = phone || '';
   const finalEmail = email ? email.toLowerCase().trim() : '';
 
+  // Asigură schema (coloane lipsă)
+  await _ensureSchema();
   const db = await getDb();
 
   try {
+    // Folosim numele reale ale coloanelor din baza de date (snake_case)
     const result = _dbRun(
       db,
-      `INSERT INTO restaurants (name, address, tableCount, tenantId, phone, email, status, createdAt, updatedAt)
+      `INSERT INTO restaurants (name, address, capacity, tenant_id, phone, email, status, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [finalName, finalAddress, finalTableCount, tenantId, finalPhone, finalEmail, finalStatus, now, now]
     );
@@ -290,6 +369,8 @@ async function findRestaurantById(id) {
     throw new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID');
   }
 
+  // Asigură schema
+  await _ensureSchema();
   const db = await getDb();
 
   try {
@@ -321,17 +402,23 @@ async function findRestaurantsByTenant(tenantId, options = {}) {
     throw new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID');
   }
 
+  // Asigură schema
+  await _ensureSchema();
   const db = await getDb();
 
   try {
-    let sql = 'SELECT * FROM restaurants WHERE tenantId = ?';
+    // Folosim numele real al coloanei: tenant_id
+    let sql = 'SELECT * FROM restaurants WHERE tenant_id = ?';
     const params = [tenantId];
 
-    // Sortare
+    // Sortare – mapăm cheile de sortare la numele reale de coloană
     if (options.sort && typeof options.sort === 'object') {
       const sortKeys = Object.keys(options.sort);
       if (sortKeys.length > 0) {
-        const sortClauses = sortKeys.map((k) => `${k} ${options.sort[k] === -1 ? 'DESC' : 'ASC'}`);
+        const sortClauses = sortKeys.map((k) => {
+          const dbKey = COLUMN_MAP_REVERSE[k] || k;
+          return `${dbKey} ${options.sort[k] === -1 ? 'DESC' : 'ASC'}`;
+        });
         sql += ' ORDER BY ' + sortClauses.join(', ');
       } else {
         sql += ' ORDER BY name ASC';
@@ -378,6 +465,8 @@ async function findRestaurantsByStatus(status, tenantId) {
     );
   }
 
+  // Asigură schema
+  await _ensureSchema();
   const db = await getDb();
 
   try {
@@ -385,7 +474,8 @@ async function findRestaurantsByStatus(status, tenantId) {
     const params = [status];
 
     if (tenantId) {
-      sql = 'SELECT * FROM restaurants WHERE status = ? AND tenantId = ? ORDER BY name ASC';
+      // Folosim numele real al coloanei: tenant_id
+      sql = 'SELECT * FROM restaurants WHERE status = ? AND tenant_id = ? ORDER BY name ASC';
       params.push(tenantId);
     } else {
       sql = 'SELECT * FROM restaurants WHERE status = ? ORDER BY name ASC';
@@ -422,7 +512,7 @@ async function updateRestaurant(id, updateData) {
   }
 
   // -----------------------------------------------------------------------
-  // Campuri permise pentru actualizare
+  // Campuri permise pentru actualizare (camelCase, mapate mai jos la DB)
   // -----------------------------------------------------------------------
   const allowedFields = ['name', 'address', 'tableCount', 'phone', 'email', 'status'];
   const sqlUpdates = {};
@@ -454,7 +544,8 @@ async function updateRestaurant(id, updateData) {
         if (!isValidPositiveInt(value)) {
           errors.push('Numarul de mese trebuie sa fie un numar intreg, mai mare sau egal cu 0.');
         } else {
-          sqlUpdates.tableCount = value;
+          // Mapare: tableCount (document) → capacity (coloana DB)
+          sqlUpdates.capacity = value;
         }
         break;
 
@@ -499,14 +590,17 @@ async function updateRestaurant(id, updateData) {
   }
 
   const now = new Date().toISOString();
+
+  // Asigură schema
+  await _ensureSchema();
   const db = await getDb();
 
   try {
     const numericId = parseInt(id, 10);
 
-    // Construim interogarea SQL dinamic
+    // Construim interogarea SQL dinamic – sqlUpdates conține deja chei snake_case
     const setClauses = Object.keys(sqlUpdates).map((k) => `${k} = ?`);
-    setClauses.push('updatedAt = ?');
+    setClauses.push('updated_at = ?');
     const allParams = Object.values(sqlUpdates);
     allParams.push(now);
 
@@ -569,6 +663,9 @@ async function updateTableCount(id, tableCount) {
   }
 
   const now = new Date().toISOString();
+
+  // Asigură schema
+  await _ensureSchema();
   const db = await getDb();
 
   try {
@@ -577,13 +674,13 @@ async function updateTableCount(id, tableCount) {
     if (!isNaN(numericId)) {
       result = _dbRun(
         db,
-        'UPDATE restaurants SET tableCount = ?, updatedAt = ? WHERE id = ?',
+        'UPDATE restaurants SET capacity = ?, updated_at = ? WHERE id = ?',
         [tableCount, now, numericId]
       );
     } else {
       result = _dbRun(
         db,
-        'UPDATE restaurants SET tableCount = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ?',
+        'UPDATE restaurants SET capacity = ?, updated_at = ? WHERE CAST(id AS TEXT) = ?',
         [tableCount, now, String(id)]
       );
     }
@@ -629,6 +726,9 @@ async function updateRestaurantStatus(id, status) {
   }
 
   const now = new Date().toISOString();
+
+  // Asigură schema
+  await _ensureSchema();
   const db = await getDb();
 
   try {
@@ -637,13 +737,13 @@ async function updateRestaurantStatus(id, status) {
     if (!isNaN(numericId)) {
       result = _dbRun(
         db,
-        'UPDATE restaurants SET status = ?, updatedAt = ? WHERE id = ?',
+        'UPDATE restaurants SET status = ?, updated_at = ? WHERE id = ?',
         [status, now, numericId]
       );
     } else {
       result = _dbRun(
         db,
-        'UPDATE restaurants SET status = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ?',
+        'UPDATE restaurants SET status = ?, updated_at = ? WHERE CAST(id AS TEXT) = ?',
         [status, now, String(id)]
       );
     }
@@ -679,6 +779,8 @@ async function deleteRestaurant(id) {
     throw new AppError('ID-ul restaurantului este invalid.', 400, 'INVALID_RESTAURANT_ID');
   }
 
+  // Asigură schema
+  await _ensureSchema();
   const db = await getDb();
 
   try {
@@ -715,10 +817,12 @@ async function countRestaurantsByTenant(tenantId) {
     return 0;
   }
 
+  // Asigură schema
+  await _ensureSchema();
   const db = await getDb();
 
   try {
-    const row = _dbGet(db, 'SELECT COUNT(*) AS cnt FROM restaurants WHERE tenantId = ?', [tenantId]);
+    const row = _dbGet(db, 'SELECT COUNT(*) AS cnt FROM restaurants WHERE tenant_id = ?', [tenantId]);
     return row ? row.cnt : 0;
   } catch (sqlErr) {
     throw new AppError(
@@ -744,6 +848,8 @@ async function countRestaurantsByStatus(status, tenantId) {
     );
   }
 
+  // Asigură schema
+  await _ensureSchema();
   const db = await getDb();
 
   try {
@@ -751,7 +857,7 @@ async function countRestaurantsByStatus(status, tenantId) {
     const params = [status];
 
     if (tenantId) {
-      sql = 'SELECT COUNT(*) AS cnt FROM restaurants WHERE status = ? AND tenantId = ?';
+      sql = 'SELECT COUNT(*) AS cnt FROM restaurants WHERE status = ? AND tenant_id = ?';
       params.push(tenantId);
     } else {
       sql = 'SELECT COUNT(*) AS cnt FROM restaurants WHERE status = ?';
@@ -783,6 +889,8 @@ async function searchRestaurantsByName(searchTerm, tenantId) {
     );
   }
 
+  // Asigură schema
+  await _ensureSchema();
   const db = await getDb();
 
   try {
@@ -790,7 +898,7 @@ async function searchRestaurantsByName(searchTerm, tenantId) {
     const params = [`%${searchTerm.trim()}%`];
 
     if (tenantId) {
-      sql = 'SELECT * FROM restaurants WHERE name LIKE ? AND tenantId = ? ORDER BY name ASC';
+      sql = 'SELECT * FROM restaurants WHERE name LIKE ? AND tenant_id = ? ORDER BY name ASC';
       params.push(tenantId);
     } else {
       sql = 'SELECT * FROM restaurants WHERE name LIKE ? ORDER BY name ASC';
@@ -837,4 +945,8 @@ module.exports = {
   // Expunere pentru testare si debugging
   _isSqlAvailable,
   _sqlRowToDoc,
+  _docToSqlParams,
+  COLUMN_MAP,
+  COLUMN_MAP_REVERSE,
+  _ensureRestaurantSchema,
 };

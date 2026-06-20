@@ -7,6 +7,55 @@ const DB_PATH = path.join(__dirname, '..', 'data', 'gastrohub.db');
 
 let db = null;
 
+/**
+ * Rulează migrări incrementale pe o bază de date existentă,
+ * adăugând coloane care ar putea lipsi din versiuni anterioare.
+ * @param {Object} database - Instanța sql.js Database
+ */
+function _applyMigrations(database) {
+  // ===== users =====
+  try { database.run('ALTER TABLE users ADD COLUMN name TEXT'); } catch (_) {}
+  try { database.run('ALTER TABLE users ADD COLUMN phone TEXT'); } catch (_) {}
+  try { database.run("ALTER TABLE users ADD COLUMN restaurante TEXT DEFAULT '[]'"); } catch (_) {}
+  try { database.run('ALTER TABLE users ADD COLUMN updated_at TEXT'); } catch (_) {}
+
+  // ===== hotels: coloane adăugate pentru hotelModel.js (snake_case) =====
+  try { database.run("ALTER TABLE hotels ADD COLUMN amenities TEXT DEFAULT '[]'"); } catch (_) {}
+  try { database.run("ALTER TABLE hotels ADD COLUMN description TEXT DEFAULT ''"); } catch (_) {}
+  try { database.run("ALTER TABLE hotels ADD COLUMN website TEXT DEFAULT ''"); } catch (_) {}
+  try { database.run("ALTER TABLE hotels ADD COLUMN images TEXT DEFAULT '[]'"); } catch (_) {}
+  try { database.run("ALTER TABLE hotels ADD COLUMN status TEXT DEFAULT 'active'"); } catch (_) {}
+  try { database.run("ALTER TABLE hotels ADD COLUMN total_rooms INTEGER DEFAULT 0"); } catch (_) {}
+  try { database.run("ALTER TABLE hotels ADD COLUMN rating REAL DEFAULT 0"); } catch (_) {}
+  try { database.run('ALTER TABLE hotels ADD COLUMN updated_at TEXT'); } catch (_) {}
+
+  // ===== rooms: coloane adăugate pentru hotelModel.js (snake_case) =====
+  try { database.run("ALTER TABLE rooms ADD COLUMN tip TEXT"); } catch (_) {}
+  try { database.run("ALTER TABLE rooms ADD COLUMN numar INTEGER"); } catch (_) {}
+  try { database.run("ALTER TABLE rooms ADD COLUMN preturi_sezoniere TEXT DEFAULT '[]'"); } catch (_) {}
+  try { database.run('ALTER TABLE rooms ADD COLUMN floor INTEGER'); } catch (_) {}
+  try { database.run('ALTER TABLE rooms ADD COLUMN capacity INTEGER DEFAULT 1'); } catch (_) {}
+  try { database.run("ALTER TABLE rooms ADD COLUMN amenities TEXT DEFAULT '[]'"); } catch (_) {}
+  try { database.run("ALTER TABLE rooms ADD COLUMN notes TEXT DEFAULT ''"); } catch (_) {}
+  try { database.run('ALTER TABLE rooms ADD COLUMN updated_at TEXT'); } catch (_) {}
+
+  // ===== reservations: coloane adăugate pentru hotelModel.js + reservationModel.js (snake_case) =====
+  try { database.run("ALTER TABLE reservations ADD COLUMN tip TEXT DEFAULT 'hotel'"); } catch (_) {}
+  try { database.run("ALTER TABLE reservations ADD COLUMN data TEXT"); } catch (_) {}
+  try { database.run("ALTER TABLE reservations ADD COLUMN numar_persoane INTEGER DEFAULT 1"); } catch (_) {}
+  try { database.run('ALTER TABLE reservations ADD COLUMN nume_client TEXT'); } catch (_) {}
+  try { database.run('ALTER TABLE reservations ADD COLUMN email_client TEXT'); } catch (_) {}
+  try { database.run('ALTER TABLE reservations ADD COLUMN telefon_client TEXT'); } catch (_) {}
+  try { database.run("ALTER TABLE reservations ADD COLUMN observatii TEXT DEFAULT ''"); } catch (_) {}
+  try { database.run('ALTER TABLE reservations ADD COLUMN camera INTEGER'); } catch (_) {}
+  try { database.run('ALTER TABLE reservations ADD COLUMN updated_at TEXT'); } catch (_) {}
+  try { database.run('ALTER TABLE reservations ADD COLUMN restaurant_id INTEGER'); } catch (_) {}
+  try { database.run("ALTER TABLE reservations ADD COLUMN ora TEXT"); } catch (_) {}
+  try { database.run("ALTER TABLE reservations ADD COLUMN masa INTEGER"); } catch (_) {}
+  try { database.run("ALTER TABLE reservations ADD COLUMN status_facturare TEXT DEFAULT 'nefacturat'"); } catch (_) {}
+  try { database.run("ALTER TABLE reservations ADD COLUMN moneda TEXT DEFAULT 'RON'"); } catch (_) {}
+}
+
 async function getDb() {
   if (db) return db;
 
@@ -33,9 +82,15 @@ async function getDb() {
     password TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'client',
     name TEXT,
+    phone TEXT,
     tenant_id TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    restaurante TEXT DEFAULT '[]',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT
   )`);
+
+  // Aplică migrări pentru baze de date existente (coloane adăugate ulterior)
+  _applyMigrations(db);
 
   db.run(`CREATE TABLE IF NOT EXISTS hotels (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,33 +98,60 @@ async function getDb() {
     address TEXT,
     phone TEXT,
     email TEXT,
-    stars INTEGER DEFAULT 3,
+    stars INTEGER DEFAULT 0,
+    amenities TEXT DEFAULT '[]',
+    description TEXT DEFAULT '',
+    website TEXT DEFAULT '',
+    images TEXT DEFAULT '[]',
+    status TEXT DEFAULT 'active',
+    total_rooms INTEGER DEFAULT 0,
+    rating REAL DEFAULT 0,
     tenant_id TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT
   )`);
 
   db.run(`CREATE TABLE IF NOT EXISTS rooms (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     hotel_id INTEGER NOT NULL,
-    room_number TEXT NOT NULL,
-    type TEXT DEFAULT 'standard',
-    price REAL DEFAULT 0,
-    status TEXT DEFAULT 'available',
     tenant_id TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    tip TEXT,
+    numar INTEGER,
+    preturi_sezoniere TEXT DEFAULT '[]',
+    status TEXT DEFAULT 'available',
+    floor INTEGER,
+    capacity INTEGER DEFAULT 1,
+    amenities TEXT DEFAULT '[]',
+    notes TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT
   )`);
 
   db.run(`CREATE TABLE IF NOT EXISTS reservations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    guest_id INTEGER,
+    tenant_id TEXT,
+    tip TEXT DEFAULT 'hotel',
+    restaurant_id INTEGER,
     hotel_id INTEGER,
     room_id INTEGER,
+    data TEXT,
+    ora TEXT,
+    numar_persoane INTEGER DEFAULT 1,
+    nume_client TEXT,
+    email_client TEXT,
+    telefon_client TEXT,
+    observatii TEXT DEFAULT '',
+    masa INTEGER,
+    camera INTEGER,
     check_in TEXT,
     check_out TEXT,
-    status TEXT DEFAULT 'pending',
+    status TEXT DEFAULT 'confirmata',
+    status_facturare TEXT DEFAULT 'nefacturat',
     total_price REAL DEFAULT 0,
-    tenant_id TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    moneda TEXT DEFAULT 'RON',
+    guest_id INTEGER,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT
   )`);
 
   db.run(`CREATE TABLE IF NOT EXISTS restaurants (
@@ -148,6 +230,9 @@ async function getDb() {
     read INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
   )`);
+
+  // Index pentru căutare rapidă după email în contact_messages
+  db.run(`CREATE INDEX IF NOT EXISTS idx_contact_messages_email ON contact_messages (email)`);
 
   db.run(`CREATE TABLE IF NOT EXISTS tenants (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

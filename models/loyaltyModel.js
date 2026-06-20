@@ -598,7 +598,7 @@ async function useCoupon(code, userId, orderDetails = {}) {
  */
 async function cancelCoupon(code, userId) {
   if (!isValidCouponCode(code)) {
-    throw Error('Codul cuponului este invalid.');
+    throw new Error('Codul cuponului este invalid.');
   }
 
   if (!isValidUserId(userId)) {

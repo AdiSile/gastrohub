@@ -19,46 +19,46 @@ const {
 router.get('/', authenticate, async (req, res) => {
   try {
     const hotels = await getHotelsByTenant(req.user.tenantId);
-    res.json(hotels);
+    res.json({ success: true, data: hotels });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: { message: err.message, code: 'SERVER_ERROR' } });
   }
 });
 
 router.post('/', authenticate, authorize('super_admin', 'owner'), async (req, res) => {
   try {
     const hotel = await createHotel({ ...req.body, tenant_id: req.user.tenantId });
-    res.status(201).json(hotel);
+    res.status(201).json({ success: true, data: hotel });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ success: false, error: { message: err.message, code: 'VALIDATION_ERROR' } });
   }
 });
 
 router.get('/:id', authenticate, async (req, res) => {
   try {
     const hotel = await getHotelById(req.params.id);
-    if (!hotel) return res.status(404).json({ error: 'Hotel negăsit' });
-    res.json(hotel);
+    if (!hotel) return res.status(404).json({ success: false, error: { message: 'Hotel negăsit', code: 'NOT_FOUND' } });
+    res.json({ success: true, data: hotel });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: { message: err.message, code: 'SERVER_ERROR' } });
   }
 });
 
 router.put('/:id', authenticate, authorize('super_admin', 'owner'), async (req, res) => {
   try {
     const updated = await updateHotel(req.params.id, req.body);
-    res.json(updated);
+    res.json({ success: true, data: updated });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ success: false, error: { message: err.message, code: 'VALIDATION_ERROR' } });
   }
 });
 
 router.delete('/:id', authenticate, authorize('super_admin'), async (req, res) => {
   try {
     await deleteHotel(req.params.id);
-    res.json({ message: 'Hotel șters' });
+    res.json({ success: true, message: 'Hotel șters', data: null });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: { message: err.message, code: 'SERVER_ERROR' } });
   }
 });
 
@@ -66,46 +66,46 @@ router.delete('/:id', authenticate, authorize('super_admin'), async (req, res) =
 router.get('/:hotelId/rooms', authenticate, async (req, res) => {
   try {
     const rooms = await getRoomsByHotel(req.params.hotelId);
-    res.json(rooms);
+    res.json({ success: true, data: rooms });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: { message: err.message, code: 'SERVER_ERROR' } });
   }
 });
 
 router.post('/:hotelId/rooms', authenticate, authorize('super_admin', 'owner'), async (req, res) => {
   try {
     const room = await createRoom({ ...req.body, hotel_id: req.params.hotelId, tenant_id: req.user.tenantId });
-    res.status(201).json(room);
+    res.status(201).json({ success: true, data: room });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ success: false, error: { message: err.message, code: 'VALIDATION_ERROR' } });
   }
 });
 
 router.get('/rooms/:id', authenticate, async (req, res) => {
   try {
     const room = await getRoomById(req.params.id);
-    if (!room) return res.status(404).json({ error: 'Cameră negăsită' });
-    res.json(room);
+    if (!room) return res.status(404).json({ success: false, error: { message: 'Cameră negăsită', code: 'NOT_FOUND' } });
+    res.json({ success: true, data: room });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: { message: err.message, code: 'SERVER_ERROR' } });
   }
 });
 
 router.put('/rooms/:id', authenticate, authorize('super_admin', 'owner'), async (req, res) => {
   try {
     const updated = await updateRoom(req.params.id, req.body);
-    res.json(updated);
+    res.json({ success: true, data: updated });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ success: false, error: { message: err.message, code: 'VALIDATION_ERROR' } });
   }
 });
 
 router.delete('/rooms/:id', authenticate, authorize('super_admin'), async (req, res) => {
   try {
     await deleteRoom(req.params.id);
-    res.json({ message: 'Cameră ștearsă' });
+    res.json({ success: true, message: 'Cameră ștearsă', data: null });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: { message: err.message, code: 'SERVER_ERROR' } });
   }
 });
 

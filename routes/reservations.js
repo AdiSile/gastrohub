@@ -101,6 +101,29 @@ function resolveUserTenantId(req) {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: extrage opțiunile comune de paginare și sortare din query
+// ---------------------------------------------------------------------------
+
+/**
+ * Extrage opțiunile comune de paginare și sortare din req.query.
+ *
+ * @param {Object} queryParams - req.query
+ * @returns {Object} { options, limit, skip }
+ */
+function extractPaginationOptions(queryParams) {
+  const { sort, limit, skip } = queryParams;
+  const options = {};
+  if (sort) options.sort = sort;
+  if (limit) options.limit = parseInt(limit, 10);
+  if (skip) options.skip = parseInt(skip, 10);
+  return {
+    options,
+    limit: options.limit || null,
+    skip: options.skip || 0,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/reservations
 // ---------------------------------------------------------------------------
 
@@ -168,17 +191,14 @@ router.get(
         return next(new AppError('Nu ai un tenant asociat.', 400, 'MISSING_TENANT_ID'));
       }
 
-      const { tip, status, data, restaurantId, hotelId, sort, limit, skip } = req.query;
+      const { tip, status, data, restaurantId, hotelId } = req.query;
 
-      const options = {};
+      const { options, limit, skip } = extractPaginationOptions(req.query);
       if (tip) options.tip = tip;
       if (status) options.status = status;
       if (data) options.data = data;
       if (restaurantId) options.restaurantId = restaurantId;
       if (hotelId) options.hotelId = hotelId;
-      if (sort) options.sort = sort;
-      if (limit) options.limit = parseInt(limit, 10);
-      if (skip) options.skip = parseInt(skip, 10);
 
       const reservations = await findReservationsByTenant(tenantId, options);
 
@@ -186,8 +206,8 @@ router.get(
         success: true,
         data: {
           reservations,
-          limit: options.limit || null,
-          skip: options.skip || 0,
+          limit,
+          skip,
         },
       });
     } catch (err) {
@@ -244,9 +264,11 @@ router.get(
  *   - status  {string}  opțional – filtrare după status
  *   - data    {string}  opțional – filtrare după dată (YYYY-MM-DD)
  *   - masa    {number}  opțional – filtrare după număr masă
+ *   - limit   {number}  opțional – număr maxim de rezultate
+ *   - skip    {number}  opțional – câte rezultate se sar
  *
  * Răspuns (200):
- *   { success: true, data: { reservations } }
+ *   { success: true, data: { reservations, limit, skip } }
  */
 router.get(
   '/restaurant/:restaurantId',
@@ -270,6 +292,14 @@ router.get(
       .optional()
       .isInt({ min: 1 })
       .withMessage('Numărul mesei trebuie să fie un număr întreg pozitiv.'),
+    query('limit')
+      .optional()
+      .isInt({ min: 1, max: 100 })
+      .withMessage('Limit trebuie să fie un număr între 1 și 100.'),
+    query('skip')
+      .optional()
+      .isInt({ min: 0 })
+      .withMessage('Skip trebuie să fie un număr întreg, mai mare sau egal cu 0.'),
   ],
   handleValidationErrors,
   async (req, res, next) => {
@@ -280,21 +310,18 @@ router.get(
       }
 
       const { restaurantId } = req.params;
-      const { status, data, masa, sort, limit, skip } = req.query;
+      const { status, data, masa } = req.query;
 
-      const options = {};
+      const { options, limit, skip } = extractPaginationOptions(req.query);
       if (status) options.status = status;
       if (data) options.data = data;
       if (masa) options.masa = parseInt(masa, 10);
-      if (sort) options.sort = sort;
-      if (limit) options.limit = limit ? parseInt(limit, 10) : undefined;
-      if (skip) options.skip = skip ? parseInt(skip, 10) : undefined;
 
       const reservations = await findReservationsByRestaurant(restaurantId, tenantId, options);
 
       res.status(200).json({
         success: true,
-        data: { reservations },
+        data: { reservations, limit, skip },
       });
     } catch (err) {
       next(err);
@@ -315,9 +342,11 @@ router.get(
  *   - status  {string}  opțional – filtrare după status
  *   - data    {string}  opțional – filtrare după dată (YYYY-MM-DD)
  *   - camera  {string}  opțional – filtrare după cameră
+ *   - limit   {number}  opțional – număr maxim de rezultate
+ *   - skip    {number}  opțional – câte rezultate se sar
  *
  * Răspuns (200):
- *   { success: true, data: { reservations } }
+ *   { success: true, data: { reservations, limit, skip } }
  */
 router.get(
   '/hotel/:hotelId',
@@ -337,6 +366,20 @@ router.get(
       .optional()
       .matches(/^\d{4}-\d{2}-\d{2}$/)
       .withMessage('Data trebuie să fie în format YYYY-MM-DD.'),
+    query('camera')
+      .optional()
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('Camera trebuie să fie un șir nevid.'),
+    query('limit')
+      .optional()
+      .isInt({ min: 1, max: 100 })
+      .withMessage('Limit trebuie să fie un număr între 1 și 100.'),
+    query('skip')
+      .optional()
+      .isInt({ min: 0 })
+      .withMessage('Skip trebuie să fie un număr întreg, mai mare sau egal cu 0.'),
   ],
   handleValidationErrors,
   async (req, res, next) => {
@@ -347,21 +390,18 @@ router.get(
       }
 
       const { hotelId } = req.params;
-      const { status, data, camera, sort, limit, skip } = req.query;
+      const { status, data, camera } = req.query;
 
-      const options = {};
+      const { options, limit, skip } = extractPaginationOptions(req.query);
       if (status) options.status = status;
       if (data) options.data = data;
       if (camera) options.camera = camera;
-      if (sort) options.sort = sort;
-      if (limit) options.limit = limit ? parseInt(limit, 10) : undefined;
-      if (skip) options.skip = skip ? parseInt(skip, 10) : undefined;
 
       const reservations = await findReservationsByHotel(hotelId, tenantId, options);
 
       res.status(200).json({
         success: true,
-        data: { reservations },
+        data: { reservations, limit, skip },
       });
     } catch (err) {
       next(err);
@@ -383,9 +423,11 @@ router.get(
  *   - restaurantId {string}  opțional – filtrare după restaurant (dacă tip='restaurant')
  *   - hotelId      {string}  opțional – filtrare după hotel (dacă tip='hotel')
  *   - status       {string}  opțional – filtrare după status
+ *   - limit        {number}  opțional – număr maxim de rezultate
+ *   - skip         {number}  opțional – câte rezultate se sar
  *
  * Răspuns (200):
- *   { success: true, data: { reservations } }
+ *   { success: true, data: { reservations, limit, skip } }
  */
 router.get(
   '/date/:data',
@@ -415,6 +457,14 @@ router.get(
       .optional()
       .isIn(VALID_RESERVATION_STATUSES)
       .withMessage(`Statusul trebuie să fie unul dintre: ${VALID_RESERVATION_STATUSES.join(', ')}.`),
+    query('limit')
+      .optional()
+      .isInt({ min: 1, max: 100 })
+      .withMessage('Limit trebuie să fie un număr între 1 și 100.'),
+    query('skip')
+      .optional()
+      .isInt({ min: 0 })
+      .withMessage('Skip trebuie să fie un număr întreg, mai mare sau egal cu 0.'),
   ],
   handleValidationErrors,
   async (req, res, next) => {
@@ -425,22 +475,19 @@ router.get(
       }
 
       const { data } = req.params;
-      const { tip, restaurantId, hotelId, status, sort, limit, skip } = req.query;
+      const { tip, restaurantId, hotelId, status } = req.query;
 
-      const options = {};
+      const { options, limit, skip } = extractPaginationOptions(req.query);
       if (tip) options.tip = tip;
       if (restaurantId) options.restaurantId = restaurantId;
       if (hotelId) options.hotelId = hotelId;
       if (status) options.status = status;
-      if (sort) options.sort = sort;
-      if (limit) options.limit = limit ? parseInt(limit, 10) : undefined;
-      if (skip) options.skip = skip ? parseInt(skip, 10) : undefined;
 
       const reservations = await findReservationsByDate(data, tenantId, options);
 
       res.status(200).json({
         success: true,
-        data: { reservations },
+        data: { reservations, limit, skip },
       });
     } catch (err) {
       next(err);
@@ -457,8 +504,12 @@ router.get(
  * @desc    Listare rezervări după status
  * @access  Privat (autentificare necesară)
  *
+ * Query params:
+ *   - limit {number} opțional – număr maxim de rezultate
+ *   - skip  {number} opțional – câte rezultate se sar
+ *
  * Răspuns (200):
- *   { success: true, data: { reservations } }
+ *   { success: true, data: { reservations, limit, skip } }
  */
 router.get(
   '/status/:status',
@@ -468,6 +519,14 @@ router.get(
     param('status')
       .isIn(VALID_RESERVATION_STATUSES)
       .withMessage(`Statusul trebuie să fie unul dintre: ${VALID_RESERVATION_STATUSES.join(', ')}.`),
+    query('limit')
+      .optional()
+      .isInt({ min: 1, max: 100 })
+      .withMessage('Limit trebuie să fie un număr între 1 și 100.'),
+    query('skip')
+      .optional()
+      .isInt({ min: 0 })
+      .withMessage('Skip trebuie să fie un număr întreg, mai mare sau egal cu 0.'),
   ],
   handleValidationErrors,
   async (req, res, next) => {
@@ -478,18 +537,14 @@ router.get(
       }
 
       const { status } = req.params;
-      const { sort, limit, skip } = req.query;
 
-      const options = {};
-      if (sort) options.sort = sort;
-      if (limit) options.limit = limit ? parseInt(limit, 10) : undefined;
-      if (skip) options.skip = skip ? parseInt(skip, 10) : undefined;
+      const { options, limit, skip } = extractPaginationOptions(req.query);
 
       const reservations = await findReservationsByStatus(status, tenantId, options);
 
       res.status(200).json({
         success: true,
-        data: { reservations },
+        data: { reservations, limit, skip },
       });
     } catch (err) {
       next(err);
@@ -507,10 +562,12 @@ router.get(
  * @access  Privat (autentificare necesară)
  *
  * Query params:
- *   - q {string} obligatoriu – termen de căutare (nume, email, telefon)
+ *   - q     {string} obligatoriu – termen de căutare (nume, email, telefon)
+ *   - limit {number} opțional – număr maxim de rezultate
+ *   - skip  {number} opțional – câte rezultate se sar
  *
  * Răspuns (200):
- *   { success: true, data: { reservations } }
+ *   { success: true, data: { reservations, limit, skip } }
  */
 router.get(
   '/person/search',
@@ -522,6 +579,14 @@ router.get(
       .trim()
       .notEmpty()
       .withMessage('Termenul de căutare (q) este obligatoriu.'),
+    query('limit')
+      .optional()
+      .isInt({ min: 1, max: 100 })
+      .withMessage('Limit trebuie să fie un număr între 1 și 100.'),
+    query('skip')
+      .optional()
+      .isInt({ min: 0 })
+      .withMessage('Skip trebuie să fie un număr întreg, mai mare sau egal cu 0.'),
   ],
   handleValidationErrors,
   async (req, res, next) => {
@@ -531,18 +596,15 @@ router.get(
         return next(new AppError('Nu ai un tenant asociat.', 400, 'MISSING_TENANT_ID'));
       }
 
-      const { q, sort, limit, skip } = req.query;
+      const { q } = req.query;
 
-      const options = {};
-      if (sort) options.sort = sort;
-      if (limit) options.limit = limit ? parseInt(limit, 10) : undefined;
-      if (skip) options.skip = skip ? parseInt(skip, 10) : undefined;
+      const { options, limit, skip } = extractPaginationOptions(req.query);
 
       const reservations = await findReservationsByPerson(q, tenantId, options);
 
       res.status(200).json({
         success: true,
-        data: { reservations },
+        data: { reservations, limit, skip },
       });
     } catch (err) {
       next(err);
@@ -847,7 +909,7 @@ router.patch(
  * @access  Privat (autentificare necesară, super_admin, owner)
  *
  * Răspuns (200):
- *   { success: true, message: 'Rezervarea a fost ștearsă.' }
+ *   { success: true, data: { message } }
  */
 router.delete(
   '/:id',
@@ -875,7 +937,7 @@ router.delete(
 
       res.status(200).json({
         success: true,
-        message: 'Rezervarea a fost ștearsă.',
+        data: { message: 'Rezervarea a fost ștearsă.' },
       });
     } catch (err) {
       next(err);
@@ -1048,8 +1110,12 @@ router.patch(
  * @desc    Istoric rezervări pentru un oaspete
  * @access  Privat (autentificare necesară)
  *
+ * Query params:
+ *   - limit {number} opțional – număr maxim de rezultate
+ *   - skip  {number} opțional – câte rezultate se sar
+ *
  * Răspuns (200):
- *   { success: true, data: { reservations } }
+ *   { success: true, data: { reservations, limit, skip } }
  */
 router.get(
   '/guest/:guestId/history',
@@ -1061,6 +1127,14 @@ router.get(
       .trim()
       .notEmpty()
       .withMessage('ID-ul oaspetelui este obligatoriu.'),
+    query('limit')
+      .optional()
+      .isInt({ min: 1, max: 100 })
+      .withMessage('Limit trebuie să fie un număr între 1 și 100.'),
+    query('skip')
+      .optional()
+      .isInt({ min: 0 })
+      .withMessage('Skip trebuie să fie un număr întreg, mai mare sau egal cu 0.'),
   ],
   handleValidationErrors,
   async (req, res, next) => {
@@ -1070,18 +1144,13 @@ router.get(
         return next(new AppError('Nu ai un tenant asociat.', 400, 'MISSING_TENANT_ID'));
       }
 
-      const { sort, limit, skip } = req.query;
-
-      const options = {};
-      if (sort) options.sort = sort;
-      if (limit) options.limit = limit ? parseInt(limit, 10) : undefined;
-      if (skip) options.skip = skip ? parseInt(skip, 10) : undefined;
+      const { options, limit, skip } = extractPaginationOptions(req.query);
 
       const reservations = await findReservationsByGuestId(req.params.guestId, tenantId, options);
 
       res.status(200).json({
         success: true,
-        data: { reservations },
+        data: { reservations, limit, skip },
       });
     } catch (err) {
       next(err);

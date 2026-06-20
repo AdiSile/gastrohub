@@ -106,7 +106,7 @@ function generateToken(user, expiresIn = DEFAULT_EXPIRES_IN) {
 function setTokenCookie(res, token) {
   const cookieOptions = {
     httpOnly: true,               // Inaccesibil din JavaScript (XSS)
-    secure: process.env.NODE_ENV === 'production',  // Doar HTTPS în producție
+    secure: true,                 // Doar HTTPS
     sameSite: 'strict',           // Protecție CSRF
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 zile în milisecunde
     path: '/',
@@ -123,7 +123,7 @@ function setTokenCookie(res, token) {
 function clearTokenCookie(res) {
   res.clearCookie(TOKEN_COOKIE_NAME, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: true,
     sameSite: 'strict',
     path: '/',
   });

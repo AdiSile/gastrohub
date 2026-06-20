@@ -190,7 +190,7 @@ router.get(
       if (sortOrder) options.sortOrder = sortOrder;
 
       const items = await findInventoryItemsByTenant(tenantId, options);
-      const total = await countInventoryItems(tenantId, { category });
+      const total = await countInventoryItems(tenantId, { category, locationId, locationType, supplierId });
 
       res.status(200).json({
         success: true,
@@ -455,36 +455,20 @@ router.get(
       const { type, locationId, locationType, itemId, page, limit, sortBy, sortOrder } = req.query;
 
       const options = {};
-      if (type) options.type = type;
-      if (locationId) options.locationId = locationId;
-      if (locationType) options.locationType = locationType;
-      if (itemId) options.itemId = itemId;
       if (page) options.page = parseInt(page, 10);
       if (limit) options.limit = parseInt(limit, 10);
       if (sortBy) options.sortBy = sortBy;
       if (sortOrder) options.sortOrder = sortOrder;
 
-      // Determinăm ce funcție de căutare folosim
-      let transactions;
-      let total;
+      // Construim obiectul de filtre pentru tranzacții
+      const filters = {};
+      if (type) filters.type = type;
+      if (locationId) filters.locationId = locationId;
+      if (locationType) filters.locationType = locationType;
+      if (itemId) filters.itemId = itemId;
 
-      if (type && !locationId && !itemId) {
-        // Filtrare doar după tip
-        transactions = await findTransactionsByType(type, { ...options, tenantId });
-        total = await countTransactions(tenantId, { type });
-      } else if (locationId && locationType) {
-        // Filtrare după locație
-        transactions = await findTransactionsByLocation(locationId, locationType, options);
-        total = await countTransactions(tenantId, { locationId, locationType });
-      } else if (itemId) {
-        // Filtrare după item
-        transactions = await findTransactionsByItem(itemId, options);
-        total = await countTransactions(tenantId, { itemId });
-      } else {
-        // Căutare generală pe tenant
-        transactions = await findTransactionsByTenant(tenantId, options);
-        total = await countTransactions(tenantId, {});
-      }
+      const transactions = await findTransactionsByTenant(tenantId, { ...filters, ...options });
+      const total = await countTransactions(tenantId, filters);
 
       const currentPage = options.page || 1;
       const currentLimit = options.limit || 50;
@@ -1577,7 +1561,7 @@ router.patch(
  * @access  Privat (autentificare + rol manager, owner, super_admin)
  *
  * Răspuns (200):
- *   { success: true, message: 'Itemul de inventar a fost șters cu succes.' }
+ *   { success: true, data: {}, message: 'Itemul de inventar a fost șters cu succes.' }
  */
 router.delete(
   '/:id',
@@ -1619,6 +1603,7 @@ router.delete(
 
       res.status(200).json({
         success: true,
+        data: {},
         message: 'Itemul de inventar a fost șters cu succes.',
       });
     } catch (err) {

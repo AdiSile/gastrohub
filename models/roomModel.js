@@ -230,13 +230,15 @@ class RoomModel {
       );
     }
 
-    // hotelId – obligatoriu
-    if (!data.hotelId) {
+    // hotelId – obligatoriu (suportă și hotel_id)
+    const hotelId = data.hotelId || data.hotel_id;
+    if (!hotelId) {
       errors.push('ID-ul hotelului este obligatoriu.');
     }
 
-    // tenantId – obligatoriu
-    if (!data.tenantId) {
+    // tenantId – obligatoriu (suportă și tenant_id)
+    const tenantId = data.tenantId || data.tenant_id;
+    if (!tenantId) {
       errors.push('ID-ul tenant-ului este obligatoriu.');
     }
 
@@ -277,6 +279,10 @@ class RoomModel {
       Array.isArray(data.prețuriSezoniere) ? data.prețuriSezoniere : []
     );
 
+    // Normalizare: suportă atât hotelId/hotel_id cât și tenantId/tenant_id
+    const hotelId = data.hotelId || data.hotel_id;
+    const tenantId = data.tenantId || data.tenant_id;
+
     const db = await getDb();
 
     try {
@@ -285,8 +291,8 @@ class RoomModel {
         `INSERT INTO rooms (hotelId, tenantId, tip, numar, preturiSezoniere, status, createdAt, updatedAt)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          data.hotelId,
-          data.tenantId,
+          hotelId,
+          tenantId,
           data.tip,
           data.număr,
           preturiSezoniereJson,

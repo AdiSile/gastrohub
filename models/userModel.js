@@ -1,9 +1,31 @@
+**Modificări în `createUser`:**
+1. Se extrag `name` și `phone` din `userData`
+2. `name` – opțional, dacă e string nevid se trimite la INSERT, altfel `null`
+3. `phone` – opțional, validat prin noua funcție `isValidPhone` (acceptă 7-20 caractere: cifre, spații, `+`, `-`, paranteze)
+4. INSERT-ul include acum coloanele `name` și `phone`
+5. S-a adăugat funcția `isValidPhone` (exportată)
+6. JSDoc-ul a fost actualizat pentru a documenta noii parametri
+7. Comentariul header listează acum `name` și `phone` printre câmpurile suportate
+
+---
+
+### config/db.js
+
+**Modificări în schema `users`:**
+1. `CREATE TABLE` include acum coloanele: `phone TEXT`, `restaurante TEXT DEFAULT '[]'`, `updated_at TEXT`
+2. S-a adăugat funcția `_applyMigrations()` care rulează `ALTER TABLE ADD COLUMN` pentru bazele de date existente (cu `try/catch` pentru a ignora erorile de coloană deja existentă)
+3. Migrările se aplică după `CREATE TABLE IF NOT EXISTS`, asigurând compatibilitatea atât cu baze noi cât și cu cele vechi
+
+---
+
+### models/userModel.js
 'use strict';
 
 // ---------------------------------------------------------------------------
 // Model User – GastroHub
 // Definirea structurii, validărilor și operațiilor comune pentru un utilizator.
-// Câmpuri suportate: email, password (hash), role, tenant_id, restaurante asociate
+// Câmpuri suportate: email, password (hash), role, name, phone, tenant_id,
+// restaurante asociate, created_at, updated_at
 //
 // Backend: exclusiv SQLite (prin getDb() din config/db, folosind db.run() / db.exec()).
 // ---------------------------------------------------------------------------
@@ -137,6 +159,18 @@ function isValidPassword(password) {
   return password.length >= 6 && password.length <= 128;
 }
 
+/**
+ * Verifică dacă un număr de telefon are un format rezonabil (opțional).
+ * Acceptă șiruri care conțin între 7 și 20 de caractere (cifre, spații, +, -, paranteze).
+ * @param {string} phone
+ * @returns {boolean}
+ */
+function isValidPhone(phone) {
+  if (typeof phone !== 'string') return false;
+  var cleaned = phone.replace(/[\s\-\(\)\+]/g, '');
+  return cleaned.length >= 7 && cleaned.length <= 20 && /^\+?[\d\s\-\(\)]+$/.test(phone);
+}
+
 // ---------------------------------------------------------------------------
 // Helpers pentru promisificare bcrypt
 // ---------------------------------------------------------------------------
@@ -185,6 +219,8 @@ function _bcryptCompare(plainPassword, hashedPassword) {
  * @param {string} userData.email - Email unic
  * @param {string} userData.password - Parolă (plain text – va fi hashuită)
  * @param {string} [userData.role='client'] - Rolul utilizatorului
+ * @param {string} [userData.name] - Numele afișat al utilizatorului (opțional)
+ * @param {string} [userData.phone] - Numărul de telefon (opțional)
  * @param {string|null} [userData.tenantId=null] - ID-ul tenant-ului
  * @param {Array} [userData.restaurante=[]] - Listă de ID-uri restaurante asociate
  * @returns {Promise<Object>} Documentul utilizatorului (fără password hash)
@@ -203,6 +239,8 @@ async function createUser(userData) {
   var role = userData.role;
   var tenantId = userData.tenantId;
   var restaurante = userData.restaurante;
+  var name = userData.name;
+  var phone = userData.phone;
 
   // Validare email
   if (!email || !isValidEmail(email)) {
@@ -229,6 +267,22 @@ async function createUser(userData) {
 
   // Validare restaurante – trebuie să fie array
   var finalRestaurante = Array.isArray(restaurante) ? restaurante : [];
+
+  // Validare name – opțional, dar dacă e transmis trebuie să fie string nevid
+  var finalName = (typeof name === 'string' && name.trim().length > 0) ? name.trim() : null;
+
+  // Validare phone – opțional, dar dacă e transmis trebuie să respecte formatul
+  var finalPhone = null;
+  if (typeof phone === 'string' && phone.trim().length > 0) {
+    if (!isValidPhone(phone.trim())) {
+      throw new AppError(
+        'Numărul de telefon este invalid. Format acceptat: +40712345678.',
+        400,
+        'INVALID_PHONE'
+      );
+    }
+    finalPhone = phone.trim();
+  }
 
   // -----------------------------------------------------------------------
   // Hash parolă
@@ -265,9 +319,9 @@ async function createUser(userData) {
 
     var restauranteJson = JSON.stringify(finalRestaurante);
     db.run(
-      'INSERT INTO users (email, password, role, tenant_id, restaurante, created_at, updated_at) ' +
-      'VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [normalizedEmail, hashedPassword, finalRole, finalTenantId, restauranteJson, now, now]
+      'INSERT INTO users (email, password, role, name, phone, tenant_id, restaurante, created_at, updated_at) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [normalizedEmail, hashedPassword, finalRole, finalName, finalPhone, finalTenantId, restauranteJson, now, now]
     );
 
     var metaResult = db.exec('SELECT last_insert_rowid() AS id');
@@ -789,6 +843,7 @@ module.exports = {
   isValidEmail: isValidEmail,
   isValidRole: isValidRole,
   isValidPassword: isValidPassword,
+  isValidPhone: isValidPhone,
   VALID_ROLES: VALID_ROLES,
 
   // Operații CRUD

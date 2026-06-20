@@ -4,12 +4,13 @@
 // Model Reservation – GastroHub
 // Gestionează rezervările (restaurant + hotel) prin SQLite.
 //
-// Structura unui document:
+// Structura unui document (camelCase – API):
 //   _id              {string}  – conversie din id (SQLite)
 //   tenantId         {string}  – tenant-ul proprietar (obligatoriu)
 //   tip              {string}  – 'restaurant' | 'hotel' (obligatoriu)
 //   restaurantId     {string}  – ID restaurant (dacă tip='restaurant')
 //   hotelId          {string}  – ID hotel (dacă tip='hotel')
+//   roomId           {string}  – ID cameră (dacă tip='hotel')
 //   data             {string}  – data rezervării YYYY-MM-DD (obligatoriu)
 //   ora              {string}  – ora HH:mm
 //   numarPersoane    {number}  – număr persoane (obligatoriu)
@@ -28,10 +29,56 @@
 //   guestId          {string}  – ID guest (legătură cu sistemul de oaspeți)
 //   createdAt        {string}  – data creării (ISO 8601)
 //   updatedAt        {string}  – data actualizării (ISO 8601)
+//
+// NOTĂ: Coloanele din baza de date SQLite sunt snake_case.
+// Modelul face conversia automată snake_case ↔ camelCase.
 // ---------------------------------------------------------------------------
 
 const { getDb, run, get, all } = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
+
+// ---------------------------------------------------------------------------
+// Mapare coloane DB (snake_case) ↔ Document JS (camelCase)
+// ---------------------------------------------------------------------------
+
+/**
+ * Mapare de la numele coloanei din baza de date (snake_case)
+ * la cheia din documentul JavaScript (camelCase).
+ */
+const COL_DB_TO_JS = {
+  'id': '_id',
+  'tenant_id': 'tenantId',
+  'tip': 'tip',
+  'restaurant_id': 'restaurantId',
+  'hotel_id': 'hotelId',
+  'room_id': 'roomId',
+  'data': 'data',
+  'ora': 'ora',
+  'numar_persoane': 'numarPersoane',
+  'nume_client': 'numeClient',
+  'email_client': 'emailClient',
+  'telefon_client': 'telefonClient',
+  'observatii': 'observatii',
+  'masa': 'masa',
+  'camera': 'camera',
+  'check_in': 'checkIn',
+  'check_out': 'checkOut',
+  'status': 'status',
+  'status_facturare': 'statusFacturare',
+  'total_price': 'sumaTotala',
+  'moneda': 'moneda',
+  'guest_id': 'guestId',
+  'created_at': 'createdAt',
+  'updated_at': 'updatedAt',
+};
+
+/**
+ * Mapare inversă: camelCase → snake_case (pentru coloane SQL).
+ */
+const COL_JS_TO_DB = {};
+for (const dbCol of Object.keys(COL_DB_TO_JS)) {
+  COL_JS_TO_DB[COL_DB_TO_JS[dbCol]] = dbCol;
+}
 
 // ---------------------------------------------------------------------------
 // Detecție backend SQLite
@@ -57,6 +104,7 @@ async function _isSqlAvailable() {
 
 /**
  * Convertește un rând SQL (id INTEGER) într-un obiect cu _id string.
+ * Face maparea snake_case → camelCase folosind COL_DB_TO_JS.
  * @param {Object} row
  * @returns {Promise<Object>}
  */
@@ -65,9 +113,14 @@ async function _sqlRowToDoc(row) {
   const doc = {};
   const keys = Object.keys(row);
   for (let i = 0; i < keys.length; i++) {
-    doc[keys[i]] = row[keys[i]];
+    const dbKey = keys[i];
+    const jsKey = COL_DB_TO_JS[dbKey] || dbKey;
+    doc[jsKey] = row[dbKey];
   }
-  doc._id = String(row.id);
+  // Asigurăm _id string
+  if (row.id !== undefined && row.id !== null) {
+    doc._id = String(row.id);
+  }
   return doc;
 }
 
@@ -169,10 +222,11 @@ function nowISO() {
 
 /**
  * Construiește clauza WHERE și parametrii pentru o interogare SQL.
+ * Folosește nume de coloană snake_case (DB).
  */
 function _buildSqlWhere(tenantId, options) {
   if (!options) options = {};
-  const clauses = ['tenantId = ?'];
+  const clauses = ['tenant_id = ?'];
   const params = [tenantId];
 
   if (options.tip) {
@@ -191,12 +245,12 @@ function _buildSqlWhere(tenantId, options) {
   }
 
   if (options.restaurantId) {
-    clauses.push('restaurantId = ?');
+    clauses.push('restaurant_id = ?');
     params.push(options.restaurantId);
   }
 
   if (options.hotelId) {
-    clauses.push('hotelId = ?');
+    clauses.push('hotel_id = ?');
     params.push(options.hotelId);
   }
 
@@ -215,13 +269,17 @@ function _buildSqlWhere(tenantId, options) {
 
 /**
  * Construiește clauza ORDER BY din opțiunea sort.
+ * Acceptă atât nume camelCase cât și snake_case; le convertește la snake_case pentru SQL.
  */
 function _buildSqlOrderBy(sort) {
-  if (!sort) return ' ORDER BY createdAt DESC';
+  if (!sort) return ' ORDER BY created_at DESC';
 
   const isDesc = sort.startsWith('-');
-  const field = isDesc ? sort.slice(1) : sort;
-  const safeField = field.replace(/[^a-zA-Z0-9_]/g, '');
+  const fieldRaw = isDesc ? sort.slice(1) : sort;
+
+  // Dacă e camelCase, îl mapăm la snake_case; altfel păstrăm ca atare
+  const dbField = COL_JS_TO_DB[fieldRaw] || fieldRaw;
+  const safeField = dbField.replace(/[^a-zA-Z0-9_]/g, '');
   return ' ORDER BY ' + safeField + (isDesc ? ' DESC' : ' ASC');
 }
 
@@ -358,7 +416,7 @@ async function createReservation(data) {
     throw new AppError('Data de check-out trebuie să fie după data de check-in.', 400, 'CHECKOUT_BEFORE_CHECKIN');
   }
 
-  if (tip === 'restaurant' && masa !== null && (!Number.isInteger(masa) || masa < 1)) {
+  if (tip === 'restaurant' && masa !== null && masa !== undefined && (!Number.isInteger(masa) || masa < 1)) {
     throw new AppError('Numărul mesei trebuie să fie un întreg pozitiv.', 400, 'INVALID_TABLE_NUMBER');
   }
 
@@ -370,13 +428,13 @@ async function createReservation(data) {
   const finalObs = typeof observatii === 'string' ? observatii.trim() : '';
   const finalRestaurantId = tip === 'restaurant' ? (restaurantId || null) : null;
   const finalHotelId = tip === 'hotel' ? (hotelId || null) : null;
-  const finalMasa = tip === 'restaurant' && masa !== null ? masa : null;
+  const finalMasa = tip === 'restaurant' && masa !== null && masa !== undefined ? Number(masa) : null;
   const finalCamera = tip === 'hotel' && camera ? camera.trim() : null;
   const finalCheckIn = tip === 'hotel' && checkIn ? checkIn : null;
   const finalCheckOut = tip === 'hotel' && checkOut ? checkOut : null;
 
   // -------------------------------------------------------------------
-  // SQLite
+  // SQLite – coloane snake_case
   // -------------------------------------------------------------------
   if (!(await _isSqlAvailable())) {
     throw new AppError('Baza de date nu este disponibilă.', 500, 'DB_UNAVAILABLE');
@@ -385,11 +443,11 @@ async function createReservation(data) {
   try {
     const result = await run(
       'INSERT INTO reservations (' +
-      'tenantId, tip, restaurantId, hotelId, data, ora, ' +
-      'numarPersoane, numeClient, emailClient, telefonClient, ' +
-      'observatii, masa, camera, checkIn, checkOut, ' +
-      'status, statusFacturare, sumaTotala, moneda, guestId, ' +
-      'createdAt, updatedAt' +
+      'tenant_id, tip, restaurant_id, hotel_id, data, ora, ' +
+      'numar_persoane, nume_client, email_client, telefon_client, ' +
+      'observatii, masa, camera, check_in, check_out, ' +
+      'status, status_facturare, total_price, moneda, guest_id, ' +
+      'created_at, updated_at' +
       ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         tenantId, tip, finalRestaurantId, finalHotelId, dataRez, ora || null,
@@ -442,12 +500,12 @@ async function findReservationById(id, tenantId) {
     let row;
     if (isNaN(numericId)) {
       row = await get(
-        'SELECT * FROM reservations WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
+        'SELECT * FROM reservations WHERE CAST(id AS TEXT) = ? AND tenant_id = ?',
         [String(id), tenantId]
       );
     } else {
       row = await get(
-        'SELECT * FROM reservations WHERE id = ? AND tenantId = ?',
+        'SELECT * FROM reservations WHERE id = ? AND tenant_id = ?',
         [numericId, tenantId]
       );
     }
@@ -610,7 +668,7 @@ async function findReservationsByPerson(searchTerm, tenantId, options) {
 
   try {
     const likeTerm = '%' + searchTerm.trim() + '%';
-    const whereClause = 'tenantId = ? AND (numeClient LIKE ? OR emailClient LIKE ? OR telefonClient LIKE ?)';
+    const whereClause = 'tenant_id = ? AND (nume_client LIKE ? OR email_client LIKE ? OR telefon_client LIKE ?)';
     let params = [tenantId, likeTerm, likeTerm, likeTerm];
 
     let sql = 'SELECT * FROM reservations WHERE ' + whereClause;
@@ -736,7 +794,7 @@ async function findReservationsByCheckInDate(date, tenantId, options) {
   }
 
   try {
-    let whereClause = 'tenantId = ? AND tip = ? AND checkIn = ?';
+    let whereClause = 'tenant_id = ? AND tip = ? AND check_in = ?';
     const params = [tenantId, 'hotel', date];
 
     if (options.status) {
@@ -783,7 +841,7 @@ async function findReservationsByCheckOutDate(date, tenantId, options) {
   }
 
   try {
-    let whereClause = 'tenantId = ? AND tip = ? AND checkOut = ?';
+    let whereClause = 'tenant_id = ? AND tip = ? AND check_out = ?';
     const params = [tenantId, 'hotel', date];
 
     if (options.status) {
@@ -830,7 +888,7 @@ async function findReservationsByGuestId(guestId, tenantId, options) {
   }
 
   try {
-    let sql = 'SELECT * FROM reservations WHERE tenantId = ? AND guestId = ?';
+    let sql = 'SELECT * FROM reservations WHERE tenant_id = ? AND guest_id = ?';
     const params = [tenantId, guestId];
     sql += _buildSqlOrderBy(options.sort);
 
@@ -873,6 +931,7 @@ async function updateReservation(id, tenantId, updates) {
   }
 
   // Construim setul de actualizare (doar câmpurile permise)
+  // NOTĂ: lista conține chei camelCase; le convertim la snake_case pentru SQL
   const allowedFields = [
     'tip', 'restaurantId', 'hotelId', 'data', 'ora',
     'numarPersoane', 'numeClient', 'emailClient', 'telefonClient',
@@ -891,6 +950,8 @@ async function updateReservation(id, tenantId, updates) {
     const field = allowedFields[i];
     if (field in updates) {
       const val = updates[field];
+      // Obținem numele coloanei DB
+      const dbCol = COL_JS_TO_DB[field] || field;
 
       // Validări per câmp
       switch (field) {
@@ -902,7 +963,7 @@ async function updateReservation(id, tenantId, updates) {
               'INVALID_RESERVATION_TYPE'
             );
           }
-          sqlSetClauses.push('tip = ?');
+          sqlSetClauses.push(dbCol + ' = ?');
           sqlParams.push(val);
           break;
 
@@ -910,7 +971,7 @@ async function updateReservation(id, tenantId, updates) {
           if (val && !isValidDate(val)) {
             throw new AppError('Data trebuie să fie în format YYYY-MM-DD.', 400, 'INVALID_DATE');
           }
-          sqlSetClauses.push('data = ?');
+          sqlSetClauses.push(dbCol + ' = ?');
           sqlParams.push(val);
           break;
 
@@ -918,7 +979,7 @@ async function updateReservation(id, tenantId, updates) {
           if (val && !isValidTime(val)) {
             throw new AppError('Ora trebuie să fie în format HH:mm.', 400, 'INVALID_TIME');
           }
-          sqlSetClauses.push('ora = ?');
+          sqlSetClauses.push(dbCol + ' = ?');
           sqlParams.push(val);
           break;
 
@@ -926,7 +987,7 @@ async function updateReservation(id, tenantId, updates) {
           if (!Number.isInteger(val) || val < 1) {
             throw new AppError('Numărul de persoane trebuie să fie un întreg pozitiv.', 400, 'INVALID_GUEST_COUNT');
           }
-          sqlSetClauses.push('numarPersoane = ?');
+          sqlSetClauses.push(dbCol + ' = ?');
           sqlParams.push(val);
           break;
 
@@ -934,7 +995,7 @@ async function updateReservation(id, tenantId, updates) {
           if (val && !isValidString(val, 2, 200)) {
             throw new AppError('Numele clientului trebuie să aibă 2-200 caractere.', 400, 'INVALID_CLIENT_NAME');
           }
-          sqlSetClauses.push('numeClient = ?');
+          sqlSetClauses.push(dbCol + ' = ?');
           sqlParams.push(val.trim());
           break;
 
@@ -942,7 +1003,7 @@ async function updateReservation(id, tenantId, updates) {
           if (val && !isValidEmail(val)) {
             throw new AppError('Email-ul clientului nu este valid.', 400, 'INVALID_EMAIL');
           }
-          sqlSetClauses.push('emailClient = ?');
+          sqlSetClauses.push(dbCol + ' = ?');
           sqlParams.push(val.trim().toLowerCase());
           break;
 
@@ -950,25 +1011,25 @@ async function updateReservation(id, tenantId, updates) {
           if (val && !isValidPhone(val)) {
             throw new AppError('Telefonul clientului nu este valid.', 400, 'INVALID_PHONE');
           }
-          sqlSetClauses.push('telefonClient = ?');
+          sqlSetClauses.push(dbCol + ' = ?');
           sqlParams.push(val.trim());
           break;
 
         case 'observatii':
-          sqlSetClauses.push('observatii = ?');
+          sqlSetClauses.push(dbCol + ' = ?');
           sqlParams.push(typeof val === 'string' ? val.trim() : '');
           break;
 
         case 'masa':
-          if (val !== null && (!Number.isInteger(val) || val < 1)) {
+          if (val !== null && val !== undefined && (!Number.isInteger(val) || val < 1)) {
             throw new AppError('Numărul mesei trebuie să fie un întreg pozitiv.', 400, 'INVALID_TABLE_NUMBER');
           }
-          sqlSetClauses.push('masa = ?');
-          sqlParams.push(val);
+          sqlSetClauses.push(dbCol + ' = ?');
+          sqlParams.push(val !== null && val !== undefined ? val : null);
           break;
 
         case 'camera':
-          sqlSetClauses.push('camera = ?');
+          sqlSetClauses.push(dbCol + ' = ?');
           sqlParams.push(val ? val.trim() : null);
           break;
 
@@ -977,7 +1038,7 @@ async function updateReservation(id, tenantId, updates) {
             throw new AppError('Data de check-in nu este validă (YYYY-MM-DD).', 400, 'INVALID_CHECKIN_DATE');
           }
           finalCheckIn = val || null;
-          sqlSetClauses.push('checkIn = ?');
+          sqlSetClauses.push(dbCol + ' = ?');
           sqlParams.push(finalCheckIn);
           break;
 
@@ -986,17 +1047,17 @@ async function updateReservation(id, tenantId, updates) {
             throw new AppError('Data de check-out nu este validă (YYYY-MM-DD).', 400, 'INVALID_CHECKOUT_DATE');
           }
           finalCheckOut = val || null;
-          sqlSetClauses.push('checkOut = ?');
+          sqlSetClauses.push(dbCol + ' = ?');
           sqlParams.push(finalCheckOut);
           break;
 
         case 'restaurantId':
-          sqlSetClauses.push('restaurantId = ?');
+          sqlSetClauses.push(dbCol + ' = ?');
           sqlParams.push(val || null);
           break;
 
         case 'hotelId':
-          sqlSetClauses.push('hotelId = ?');
+          sqlSetClauses.push(dbCol + ' = ?');
           sqlParams.push(val || null);
           break;
 
@@ -1011,7 +1072,7 @@ async function updateReservation(id, tenantId, updates) {
     throw new AppError('Data de check-out trebuie să fie după data de check-in.', 400, 'CHECKOUT_BEFORE_CHECKIN');
   }
 
-  sqlSetClauses.push('updatedAt = ?');
+  sqlSetClauses.push('updated_at = ?');
   sqlParams.push(now);
 
   // ---- SQLite ----
@@ -1025,7 +1086,7 @@ async function updateReservation(id, tenantId, updates) {
       sqlParams.push(numericId);
       sqlParams.push(tenantId);
       const result = await run(
-        'UPDATE reservations SET ' + sqlSetClauses.join(', ') + ' WHERE id = ? AND tenantId = ?',
+        'UPDATE reservations SET ' + sqlSetClauses.join(', ') + ' WHERE id = ? AND tenant_id = ?',
         sqlParams
       );
       if (result.changes === 0) {
@@ -1037,7 +1098,7 @@ async function updateReservation(id, tenantId, updates) {
       sqlParams.push(String(id));
       sqlParams.push(tenantId);
       const result = await run(
-        'UPDATE reservations SET ' + sqlSetClauses.join(', ') + ' WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
+        'UPDATE reservations SET ' + sqlSetClauses.join(', ') + ' WHERE CAST(id AS TEXT) = ? AND tenant_id = ?',
         sqlParams
       );
       if (result.changes === 0) {
@@ -1106,12 +1167,12 @@ async function updateReservationStatus(id, tenantId, status) {
     let result;
     if (!isNaN(numericId)) {
       result = await run(
-        'UPDATE reservations SET status = ?, updatedAt = ? WHERE id = ? AND tenantId = ?',
+        'UPDATE reservations SET status = ?, updated_at = ? WHERE id = ? AND tenant_id = ?',
         [status, now, numericId, tenantId]
       );
     } else {
       result = await run(
-        'UPDATE reservations SET status = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
+        'UPDATE reservations SET status = ?, updated_at = ? WHERE CAST(id AS TEXT) = ? AND tenant_id = ?',
         [status, now, String(id), tenantId]
       );
     }
@@ -1154,12 +1215,12 @@ async function deleteReservation(id, tenantId) {
     let result;
     if (!isNaN(numericId)) {
       result = await run(
-        'DELETE FROM reservations WHERE id = ? AND tenantId = ?',
+        'DELETE FROM reservations WHERE id = ? AND tenant_id = ?',
         [numericId, tenantId]
       );
     } else {
       result = await run(
-        'DELETE FROM reservations WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
+        'DELETE FROM reservations WHERE CAST(id AS TEXT) = ? AND tenant_id = ?',
         [String(id), tenantId]
       );
     }
@@ -1221,12 +1282,12 @@ async function checkInReservation(id, tenantId) {
     const numericId = parseInt(id, 10);
     if (!isNaN(numericId)) {
       await run(
-        'UPDATE reservations SET status = ?, updatedAt = ? WHERE id = ? AND tenantId = ?',
+        'UPDATE reservations SET status = ?, updated_at = ? WHERE id = ? AND tenant_id = ?',
         ['check-in', now, numericId, tenantId]
       );
     } else {
       await run(
-        'UPDATE reservations SET status = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
+        'UPDATE reservations SET status = ?, updated_at = ? WHERE CAST(id AS TEXT) = ? AND tenant_id = ?',
         ['check-in', now, String(id), tenantId]
       );
     }
@@ -1292,12 +1353,12 @@ async function checkOutReservation(id, tenantId) {
     const numericId = parseInt(id, 10);
     if (!isNaN(numericId)) {
       await run(
-        'UPDATE reservations SET status = ?, updatedAt = ? WHERE id = ? AND tenantId = ?',
+        'UPDATE reservations SET status = ?, updated_at = ? WHERE id = ? AND tenant_id = ?',
         ['check-out', now, numericId, tenantId]
       );
     } else {
       await run(
-        'UPDATE reservations SET status = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
+        'UPDATE reservations SET status = ?, updated_at = ? WHERE CAST(id AS TEXT) = ? AND tenant_id = ?',
         ['check-out', now, String(id), tenantId]
       );
     }
@@ -1368,11 +1429,11 @@ async function updateReservationBilling(id, tenantId, billingData) {
 
   try {
     const numericId = parseInt(id, 10);
-    const setClauses = ['statusFacturare = ?', 'updatedAt = ?'];
+    const setClauses = ['status_facturare = ?', 'updated_at = ?'];
     const params = [statusFacturare, now];
 
     if (sumaTotala !== undefined && sumaTotala !== null) {
-      setClauses.push('sumaTotala = ?');
+      setClauses.push('total_price = ?');
       params.push(sumaTotala);
     }
     if (finalMoneda !== undefined) {
@@ -1384,14 +1445,14 @@ async function updateReservationBilling(id, tenantId, billingData) {
       params.push(numericId);
       params.push(tenantId);
       await run(
-        'UPDATE reservations SET ' + setClauses.join(', ') + ' WHERE id = ? AND tenantId = ?',
+        'UPDATE reservations SET ' + setClauses.join(', ') + ' WHERE id = ? AND tenant_id = ?',
         params
       );
     } else {
       params.push(String(id));
       params.push(tenantId);
       await run(
-        'UPDATE reservations SET ' + setClauses.join(', ') + ' WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
+        'UPDATE reservations SET ' + setClauses.join(', ') + ' WHERE CAST(id AS TEXT) = ? AND tenant_id = ?',
         params
       );
     }

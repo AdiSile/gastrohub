@@ -6,6 +6,9 @@
 // Foloseste SQLite via sql.js (getDb() din config/db).
 // Toate operatiile sunt Promise-based (async/await) cu interogari SQL parametrizate.
 // Utilizeaza direct db.run() / db.exec() dupa await getDb().
+//
+// NOTĂ: Coloanele SQL folosesc snake_case (convenția bazei de date).
+// Funcțiile normalize* convertesc la camelCase pentru API.
 // ---------------------------------------------------------------------------
 
 const { getDb } = require('../config/db');
@@ -87,6 +90,7 @@ function isValidPhone(phone) {
 
 /**
  * Normalizeaza un rând din tabela hotels la formatul asteptat de controller-e.
+ * Citește coloanele snake_case din baza de date și produce camelCase.
  * @param {Object} row
  * @returns {Object}
  */
@@ -95,12 +99,12 @@ function normalizeHotel(row) {
   return {
     _id: String(row.id),
     id: row.id,
-    nume: row.name,
-    name: row.name,
-    adresa: row.address,
-    address: row.address,
-    numarStele: row.stars,
-    stars: row.stars,
+    nume: row.name || '',
+    name: row.name || '',
+    adresa: row.address || '',
+    address: row.address || '',
+    numarStele: row.stars || 0,
+    stars: row.stars || 0,
     facilitati: safeJsonParse(row.amenities, []),
     amenities: safeJsonParse(row.amenities, []),
     descriere: row.description || '',
@@ -111,17 +115,18 @@ function normalizeHotel(row) {
     website: row.website || '',
     imagine: safeJsonParse(row.images, []),
     images: safeJsonParse(row.images, []),
-    totalRooms: row.totalRooms || 0,
+    totalRooms: row.total_rooms || 0,
     status: row.status || 'active',
     rating: row.rating || 0,
-    tenantId: row.tenantId,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    tenantId: row.tenant_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
 /**
  * Normalizeaza un rând din tabela rooms.
+ * Citește coloanele snake_case din baza de date și produce camelCase.
  * @param {Object} row
  * @returns {Object}
  */
@@ -130,23 +135,24 @@ function normalizeRoom(row) {
   return {
     _id: String(row.id),
     id: row.id,
-    tip: row.tip,
+    tip: row.tip || '',
     numar: row.numar,
-    preturiSezoniere: safeJsonParse(row.preturiSezoniere, []),
-    status: row.status,
+    preturiSezoniere: safeJsonParse(row.preturi_sezoniere, []),
+    status: row.status || 'available',
     floor: row.floor,
-    capacity: row.capacity,
+    capacity: row.capacity || 1,
     amenities: safeJsonParse(row.amenities, []),
     notes: row.notes || '',
-    hotelId: row.hotelId,
-    tenantId: row.tenantId,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    hotelId: row.hotel_id,
+    tenantId: row.tenant_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
 /**
  * Normalizeaza un rând din tabela reservations (tip hotel).
+ * Citește coloanele snake_case din baza de date și produce camelCase.
  * @param {Object} row
  * @returns {Object}
  */
@@ -155,32 +161,32 @@ function normalizeReservation(row) {
   return {
     _id: String(row.id),
     id: row.id,
-    tip: row.tip,
-    hotelId: row.hotelId,
-    tenantId: row.tenantId,
-    numePersoana: row.numeClient,
-    numeClient: row.numeClient,
-    telefon: row.telefonClient || '',
-    telefonClient: row.telefonClient || '',
-    email: row.emailClient || '',
-    emailClient: row.emailClient || '',
-    checkIn: row.checkIn,
-    checkOut: row.checkOut,
+    tip: row.tip || 'hotel',
+    hotelId: row.hotel_id,
+    tenantId: row.tenant_id,
+    numePersoana: row.nume_client || '',
+    numeClient: row.nume_client || '',
+    telefon: row.telefon_client || '',
+    telefonClient: row.telefon_client || '',
+    email: row.email_client || '',
+    emailClient: row.email_client || '',
+    checkIn: row.check_in || '',
+    checkOut: row.check_out || '',
     cameraId: row.camera || null,
     camera: row.camera || null,
-    numarPersoane: row.numarPersoane,
-    status: row.status,
+    numarPersoane: row.numar_persoane || 1,
+    status: row.status || 'confirmata',
     note: row.observatii || '',
     observatii: row.observatii || '',
-    guestId: row.guestId || null,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    guestId: row.guest_id || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
 /**
  * Parseaza JSON in siguranta; returneaza defaultValue daca parsarea esueaza.
- * @param {string} str
+ * @param {string|*} str
  * @param {*} defaultValue
  * @returns {*}
  */
@@ -308,7 +314,9 @@ async function createHotel(data) {
     throw new Error('Adresa hotelului este obligatorie si trebuie sa aiba intre 1 si 500 de caractere.');
   }
 
-  if (!data.tenantId) {
+  // Suportă atât tenantId (camelCase) cât și tenant_id (snake_case)
+  const tenantId = data.tenantId || data.tenant_id;
+  if (!tenantId) {
     throw new Error('ID-ul tenant-ului este obligatoriu.');
   }
 
@@ -350,10 +358,10 @@ async function createHotel(data) {
   const db = await getDb();
   const result = _dbRun(
     db,
-    `INSERT INTO hotels (tenantId, name, address, stars, amenities, description, phone, email, website, images, status, createdAt, updatedAt)
+    `INSERT INTO hotels (tenant_id, name, address, stars, amenities, description, phone, email, website, images, status, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      data.tenantId,
+      tenantId,
       data.nume.trim(),
       data.adresa.trim(),
       data.numarStele !== undefined && data.numarStele !== null ? data.numarStele : 0,
@@ -400,7 +408,7 @@ async function getHotelsByTenant(tenantId) {
   }
 
   const db = await getDb();
-  const rows = _dbAll(db, 'SELECT * FROM hotels WHERE tenantId = ? ORDER BY name ASC', [tenantId]);
+  const rows = _dbAll(db, 'SELECT * FROM hotels WHERE tenant_id = ? ORDER BY name ASC', [tenantId]);
   return rows.map(normalizeHotel);
 }
 
@@ -483,6 +491,7 @@ async function updateHotel(id, updates) {
   }
 
   // Construieste clauza SET dinamic
+  // Mapare camp API → coloană SQL (snake_case)
   const setClauses = [];
   const params = [];
   const fieldMap = {
@@ -512,7 +521,7 @@ async function updateHotel(id, updates) {
     }
   }
 
-  setClauses.push('updatedAt = ?');
+  setClauses.push('updated_at = ?');
   params.push(nowISO());
   params.push(intId);
 
@@ -589,11 +598,15 @@ async function createRoom(data) {
     throw new Error('Numarul camerei trebuie sa fie un numar intreg pozitiv.');
   }
 
-  if (!data.hotelId) {
+  // Suportă atât hotelId (camelCase) cât și hotel_id (snake_case)
+  const hotelId = data.hotelId || data.hotel_id;
+  if (!hotelId) {
     throw new Error('ID-ul hotelului este obligatoriu.');
   }
 
-  if (!data.tenantId) {
+  // Suportă atât tenantId (camelCase) cât și tenant_id (snake_case)
+  const tenantId = data.tenantId || data.tenant_id;
+  if (!tenantId) {
     throw new Error('ID-ul tenant-ului este obligatoriu.');
   }
 
@@ -619,11 +632,11 @@ async function createRoom(data) {
   const db = await getDb();
   const result = _dbRun(
     db,
-    `INSERT INTO rooms (hotelId, tenantId, tip, numar, preturiSezoniere, status, floor, capacity, amenities, notes, createdAt, updatedAt)
+    `INSERT INTO rooms (hotel_id, tenant_id, tip, numar, preturi_sezoniere, status, floor, capacity, amenities, notes, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      String(data.hotelId),
-      data.tenantId,
+      String(hotelId),
+      tenantId,
       data.tip,
       data.numar,
       preturiSezoniere,
@@ -668,7 +681,7 @@ async function getRoomsByHotel(hotelId) {
   }
 
   const db = await getDb();
-  const rows = _dbAll(db, 'SELECT * FROM rooms WHERE hotelId = ? ORDER BY numar ASC', [String(hotelId)]);
+  const rows = _dbAll(db, 'SELECT * FROM rooms WHERE hotel_id = ? ORDER BY numar ASC', [String(hotelId)]);
   return rows.map(normalizeRoom);
 }
 
@@ -733,13 +746,13 @@ async function updateRoom(id, updates) {
     throw new Error('Camera nu a fost gasita.');
   }
 
-  // Construieste SET dinamic
+  // Construieste SET dinamic (coloanele rămân cu numele din schema: tip, numar, preturi_sezoniere, status)
   const setClauses = [];
   const params = [];
 
   for (const [key, value] of Object.entries(updates)) {
     if (key === 'preturiSezoniere') {
-      setClauses.push('preturiSezoniere = ?');
+      setClauses.push('preturi_sezoniere = ?');
       params.push(JSON.stringify(value));
     } else {
       setClauses.push(`${key} = ?`);
@@ -747,7 +760,7 @@ async function updateRoom(id, updates) {
     }
   }
 
-  setClauses.push('updatedAt = ?');
+  setClauses.push('updated_at = ?');
   params.push(nowISO());
   params.push(intId);
 
@@ -803,11 +816,15 @@ async function createReservation(data) {
     throw new Error('Datele rezervarii sunt invalide.');
   }
 
-  if (!data.hotelId) {
+  // Suportă atât hotelId (camelCase) cât și hotel_id (snake_case)
+  const hotelId = data.hotelId || data.hotel_id;
+  if (!hotelId) {
     throw new Error('ID-ul hotelului este obligatoriu.');
   }
 
-  if (!data.tenantId) {
+  // Suportă atât tenantId (camelCase) cât și tenant_id (snake_case)
+  const tenantId = data.tenantId || data.tenant_id;
+  if (!tenantId) {
     throw new Error('ID-ul tenant-ului este obligatoriu.');
   }
 
@@ -845,6 +862,11 @@ async function createReservation(data) {
     }
   }
 
+  // Suportă atât cameraId (camelCase) cât și camera_id (snake_case)
+  const cameraId = data.cameraId || data.camera_id || null;
+  // Suportă atât guestId (camelCase) cât și guest_id (snake_case)
+  const guestId = data.guestId || data.guest_id || null;
+
   const now = nowISO();
   const status = data.status || 'confirmata';
 
@@ -852,24 +874,24 @@ async function createReservation(data) {
   const result = _dbRun(
     db,
     `INSERT INTO reservations
-       (tenantId, tip, hotelId, data, numarPersoane, numeClient, emailClient, telefonClient,
-        observatii, camera, checkIn, checkOut, status, guestId, createdAt, updatedAt)
+       (tenant_id, tip, hotel_id, data, numar_persoane, nume_client, email_client, telefon_client,
+        observatii, camera, check_in, check_out, status, guest_id, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      data.tenantId,
+      tenantId,
       'hotel',
-      String(data.hotelId),
+      String(hotelId),
       data.checkIn,
       data.numarPersoane || 1,
       data.numePersoana.trim(),
       data.email || '',
       data.telefon || '',
       data.note || '',
-      data.cameraId || null,
+      cameraId,
       data.checkIn,
       data.checkOut,
       status,
-      data.guestId || null,
+      guestId,
       now,
       now,
     ]
@@ -908,7 +930,7 @@ async function getReservationsByHotel(hotelId) {
   const db = await getDb();
   const rows = _dbAll(
     db,
-    'SELECT * FROM reservations WHERE hotelId = ? ORDER BY checkIn ASC',
+    'SELECT * FROM reservations WHERE hotel_id = ? ORDER BY check_in ASC',
     [String(hotelId)]
   );
   return rows.map(normalizeReservation);
@@ -929,8 +951,8 @@ async function getReservationsByGuest(guestInfo) {
   const rows = _dbAll(
     db,
     `SELECT * FROM reservations
-     WHERE numeClient LIKE ? OR telefonClient LIKE ? OR emailClient LIKE ?
-     ORDER BY checkIn DESC`,
+     WHERE nume_client LIKE ? OR telefon_client LIKE ? OR email_client LIKE ?
+     ORDER BY check_in DESC`,
     [searchTerm, searchTerm, searchTerm]
   );
   return rows.map(normalizeReservation);
@@ -957,7 +979,7 @@ async function updateReservationStatus(id, status) {
 
   const result = _dbRun(
     db,
-    'UPDATE reservations SET status = ?, updatedAt = ? WHERE id = ?',
+    'UPDATE reservations SET status = ?, updated_at = ? WHERE id = ?',
     [status, now, intId]
   );
 
@@ -998,7 +1020,7 @@ async function cancelReservation(id) {
   const now = nowISO();
   _dbRun(
     db,
-    'UPDATE reservations SET status = ?, updatedAt = ? WHERE id = ?',
+    'UPDATE reservations SET status = ?, updated_at = ? WHERE id = ?',
     ['anulata', now, intId]
   );
 

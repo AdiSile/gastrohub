@@ -34,7 +34,7 @@
 
 const { AppError } = require('./errorHandler');
 const { getTenantConfig, getTenantDb, DEFAULT_TENANT_CONFIG } = require('../config/tenant');
-const { getDb } = require('../config/db');
+const { getDb, get: dbGet } = require('../config/db');
 
 // ---------------------------------------------------------------------------
 // Constante
@@ -106,8 +106,7 @@ function isValidSlug(slug) {
 async function findTenantBySlug(slug) {
   if (!slug || !isValidSlug(slug)) return null;
 
-  const db = await getDb();
-  const row = db.get(
+  const row = await dbGet(
     'SELECT id, name, slug, settings, createdAt FROM tenants WHERE slug = ?',
     [slug]
   );
@@ -143,8 +142,7 @@ async function findTenantBySlug(slug) {
 async function findTenantById(id) {
   if (!id) return null;
 
-  const db = await getDb();
-  const row = db.get(
+  const row = await dbGet(
     'SELECT id, name, slug, settings, createdAt FROM tenants WHERE CAST(id AS TEXT) = ?',
     [String(id)]
   );

@@ -8,14 +8,103 @@
   const customer = locals.customer || locals.user || {};
   const recentOrders = locals.recentOrders || [];
   const activeReservations = locals.activeReservations || [];
-  const loyaltyPoints = locals.loyaltyPoints || 0;
-  const pendingOrdersCount = locals.pendingOrdersCount || 0;
+  const loyaltyPoints = Number(locals.loyaltyPoints) || 0;
+  const pendingOrdersCount = Number(locals.pendingOrdersCount) || 0;
   const fetchErrors = locals.fetchErrors || [];
 
-  // Normalizează date utilizator pentru integrare robustă
-  const displayName = customer.nume || customer.name || customer.displayName || '';
-  const displayEmail = customer.email || customer.contactEmail || '';
-  const displayPhone = customer.telefon || customer.phone || customer.contactPhone || '';
+  // ============================================================
+  // Helper: formatare sigură a datelor (evită „Invalid Date”)
+  // ============================================================
+  function safeDate(dateInput, options) {
+    if (!dateInput) return '';
+    try {
+      var d = new Date(dateInput);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleDateString('ro-RO', options);
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // ============================================================
+  // Helper: escape sigur pentru atribute HTML (onclick etc.)
+  // ============================================================
+  function safeId(id) {
+    if (id === undefined || id === null || id === '') return '';
+    return String(id).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // ============================================================
+  // Helper: nume restaurant/hotel/locație compus
+  // ============================================================
+  function resolveLocationName(obj) {
+    if (!obj) return 'Locație';
+    if (obj.restaurantId && obj.restaurantId.name) return obj.restaurantId.name;
+    if (obj.hotelId && obj.hotelId.nume) return obj.hotelId.nume;
+    if (obj.restaurantName) return obj.restaurantName;
+    if (obj.hotelName) return obj.hotelName;
+    if (obj.locationName) return obj.locationName;
+    return 'Locație';
+  }
+
+  // ============================================================
+  // Normalizează date utilizator pentru integrare robustă cu userModel
+  // Fallback extins pentru customer.nume, customer.email, customer.phone
+  // ============================================================
+
+  // --- Nume: compunere din prenume + numeFamilie dacă customer.nume lipsește ---
+  const rawFirstName = customer.firstName || customer.prenume || '';
+  const rawLastName  = customer.lastName || customer.numeFamilie || customer.familyName || '';
+  const composedName = [rawFirstName, rawLastName].filter(Boolean).join(' ');
+
+  const customerNume = customer.nume
+    || customer.name
+    || composedName
+    || customer.displayName
+    || customer.username
+    || '';
+
+  const customerEmail = customer.email
+    || customer.contactEmail
+    || customer.emailAddress
+    || customer.mail
+    || '';
+
+  const customerPhone = customer.telefon
+    || customer.phone
+    || customer.contactPhone
+    || customer.phoneNumber
+    || customer.mobile
+    || customer.telefonMobil
+    || '';
+
+  // Asigură că obiectul customer are câmpurile normalizate (pentru orice referință ulterioară)
+  customer.nume  = customerNume || customer.nume || '';
+  customer.email = customerEmail || customer.email || '';
+  customer.phone = customerPhone || customer.telefon || customer.phone || '';
+
+  // --- Variabile display folosite în template ---
+  const displayName = customer.nume
+    || customer.name
+    || composedName
+    || customer.displayName
+    || customer.username
+    || '';
+
+  const displayEmail = customer.email
+    || customer.contactEmail
+    || customer.emailAddress
+    || customer.mail
+    || '';
+
+  const displayPhone = customer.telefon
+    || customer.phone
+    || customer.contactPhone
+    || customer.phoneNumber
+    || customer.mobile
+    || customer.telefonMobil
+    || '';
+
   const avatarInitial = displayName ? displayName.charAt(0).toUpperCase() : '👤';
   const customerSince = customer.createdAt || customer.joinedAt || customer.dataInregistrare || '';
   const loyaltyTier = customer.loyaltyTier || customer.nivelLoialitate || '';
@@ -32,6 +121,48 @@
     'diamant': '👑 Diamant',
   };
   const loyaltyTierLabel = tierLabels[loyaltyTier] || loyaltyTier || '';
+
+  // ============================================================
+  // Progres loialitate: cât mai are până la următorul tier
+  // ============================================================
+  const tierThresholds = {
+    'bronze':    { next: 'silver',  pointsNeeded: 500,  label: '🥈 Silver' },
+    'silver':    { next: 'gold',    pointsNeeded: 1500, label: '🥇 Gold' },
+    'gold':      { next: 'platinum',pointsNeeded: 5000, label: '💎 Platinum' },
+    'platinum':  { next: 'diamond', pointsNeeded: 15000,label: '👑 Diamond' },
+    'diamond':   { next: null,      pointsNeeded: 0,    label: 'Maxim' },
+    'bronz':     { next: 'argint',  pointsNeeded: 500,  label: '🥈 Argint' },
+    'argint':    { next: 'aur',     pointsNeeded: 1500, label: '🥇 Aur' },
+    'aur':       { next: 'platina', pointsNeeded: 5000, label: '💎 Platină' },
+    'platina':   { next: 'diamant', pointsNeeded: 15000,label: '👑 Diamant' },
+    'diamant':   { next: null,      pointsNeeded: 0,    label: 'Maxim' },
+  };
+  var tierInfo = tierThresholds[loyaltyTier] || null;
+  var pointsToNextTier = tierInfo ? Math.max(0, tierInfo.pointsNeeded - loyaltyPoints) : 0;
+  var tierProgressPercent = tierInfo && tierInfo.pointsNeeded > 0
+    ? Math.min(100, Math.round((loyaltyPoints / tierInfo.pointsNeeded) * 100))
+    : 100;
+
+  // ============================================================
+  // Detectare date incomplete (banner diagnoză)
+  // ============================================================
+  var hasIncompleteData = !displayName || !displayEmail || !customerSince;
+  var missingFields = [];
+  if (!displayName) missingFields.push('nume');
+  if (!displayEmail) missingFields.push('email');
+  if (!customerSince) missingFields.push('data înregistrare');
+
+  // Log silențios pentru diagnoză (doar în development)
+  if (locals.dev || locals.debug) {
+    console.log('[dashboard.ejs] customer normalized:', {
+      nume: displayName || '(lipsă)',
+      email: displayEmail || '(lipsă)',
+      phone: displayPhone || '(lipsă)',
+      tier: loyaltyTierLabel || '(none)',
+      points: loyaltyPoints,
+      incomplete: hasIncompleteData
+    });
+  }
 %>
 
 <style>
@@ -226,6 +357,116 @@
   .dash-errors-banner i {
     color: #d97706;
     flex-shrink: 0;
+  }
+
+  /* ============================================================
+     INCOMPLETE DATA BANNER — Banner mov pal
+     ============================================================ */
+  .dash-incomplete-banner {
+    background: rgba(139, 92, 246, 0.06);
+    background: rgba(255, 255, 255, 0.50);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(139, 92, 246, 0.22);
+    border-radius: var(--radius-md);
+    padding: 10px 16px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: var(--dash-purple-700);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 1;
+    position: relative;
+  }
+
+  .dash-incomplete-banner i {
+    color: var(--dash-purple-500);
+    flex-shrink: 0;
+  }
+
+  .dash-incomplete-banner a {
+    color: var(--dash-purple-700);
+    font-weight: 600;
+    text-decoration: underline;
+  }
+
+  /* ============================================================
+     LOYALTY PROGRESS BAR (sub stats)
+     ============================================================ */
+  .loyalty-progress-section {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--glass-shadow);
+    padding: 18px 22px;
+    margin-bottom: 24px;
+    z-index: 1;
+    position: relative;
+  }
+
+  .loyalty-progress-section .loyalty-progress-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .loyalty-progress-section .loyalty-progress-header .loyalty-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .loyalty-progress-section .loyalty-progress-header .loyalty-title i {
+    color: #d97706;
+  }
+
+  .loyalty-progress-section .loyalty-progress-header .loyalty-next {
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+
+  .loyalty-progress-bar-outer {
+    width: 100%;
+    height: 10px;
+    background: rgba(139, 92, 246, 0.08);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+
+  .loyalty-progress-bar-inner {
+    height: 100%;
+    background: linear-gradient(90deg, var(--dash-purple-500), #f59e0b);
+    border-radius: 8px;
+    transition: width 0.6s ease;
+    min-width: 2%;
+  }
+
+  .loyalty-progress-bar-inner.max {
+    background: linear-gradient(90deg, #f59e0b, #fbbf24, #f59e0b);
+    animation: shimmer 2s infinite;
+  }
+
+  @keyframes shimmer {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+  }
+
+  .loyalty-progress-detail {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--color-text-muted);
   }
 
   /* ============================================================
@@ -677,6 +918,11 @@
     .dash-user-summary .summary-divider {
       display: none;
     }
+
+    .loyalty-progress-section .loyalty-progress-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
   }
 
   @media (max-width: 480px) {
@@ -716,7 +962,11 @@
         Bun venit<%= displayName ? ', ' + displayName : '' %>!
       </h1>
       <div class="welcome-sub">
-        <span>Explorează comenzile, rezervările și ofertele tale.</span>
+        <% if (displayName) { %>
+          <span>Explorează comenzile, rezervările și ofertele tale.</span>
+        <% } else { %>
+          <span>Dashboard-ul tău personal. Completează-ți profilul pentru o experiență mai bună.</span>
+        <% } %>
         <% if (loyaltyTierLabel) { %>
           <span class="welcome-tier-badge"><%= loyaltyTierLabel %></span>
         <% } %>
@@ -738,6 +988,19 @@
         <% fetchErrors.forEach(function(err, idx) { %>
           <%= err %><%= idx < fetchErrors.length - 1 ? ' ' : '' %>
         <% }); %>
+      </span>
+    </div>
+  <% } %>
+
+  <!-- ============================================================
+       INCOMPLETE DATA BANNER (date lipsă după login)
+       ============================================================ -->
+  <% if (hasIncompleteData) { %>
+    <div class="dash-incomplete-banner">
+      <i class="fas fa-user-edit"></i>
+      <span>
+        Unele date din profil sunt incomplete (<%= missingFields.join(', ') %>).
+        <a href="/customer/profile">Completează profilul</a> pentru o experiență mai bună.
       </span>
     </div>
   <% } %>
@@ -766,7 +1029,7 @@
     <% if (customerSince) { %>
       <span class="summary-item">
         <i class="fas fa-user-clock"></i>
-        Client din <%= new Date(customerSince).toLocaleDateString('ro-RO', { year: 'numeric', month: 'long' }) %>
+        Client din <%= safeDate(customerSince, { year: 'numeric', month: 'long' }) %>
       </span>
     <% } %>
   </div>
@@ -835,6 +1098,52 @@
       </div>
     </div>
   </div>
+
+  <!-- ============================================================
+       LOYALTY PROGRESS — Bară progres spre următorul tier
+       ============================================================ -->
+  <% if (tierInfo && tierInfo.next) { %>
+  <div class="loyalty-progress-section">
+    <div class="loyalty-progress-header">
+      <span class="loyalty-title">
+        <i class="fas fa-crown"></i> Progres loialitate
+      </span>
+      <span class="loyalty-next">
+        <% if (pointsToNextTier > 0) { %>
+          Încă <strong><%= pointsToNextTier %></strong> puncte până la <%= tierInfo.label %>
+        <% } else { %>
+          🎉 Ai atins <%= tierInfo.label %>!
+        <% } %>
+      </span>
+    </div>
+    <div class="loyalty-progress-bar-outer">
+      <div class="loyalty-progress-bar-inner<%= tierProgressPercent >= 100 ? ' max' : '' %>"
+           style="width:<%= tierProgressPercent %>%;"></div>
+    </div>
+    <div class="loyalty-progress-detail">
+      <span><%= loyaltyPoints %> puncte</span>
+      <span><%= tierInfo.pointsNeeded %> necesare</span>
+    </div>
+  </div>
+  <% } else if (tierInfo && !tierInfo.next) { %>
+  <div class="loyalty-progress-section">
+    <div class="loyalty-progress-header">
+      <span class="loyalty-title">
+        <i class="fas fa-crown"></i> Progres loialitate
+      </span>
+      <span class="loyalty-next">
+        👑 Ai atins nivelul maxim — <strong><%= tierInfo.label %></strong>!
+      </span>
+    </div>
+    <div class="loyalty-progress-bar-outer">
+      <div class="loyalty-progress-bar-inner max" style="width:100%;"></div>
+    </div>
+    <div class="loyalty-progress-detail">
+      <span><%= loyaltyPoints %> puncte</span>
+      <span>Nivel maxim</span>
+    </div>
+  </div>
+  <% } %>
 
   <!-- ============================================================
        QUICK LINKS
@@ -945,20 +1254,22 @@
                   'confirmed': 'Confirmat'
                 };
                 var statusLabel = statusLabels[orderStatus] || orderStatus || '—';
-                var restaurantName = (order.restaurantId && order.restaurantId.name) ? order.restaurantId.name : (order.restaurantName || 'Restaurant');
-                var orderTotal = order.total || 0;
+                var restaurantName = resolveLocationName(order);
+                var orderTotal = Number(order.total) || 0;
                 var orderDate = order.createdAt || order.date || '';
+                var orderId = safeId(order._id);
+                var orderUrl = orderId ? '/customer/orders/' + orderId : '#';
               %>
-              <li class="dash-item" style="cursor:pointer;" onclick="window.location.href='/customer/orders/<%= order._id %>'">
+              <li class="dash-item" style="<%= orderId ? 'cursor:pointer;' : 'cursor:default;opacity:0.6;' %>" <%= orderId ? 'onclick="window.location.href=\'' + orderUrl + '\'"' : '' %>>
                 <div class="item-dot <%= dotClass %>"></div>
                 <div class="item-info">
                   <div class="item-title"><%= restaurantName %></div>
                   <div class="item-meta">
                     <%= statusLabel %>
-                    <% if (orderDate) { %> · <%= new Date(orderDate).toLocaleDateString('ro-RO', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) %><% } %>
+                    <% if (orderDate) { %> · <%= safeDate(orderDate, { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) %><% } %>
                   </div>
                 </div>
-                <div class="item-extra"><%= Number(orderTotal).toFixed(2) %> lei</div>
+                <div class="item-extra"><%= orderTotal.toFixed(2) %> lei</div>
               </li>
             <% }); %>
           </ul>
@@ -1004,15 +1315,17 @@
                 };
                 var rezLabel = rezStatusLabels[rezStatus] || rezStatus || '—';
                 var rezDate = rez.data || rez.date || rez.checkInDate || '';
-                var rezLocation = rez.restaurantId && rez.restaurantId.name ? rez.restaurantId.name : (rez.restaurantName || (rez.hotelId && rez.hotelId.nume ? rez.hotelId.nume : 'Locație'));
+                var rezLocation = resolveLocationName(rez);
+                var rezId = safeId(rez._id);
+                var rezUrl = rezId ? '/customer/reservations/' + rezId : '#';
               %>
-              <li class="dash-item" style="cursor:pointer;" onclick="window.location.href='/customer/reservations/<%= rez._id %>'">
+              <li class="dash-item" style="<%= rezId ? 'cursor:pointer;' : 'cursor:default;opacity:0.6;' %>" <%= rezId ? 'onclick="window.location.href=\'' + rezUrl + '\'"' : '' %>>
                 <div class="item-dot <%= dotClass %>"></div>
                 <div class="item-info">
                   <div class="item-title"><%= rezLocation %></div>
                   <div class="item-meta">
                     <%= rezLabel %>
-                    <% if (rezDate) { %> · <%= new Date(rezDate).toLocaleDateString('ro-RO', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) %><% } %>
+                    <% if (rezDate) { %> · <%= safeDate(rezDate, { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) %><% } %>
                   </div>
                 </div>
                 <div class="item-extra">

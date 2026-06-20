@@ -1004,13 +1004,16 @@
     <div class="sidebar-footer">
       <div class="user-info">
         <div class="user-avatar">
-          <%= locals.customer && customer.nume ? customer.nume.charAt(0).toUpperCase() : '?' %>
+          <% 
+            var displayName = (locals.customer && (customer.nume || customer.name)) ? (customer.nume || customer.name) : '';
+          %>
+          <%= displayName ? displayName.charAt(0).toUpperCase() : '?' %>
         </div>
         <div class="user-details">
-          <div class="user-name"><%= locals.customer ? customer.nume : 'Vizitator' %></div>
-          <div class="user-email"><%= locals.customer ? customer.email : '' %></div>
+          <div class="user-name"><%= (locals.customer && (customer.nume || customer.name)) ? (customer.nume || customer.name) : 'Vizitator' %></div>
+          <div class="user-email"><%= (locals.customer && customer.email) ? customer.email : '' %></div>
         </div>
-        <a href="/api/customer/auth/logout" class="logout-link" title="Deconectare">
+        <a href="/api/auth/logout" class="logout-link" title="Deconectare">
           <i class="fas fa-sign-out-alt"></i>
         </a>
       </div>
@@ -1188,4 +1191,25 @@
         'completed':    { label: 'Finalizat', class: 'badge-active' },
         'cancelled':    { label: 'Anulat', class: 'badge-closed' },
         'refunded':     { label: 'Rambursat', class: 'badge-info' },
-        'checked_in
+        'checked_in':   { label: 'Check-in', class: 'badge-info' },
+        'checked_out':  { label: 'Check-out', class: 'badge-closed' }
+      };
+
+      var entry = map[status];
+      if (entry) {
+        return '<span class="badge ' + entry.class + '">' + entry.label + '</span>';
+      }
+      return '<span class="badge">' + (status || 'Necunoscut') + '</span>';
+    }
+
+    window.formatStatus = formatStatus;
+    window.formatCurrency = formatCurrency;
+    window.formatDate = formatDate;
+    window.formatShortDate = formatShortDate;
+  </script>
+
+  <% if (locals.scripts) { %>
+    <%- scripts %>
+  <% } %>
+</body>
+</html>

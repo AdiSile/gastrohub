@@ -1244,7 +1244,7 @@
             <div class="kpi-label">Venituri Totale</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-value" id="admin-stat-tenants">0</div>
+            <div class="kpi-value" id="admin-stat-tenants"><%= tenantCount || 0 %></div>
             <div class="kpi-label">Tenanți Activi</div>
           </div>
           <div class="kpi-card info">
@@ -1271,7 +1271,7 @@
           <div class="stat-card">
             <div class="stat-icon green"><i class="fas fa-store"></i></div>
             <div class="stat-info">
-              <div class="stat-value" id="admin-stat-active-tenants">0</div>
+              <div class="stat-value" id="admin-stat-active-tenants"><%= tenantCount || 0 %></div>
               <div class="stat-label">Tenanți Activi</div>
               <div class="stat-change up" id="admin-stat-tenant-change">+0</div>
             </div>

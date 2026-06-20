@@ -71,7 +71,7 @@ function handleValidationErrors(req, res, next) {
  *   - status        {string} opțional – implicit 'active'
  *   - tenantId      {string} obligatoriu
  *
- * Răspuns (201): { success, data: { supplier } }
+ * Răspuns (201): { success: true, message, data: { supplier } }
  */
 router.post(
   '/',
@@ -154,6 +154,7 @@ router.post(
 
       res.status(201).json({
         success: true,
+        message: 'Furnizorul a fost creat cu succes.',
         data: { supplier },
       });
     } catch (err) {
@@ -180,7 +181,7 @@ router.post(
  *   - limit         {number}  limitează rezultatele (max 100)
  *   - skip          {number}  paginare
  *
- * Răspuns (200): { success, data: { suppliers, total, limit, skip } }
+ * Răspuns (200): { success: true, message, data: { suppliers, total, limit, skip } }
  */
 router.get(
   '/',
@@ -267,6 +268,7 @@ router.get(
 
       res.status(200).json({
         success: true,
+        message: 'Lista furnizorilor a fost obținută cu succes.',
         data: {
           suppliers,
           total,
@@ -289,7 +291,7 @@ router.get(
  * @desc    Obține detaliile unui furnizor după ID
  * @access  Privat (autentificare)
  *
- * Răspuns (200): { success, data: { supplier } }
+ * Răspuns (200): { success: true, message, data: { supplier } }
  */
 router.get(
   '/:id',
@@ -324,6 +326,7 @@ router.get(
 
       res.status(200).json({
         success: true,
+        message: 'Detaliile furnizorului au fost obținute cu succes.',
         data: { supplier },
       });
     } catch (err) {
@@ -343,7 +346,7 @@ router.get(
  *
  * Body (JSON): câmpurile de actualizat (parțial)
  *
- * Răspuns (200): { success, data: { supplier } }
+ * Răspuns (200): { success: true, message, data: { supplier } }
  */
 router.put(
   '/:id',
@@ -433,6 +436,7 @@ router.put(
 
       res.status(200).json({
         success: true,
+        message: 'Furnizorul a fost actualizat cu succes.',
         data: { supplier: updatedSupplier },
       });
     } catch (err) {
@@ -450,7 +454,7 @@ router.put(
  * @desc    Șterge un furnizor
  * @access  Privat (rol owner, super_admin)
  *
- * Răspuns (200): { success, data: { deleted: true } }
+ * Răspuns (200): { success: true, message, data: { deleted: true } }
  */
 router.delete(
   '/:id',
@@ -489,6 +493,7 @@ router.delete(
 
       res.status(200).json({
         success: true,
+        message: 'Furnizorul a fost șters cu succes.',
         data: { deleted: true },
       });
     } catch (err) {
@@ -508,7 +513,7 @@ router.delete(
  *
  * Body: { rating: number (0-5) }
  *
- * Răspuns (200): { success, data: { supplier } }
+ * Răspuns (200): { success: true, message, data: { supplier } }
  */
 router.patch(
   '/:id/rating',
@@ -551,6 +556,7 @@ router.patch(
 
       res.status(200).json({
         success: true,
+        message: 'Ratingul furnizorului a fost actualizat cu succes.',
         data: { supplier: updatedSupplier },
       });
     } catch (err) {
@@ -570,7 +576,7 @@ router.patch(
  *
  * Body: { status: string ('active' | 'inactive' | 'blacklisted') }
  *
- * Răspuns (200): { success, data: { supplier } }
+ * Răspuns (200): { success: true, message, data: { supplier } }
  */
 router.patch(
   '/:id/status',
@@ -613,6 +619,7 @@ router.patch(
 
       res.status(200).json({
         success: true,
+        message: 'Statusul furnizorului a fost actualizat cu succes.',
         data: { supplier: updatedSupplier },
       });
     } catch (err) {
@@ -632,7 +639,7 @@ router.patch(
  *
  * Body: { product: string }
  *
- * Răspuns (201): { success, data: { supplier } }
+ * Răspuns (201): { success: true, message, data: { supplier } }
  */
 router.post(
   '/:id/products',
@@ -677,6 +684,7 @@ router.post(
 
       res.status(201).json({
         success: true,
+        message: 'Produsul a fost adăugat cu succes.',
         data: { supplier: updatedSupplier },
       });
     } catch (err) {
@@ -694,7 +702,7 @@ router.post(
  * @desc    Elimină un produs din lista furnizorului
  * @access  Privat (rol manager, owner, super_admin)
  *
- * Răspuns (200): { success, data: { supplier } }
+ * Răspuns (200): { success: true, message, data: { supplier } }
  */
 router.delete(
   '/:id/products/:product',
@@ -738,6 +746,7 @@ router.delete(
 
       res.status(200).json({
         success: true,
+        message: 'Produsul a fost eliminat cu succes.',
         data: { supplier: updatedSupplier },
       });
     } catch (err) {
@@ -763,7 +772,7 @@ router.delete(
  *   - notes            {string}  opțional
  *   - deliveryDate     {string}  opțional (format ISO 8601)
  *
- * Răspuns (201): { success, data: { order } }
+ * Răspuns (201): { success: true, message, data: { order } }
  */
 router.post(
   '/:id/order',
@@ -896,6 +905,7 @@ router.post(
 
       res.status(201).json({
         success: true,
+        message: 'Comanda a fost plasată cu succes.',
         data: {
           order: savedOrder,
         },
@@ -920,7 +930,7 @@ router.post(
  *   - limit   {number}  opțional – max 100
  *   - skip    {number}  opțional
  *
- * Răspuns (200): { success, data: { orders, total, limit, skip } }
+ * Răspuns (200): { success: true, message, data: { orders, total, limit, skip } }
  */
 router.get(
   '/:id/orders',
@@ -983,6 +993,7 @@ router.get(
 
       res.status(200).json({
         success: true,
+        message: 'Istoricul comenzilor a fost obținut cu succes.',
         data: {
           orders,
           total,

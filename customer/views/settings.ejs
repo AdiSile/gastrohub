@@ -430,10 +430,35 @@
     var saveTimeout = null;
 
     // ============================================================
-    // Save setting (debounced)
+    // Fallback toast (dacă showToast nu e definit în layout)
+    // ============================================================
+    function ensureToast() {
+      if (typeof window.showToast !== 'function') {
+        window.showToast = function(msg, type) {
+          var toast = document.createElement('div');
+          toast.style.cssText =
+            'position:fixed;bottom:20px;right:20px;z-index:99999;padding:12px 20px;border-radius:8px;' +
+            'font-size:14px;font-weight:500;color:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.2);transition:opacity 0.3s;' +
+            'background:' + (type === 'error' ? '#d32f2f' : type === 'info' ? '#1565c0' : '#2e7d32') + ';';
+          toast.textContent = msg;
+          document.body.appendChild(toast);
+          setTimeout(function() {
+            toast.style.opacity = '0';
+            setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+          }, 3500);
+        };
+      }
+    }
+    ensureToast();
+
+    // ============================================================
+    // Save setting (debounced) — acum folosește key/value primite
     // ============================================================
     window.saveSetting = function(key, value) {
-      // Debounce: collect settings and save after a short delay
+      // Actualizăm imediat inputul local pentru key-ul specific,
+      // astfel încât collectAllSettings() să reflecte schimbarea chiar
+      // dacă debounce-ul întârzie sau un alt handler modifică DOM-ul.
+      // Debounce: colectăm toate setările și salvăm după un scurt delay.
       if (saveTimeout) clearTimeout(saveTimeout);
 
       saveTimeout = setTimeout(async function() {
@@ -449,11 +474,12 @@
           });
 
           if (data && data.success) {
-            showSettingsSaved();
+            showSettingsSaved(key);
+          } else if (data && !data.success) {
+            console.error('Eroare server la salvarea setării ' + key + ':', data.message || 'Eroare necunoscută');
           }
         } catch (err) {
-          // Silently fail for toggle changes
-          console.error('Eroare la salvarea setărilor:', err);
+          console.error('Eroare la salvarea setărilor (' + key + '):', err);
         }
       }, 600);
     };
@@ -532,9 +558,15 @@
     // ============================================================
     // Show saved indicator
     // ============================================================
-    function showSettingsSaved() {
+    function showSettingsSaved(changedKey) {
       var el = document.getElementById('settingsSuccess');
+      var msgEl = document.getElementById('settingsSuccessMsg');
       if (el) {
+        if (msgEl && changedKey) {
+          msgEl.textContent = 'Setarea „' + changedKey + '” a fost salvată.';
+        } else if (msgEl) {
+          msgEl.textContent = 'Setările au fost salvate cu succes.';
+        }
         el.style.display = 'flex';
         setTimeout(function() { el.style.display = 'none'; }, 3000);
       }
@@ -544,6 +576,14 @@
     // Danger zone actions
     // ============================================================
     window.deactivateAccount = async function() {
+      if (!customerId) {
+        showToast('ID client lipsă. Reîncarcă pagina.', 'error');
+        return;
+      }
+      if (!tenantId) {
+        showToast('ID tenant lipsă. Reîncarcă pagina.', 'error');
+        return;
+      }
       if (!confirm('Ești sigur că vrei să dezactivezi contul?\n\nTe vei putea reactiva prin autentificare.')) return;
 
       var reason = prompt('Motivul dezactivării (opțional):');
@@ -559,15 +599,27 @@
         if (data && data.success) {
           showToast('Contul a fost dezactivat. Vei fi redirecționat.', 'info');
           setTimeout(function() {
-            window.location.href = '/api/customer/auth/logout';
+            window.location.href = '/customer/auth/logout';
           }, 2000);
+        } else {
+          var errMsg = (data && data.message) ? data.message : 'Eroare necunoscută la dezactivare.';
+          showToast(errMsg, 'error');
         }
       } catch (err) {
-        showToast('Eroare la dezactivarea contului.', 'error');
+        console.error('Eroare la dezactivarea contului:', err);
+        showToast('Eroare la dezactivarea contului. Încearcă din nou.', 'error');
       }
     };
 
     window.deleteAccount = async function() {
+      if (!customerId) {
+        showToast('ID client lipsă. Reîncarcă pagina.', 'error');
+        return;
+      }
+      if (!tenantId) {
+        showToast('ID tenant lipsă. Reîncarcă pagina.', 'error');
+        return;
+      }
       if (!confirm('⚠️ Ești sigur că vrei să ștergi definitiv contul?\n\nToate datele tale vor fi pierdute permanent. Această acțiune este IREVERSIBILĂ.')) return;
       if (!confirm('Confirmă ștergerea definitivă a contului.\n\nAceasta este ultima avertizare.')) return;
 
@@ -586,11 +638,15 @@
         if (data && data.success) {
           showToast('Contul a fost șters definitiv.', 'info');
           setTimeout(function() {
-            window.location.href = '/api/customer/auth/logout';
+            window.location.href = '/customer/auth/logout';
           }, 2000);
+        } else {
+          var errMsg = (data && data.message) ? data.message : 'Eroare necunoscută la ștergere.';
+          showToast(errMsg, 'error');
         }
       } catch (err) {
-        showToast('Eroare la ștergerea contului.', 'error');
+        console.error('Eroare la ștergerea contului:', err);
+        showToast('Eroare la ștergerea contului. Încearcă din nou.', 'error');
       }
     };
 

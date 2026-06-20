@@ -112,15 +112,14 @@ function dbAll(db, sql, params = []) {
 // Asigură existența tabelelor (idempotent)
 // ---------------------------------------------------------------------------
 
-let _tablesEnsured = false;
-
 /**
  * Creează tabelele hr_attendance și hr_salaries dacă nu există deja.
+ * Idempotent – poate fi apelată de oricâte ori; flag-ul global a fost eliminat
+ * pentru a se asigura că tabelele sunt recreate și într-un scenariu de testare
+ * unde instanța bazei de date se poate reseta.
  * @param {import('sql.js').Database} db
  */
 function ensureTables(db) {
-  if (_tablesEnsured) return;
-
   db.run(`
     CREATE TABLE IF NOT EXISTS hr_attendance (
       id           TEXT PRIMARY KEY,
@@ -162,8 +161,6 @@ function ensureTables(db) {
   db.run('CREATE INDEX IF NOT EXISTS idx_hr_salaries_tenantId ON hr_salaries(tenantId);');
   db.run('CREATE INDEX IF NOT EXISTS idx_hr_salaries_period ON hr_salaries(period);');
   db.run('CREATE INDEX IF NOT EXISTS idx_hr_salaries_status ON hr_salaries(status);');
-
-  _tablesEnsured = true;
 }
 
 // ---------------------------------------------------------------------------

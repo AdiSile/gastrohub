@@ -39,6 +39,41 @@ const VALID_PAYMENT_METHODS = [
 ];
 
 // ---------------------------------------------------------------------------
+// Mapare coloane snake_case (DB) → camelCase (documente returnate)
+// ---------------------------------------------------------------------------
+
+/**
+ * Tabelă de corespondență între numele coloanelor din baza de date (snake_case)
+ * și numele câmpurilor din documentele returnate (camelCase).
+ * Coloanele care nu se regăsesc aici rămân neschimbate.
+ */
+const COLUMN_TO_FIELD = {
+  tenant_id: 'tenantId',
+  restaurant_id: 'restaurantId',
+  table_number: 'tableNumber',
+  total_price: 'total',
+  payment_method: 'paymentMethod',
+  created_at: 'createdAt',
+  updated_at: 'updatedAt',
+  waiter_id: 'waiterId',
+};
+
+/**
+ * Mapare inversă: nume câmp (camelCase) → nume coloană (snake_case).
+ * Folosită pentru construirea dinamică a clauzelor SET în UPDATE.
+ */
+const FIELD_TO_COLUMN = {
+  items: 'items',
+  status: 'status',
+  paymentMethod: 'payment_method',
+  tableNumber: 'table_number',
+  subtotal: 'subtotal',
+  tax: 'tax',
+  total: 'total_price',
+  notes: 'notes',
+};
+
+// ---------------------------------------------------------------------------
 // Detecție backend SQLite – întotdeauna true (NeDB a fost eliminat)
 // ---------------------------------------------------------------------------
 
@@ -57,6 +92,7 @@ function _isSqlAvailable() {
 /**
  * Convertește un rând SQL (id INTEGER) într-un obiect cu _id string.
  * Parsează câmpul `items` din JSON dacă este stocat ca string.
+ * Aplică maparea snake_case → camelCase pentru câmpurile cunoscute.
  * @param {Object} row
  * @returns {Object}
  */
@@ -65,7 +101,9 @@ function _sqlRowToDoc(row) {
   const doc = {};
   const keys = Object.keys(row);
   for (let i = 0; i < keys.length; i++) {
-    doc[keys[i]] = row[keys[i]];
+    const key = keys[i];
+    const mappedKey = COLUMN_TO_FIELD[key] !== undefined ? COLUMN_TO_FIELD[key] : key;
+    doc[mappedKey] = row[key];
   }
   doc._id = String(row.id);
 
@@ -336,8 +374,8 @@ async function createOrder(orderData) {
     const result = _dbRun(
       db,
       `INSERT INTO orders
-       (tenantId, restaurantId, items, status, paymentMethod, tableNumber,
-        subtotal, tax, total, notes, createdAt, updatedAt)
+       (tenant_id, restaurant_id, items, status, payment_method, table_number,
+        subtotal, tax, total_price, notes, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         tenantId,
@@ -422,7 +460,7 @@ async function findOrdersByTenant(tenantId, options = {}) {
   const db = await getDb();
 
   try {
-    let sql = 'SELECT * FROM orders WHERE tenantId = ?';
+    let sql = 'SELECT * FROM orders WHERE tenant_id = ?';
     const params = [tenantId];
 
     if (options.status) {
@@ -434,13 +472,16 @@ async function findOrdersByTenant(tenantId, options = {}) {
     if (options.sort && typeof options.sort === 'object') {
       const sortKeys = Object.keys(options.sort);
       if (sortKeys.length > 0) {
-        const sortClauses = sortKeys.map((k) => `${k} ${options.sort[k] === -1 ? 'DESC' : 'ASC'}`);
+        const sortClauses = sortKeys.map((k) => {
+          const col = FIELD_TO_COLUMN[k] || k;
+          return `${col} ${options.sort[k] === -1 ? 'DESC' : 'ASC'}`;
+        });
         sql += ' ORDER BY ' + sortClauses.join(', ');
       } else {
-        sql += ' ORDER BY createdAt DESC';
+        sql += ' ORDER BY created_at DESC';
       }
     } else {
-      sql += ' ORDER BY createdAt DESC';
+      sql += ' ORDER BY created_at DESC';
     }
 
     // Limit
@@ -491,7 +532,7 @@ async function findOrdersByRestaurant(restaurantId, options = {}) {
   const db = await getDb();
 
   try {
-    let sql = 'SELECT * FROM orders WHERE restaurantId = ?';
+    let sql = 'SELECT * FROM orders WHERE restaurant_id = ?';
     const params = [restaurantId];
 
     if (options.status) {
@@ -503,13 +544,16 @@ async function findOrdersByRestaurant(restaurantId, options = {}) {
     if (options.sort && typeof options.sort === 'object') {
       const sortKeys = Object.keys(options.sort);
       if (sortKeys.length > 0) {
-        const sortClauses = sortKeys.map((k) => `${k} ${options.sort[k] === -1 ? 'DESC' : 'ASC'}`);
+        const sortClauses = sortKeys.map((k) => {
+          const col = FIELD_TO_COLUMN[k] || k;
+          return `${col} ${options.sort[k] === -1 ? 'DESC' : 'ASC'}`;
+        });
         sql += ' ORDER BY ' + sortClauses.join(', ');
       } else {
-        sql += ' ORDER BY createdAt DESC';
+        sql += ' ORDER BY created_at DESC';
       }
     } else {
-      sql += ' ORDER BY createdAt DESC';
+      sql += ' ORDER BY created_at DESC';
     }
 
     // Limit
@@ -557,10 +601,10 @@ async function findOrdersByStatus(status, tenantId) {
     const params = [status];
 
     if (tenantId) {
-      sql = 'SELECT * FROM orders WHERE status = ? AND tenantId = ? ORDER BY createdAt DESC';
+      sql = 'SELECT * FROM orders WHERE status = ? AND tenant_id = ? ORDER BY created_at DESC';
       params.push(tenantId);
     } else {
-      sql = 'SELECT * FROM orders WHERE status = ? ORDER BY createdAt DESC';
+      sql = 'SELECT * FROM orders WHERE status = ? ORDER BY created_at DESC';
     }
 
     const rows = _dbAll(db, sql, params);
@@ -598,7 +642,7 @@ async function findOrdersByTable(restaurantId, tableNumber) {
   try {
     const rows = _dbAll(
       db,
-      'SELECT * FROM orders WHERE restaurantId = ? AND tableNumber = ? ORDER BY createdAt DESC',
+      'SELECT * FROM orders WHERE restaurant_id = ? AND table_number = ? ORDER BY created_at DESC',
       [restaurantId, tableNumber]
     );
     return rows.map((r) => _sqlRowToDoc(r));
@@ -633,10 +677,10 @@ async function findOrdersByPaymentMethod(paymentMethod, tenantId) {
     const params = [paymentMethod];
 
     if (tenantId) {
-      sql = 'SELECT * FROM orders WHERE paymentMethod = ? AND tenantId = ? ORDER BY createdAt DESC';
+      sql = 'SELECT * FROM orders WHERE payment_method = ? AND tenant_id = ? ORDER BY created_at DESC';
       params.push(tenantId);
     } else {
-      sql = 'SELECT * FROM orders WHERE paymentMethod = ? ORDER BY createdAt DESC';
+      sql = 'SELECT * FROM orders WHERE payment_method = ? ORDER BY created_at DESC';
     }
 
     const rows = _dbAll(db, sql, params);
@@ -684,7 +728,7 @@ async function findOrdersByDateRange(tenantId, startDate, endDate, options = {})
   const db = await getDb();
 
   try {
-    let sql = 'SELECT * FROM orders WHERE tenantId = ? AND createdAt >= ? AND createdAt <= ?';
+    let sql = 'SELECT * FROM orders WHERE tenant_id = ? AND created_at >= ? AND created_at <= ?';
     const params = [tenantId, startDate, endDate];
 
     if (options.status) {
@@ -696,13 +740,16 @@ async function findOrdersByDateRange(tenantId, startDate, endDate, options = {})
     if (options.sort && typeof options.sort === 'object') {
       const sortKeys = Object.keys(options.sort);
       if (sortKeys.length > 0) {
-        const sortClauses = sortKeys.map((k) => `${k} ${options.sort[k] === -1 ? 'DESC' : 'ASC'}`);
+        const sortClauses = sortKeys.map((k) => {
+          const col = FIELD_TO_COLUMN[k] || k;
+          return `${col} ${options.sort[k] === -1 ? 'DESC' : 'ASC'}`;
+        });
         sql += ' ORDER BY ' + sortClauses.join(', ');
       } else {
-        sql += ' ORDER BY createdAt DESC';
+        sql += ' ORDER BY created_at DESC';
       }
     } else {
-      sql += ' ORDER BY createdAt DESC';
+      sql += ' ORDER BY created_at DESC';
     }
 
     // Limit

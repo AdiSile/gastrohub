@@ -853,10 +853,10 @@ router.post(
         note: note || '',
       };
 
-      // Adăugăm noul articol la lista existentă de item-uri
-      const existingItems = existingOrder.items || [];
+      // Adăugăm noul articol la lista existentă de articole
+      const existingItems = existingOrder.articole || [];
       const updatedItems = [...existingItems, articol];
-      const updatedOrder = await updateOrder(id, { items: updatedItems });
+      const updatedOrder = await updateOrder(id, { articole: updatedItems }, tenantId);
 
       res.status(200).json({
         success: true,
@@ -952,20 +952,12 @@ router.post(
       // Actualizăm metoda de plată
       await updateOrderPayment(id, metodaPlata, tenantId);
 
-      // Actualizăm totalul dacă a fost furnizat
-      const updateData = { status: 'achitată' };
+      // Marcăm comanda ca achitată și, opțional, actualizăm totalul
+      const statusUpdate = { status: 'achitată' };
       if (total !== undefined && total !== null) {
-        updateData.total = total;
+        statusUpdate.total = total;
       }
-
-      // Marcăm comanda ca achitată
-      const updatedOrder = await updateOrderStatus(id, 'achitată', tenantId);
-
-      // Dacă s-a trimis și un total, actualizăm și totalul
-      let finalOrder = updatedOrder;
-      if (total !== undefined && total !== null) {
-        finalOrder = await updateOrder(id, { total }, tenantId);
-      }
+      const finalOrder = await updateOrder(id, statusUpdate, tenantId);
 
       // Construim factura
       const invoice = {

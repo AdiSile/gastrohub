@@ -9,6 +9,10 @@
   <meta name="description" content="GastroHub - Panou de administrare - Autentificare" />
   <meta name="theme-color" content="#0d1117" />
 
+  <!-- Mental Flow: /admin/login → autentificare super_admin → dashboard admin cu statistici și tenanți -->
+  <meta name="x-flow-role" content="super_admin" />
+  <meta name="x-flow-destination" content="/admin/dashboard" />
+
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -213,6 +217,53 @@
     .login-brand .brand-sub i {
       color: var(--color-primary);
       margin-right: 4px;
+    }
+
+    /* ============================================================
+       DASHBOARD PREVIEW — What awaits after login
+       ============================================================ */
+    .dashboard-preview {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 24px;
+      padding: 14px 16px;
+      background: rgba(139, 92, 246, 0.06);
+      border: 1px solid rgba(139, 92, 246, 0.15);
+      border-radius: var(--radius-sm);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+
+    .dashboard-preview .preview-item {
+      flex: 1;
+      text-align: center;
+      padding: 8px 4px;
+    }
+
+    .dashboard-preview .preview-item .preview-icon {
+      font-size: 18px;
+      color: var(--color-primary);
+      margin-bottom: 4px;
+    }
+
+    .dashboard-preview .preview-item .preview-label {
+      font-size: 11px;
+      color: var(--color-text-muted);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .dashboard-preview .preview-item .preview-value {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--color-text);
+    }
+
+    .dashboard-preview .preview-divider {
+      width: 1px;
+      background: rgba(139, 92, 246, 0.2);
+      align-self: stretch;
     }
 
     /* ============================================================
@@ -627,6 +678,26 @@
       .login-social {
         flex-direction: column;
       }
+
+      .dashboard-preview {
+        flex-wrap: wrap;
+        gap: 0;
+        padding: 10px 8px;
+      }
+
+      .dashboard-preview .preview-item {
+        flex: 0 0 50%;
+        padding: 6px 2px;
+      }
+
+      .dashboard-preview .preview-divider:nth-child(2) {
+        display: none;
+      }
+
+      .dashboard-preview .preview-divider:nth-child(4) {
+        width: 100%;
+        height: 1px;
+      }
     }
 
     @media (max-width: 360px) {
@@ -643,6 +714,14 @@
       .login-brand h1 {
         font-size: 18px;
       }
+
+      .dashboard-preview .preview-label {
+        font-size: 10px;
+      }
+
+      .dashboard-preview .preview-value {
+        font-size: 14px;
+      }
     }
   </style>
 </head>
@@ -657,6 +736,33 @@
         <h1>GastroHub Admin</h1>
         <div class="brand-sub">
           <i class="fas fa-shield-alt"></i> Panou Super Administrator
+        </div>
+      </div>
+
+      <!-- Dashboard Preview: Ce te așteaptă după autentificare -->
+      <div class="dashboard-preview" aria-label="Previzualizare Dashboard Admin">
+        <div class="preview-item">
+          <div class="preview-icon"><i class="fas fa-chart-bar"></i></div>
+          <div class="preview-label">Statistici</div>
+          <div class="preview-value"><i class="fas fa-chart-line"></i></div>
+        </div>
+        <div class="preview-divider"></div>
+        <div class="preview-item">
+          <div class="preview-icon"><i class="fas fa-building"></i></div>
+          <div class="preview-label">Tenanți</div>
+          <div class="preview-value"><i class="fas fa-layer-group"></i></div>
+        </div>
+        <div class="preview-divider"></div>
+        <div class="preview-item">
+          <div class="preview-icon"><i class="fas fa-file-invoice"></i></div>
+          <div class="preview-label">Facturare</div>
+          <div class="preview-value"><i class="fas fa-receipt"></i></div>
+        </div>
+        <div class="preview-divider"></div>
+        <div class="preview-item">
+          <div class="preview-icon"><i class="fas fa-globe"></i></div>
+          <div class="preview-label">Conform.</div>
+          <div class="preview-value"><i class="fas fa-passport"></i></div>
         </div>
       </div>
 
@@ -683,7 +789,7 @@
       <% } %>
 
       <!-- Login Form -->
-      <form class="login-form" action="<%= locals.action ? action : '/admin/login' %>" method="POST" novalidate>
+      <form class="login-form" action="<%= locals.action ? action : '/admin/login' %>" method="POST" novalidate data-role="super_admin" data-destination="<%= locals.destination ? destination : '/admin/dashboard' %>">
         <!-- Email / Username -->
         <div class="form-group<%= (locals.errors && locals.errors.email) ? ' has-error' : '' %>">
           <label for="email">
@@ -734,6 +840,10 @@
             <% } %>
           </div>
         </div>
+
+        <!-- Hidden redirect to dashboard -->
+        <input type="hidden" name="redirect" value="<%= locals.destination ? destination : '/admin/dashboard' %>" />
+        <input type="hidden" name="role" value="super_admin" />
 
         <!-- Options: Remember me + Forgot -->
         <div class="form-options">

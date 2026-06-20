@@ -491,7 +491,7 @@ router.get(
  * @access  Privat (autentificare + rol manager, owner, super_admin)
  *
  * Răspuns (200):
- *   { success: true, message: 'Evenimentul de pontaj a fost șters cu succes.' }
+ *   { success: true, data: { deleted: true }, message: 'Evenimentul de pontaj a fost șters cu succes.' }
  */
 router.delete(
   '/attendance/:id',
@@ -519,10 +519,22 @@ router.delete(
         ));
       }
 
+      // Verificare acces tenant
+      if (req.user.role !== 'super_admin') {
+        if (String(existingRecord.tenantId) !== String(req.user.tenantId)) {
+          return next(new AppError(
+            'Nu ai acces la acest eveniment de pontaj.',
+            403,
+            'TENANT_MISMATCH'
+          ));
+        }
+      }
+
       await deleteAttendanceRecord(id);
 
       res.status(200).json({
         success: true,
+        data: { deleted: true },
         message: 'Evenimentul de pontaj a fost șters cu succes.',
       });
     } catch (err) {
@@ -728,7 +740,7 @@ router.post(
  *   - skip        {number}  opțional – câte rezultate se sar
  *
  * Răspuns (200):
- *   { success: true, data: { salaries } }
+ *   { success: true, data: { salaries, total } }
  */
 router.get(
   '/salaries',
@@ -765,7 +777,7 @@ router.get(
       if (!tenantId && req.user.role !== 'super_admin') {
         return res.status(200).json({
           success: true,
-          data: { salaries: [] },
+          data: { salaries: [], total: 0 },
         });
       }
 
@@ -792,7 +804,7 @@ router.get(
 
       res.status(200).json({
         success: true,
-        data: { salaries },
+        data: { salaries, total: salaries.length },
       });
     } catch (err) {
       next(err);
@@ -1392,7 +1404,7 @@ router.patch(
  * @access  Privat (autentificare + rol owner, super_admin)
  *
  * Răspuns (200):
- *   { success: true, message: 'Înregistrarea salarială a fost ștearsă cu succes.' }
+ *   { success: true, data: { deleted: true }, message: 'Înregistrarea salarială a fost ștearsă cu succes.' }
  */
 router.delete(
   '/salaries/:id',
@@ -1435,6 +1447,7 @@ router.delete(
 
       res.status(200).json({
         success: true,
+        data: { deleted: true },
         message: 'Înregistrarea salarială a fost ștearsă cu succes.',
       });
     } catch (err) {

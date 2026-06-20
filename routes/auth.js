@@ -68,7 +68,9 @@ function handleValidationErrors(req, res, next) {
  *
  * Body (JSON):
  *   - email      {string}  obligatoriu
- *   - password   {string}  obligatoriu, 6-128 caractere
+ *   - password   {string}  obligatoriu, minimum 6 caractere
+ *   - name       {string}  opțional
+ *   - phone      {string}  opțional
  *   - role       {string}  opțional, implicit 'client'
  *   - tenantId   {string}  opțional
  *
@@ -83,8 +85,16 @@ router.post(
       .withMessage('Adresa de email nu este validă.')
       .normalizeEmail(),
     body('password')
-      .isLength({ min: 6, max: 128 })
-      .withMessage('Parola trebuie să aibă între 6 și 128 de caractere.'),
+      .isLength({ min: 6 })
+      .withMessage('Parola trebuie să aibă minimum 6 caractere.'),
+    body('name')
+      .optional()
+      .isString()
+      .withMessage('Numele trebuie să fie un șir de caractere.'),
+    body('phone')
+      .optional()
+      .isString()
+      .withMessage('Telefonul trebuie să fie un șir de caractere.'),
     body('role')
       .optional()
       .isIn(VALID_ROLES)
@@ -97,7 +107,7 @@ router.post(
   handleValidationErrors,
   async (req, res, next) => {
     try {
-      const { email, password, role, tenantId } = req.body;
+      const { email, password, name, phone, role, tenantId } = req.body;
 
       // -------------------------------------------------------------------
       // Verificare existență utilizator (email duplicat)
@@ -117,6 +127,8 @@ router.post(
       const newUser = await createUser({
         email,
         password,
+        name: name || null,
+        phone: phone || null,
         role: role || 'client',
         tenantId: tenantId || null,
       });

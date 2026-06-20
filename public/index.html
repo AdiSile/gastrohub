@@ -1,31 +1,31 @@
 <!DOCTYPE html>
 <html lang="ro">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GastroHub – Soluție All-in-One pentru Restaurante</title>
-  <meta name="description" content="GastroHub oferă gestionare completă a restaurantelor: meniu, comenzi, livrări, inventar, rezervări, HR și loialitate. Înregistrează-te gratuit.">
-  <link rel="manifest" href="/pwa/manifest.json">
-  <meta name="theme-color" content="#2d0a4e">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GastroHub – Gestionare completă pentru restaurante, hoteluri și clienți</title>
+  <meta name="description" content="GastroHub — platforma all-in-one pentru gestionarea restaurantelor, hotelurilor, rezervărilor și comenzilor. Înregistrează-te gratuit ca proprietar sau client." />
 
-  <!-- Open Graph -->
-  <meta property="og:title" content="GastroHub – Soluție All-in-One">
-  <meta property="og:description" content="Gestionează-ți restaurantul eficient cu GastroHub.">
-  <meta property="og:type" content="website">
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
 
   <!-- Font Awesome -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 
   <style>
     /* ============================================================
-       RESET & BASE – Purple Glassmorphism Landing
+       RESET & BASE
        ============================================================ */
     *, *::before, *::after {
-      margin: 0; padding: 0; box-sizing: border-box;
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
 
     :root {
-      --purple-950: #0d0221;
+      --purple-950: #0b011a;
       --purple-900: #1a0533;
       --purple-800: #2d0a4e;
       --purple-700: #3f0e6b;
@@ -34,938 +34,1314 @@
       --purple-400: #9b59e6;
       --purple-300: #c39bff;
       --purple-200: #ddc4ff;
-      --surface-glass: rgba(255,255,255,0.07);
-      --surface-glass-hover: rgba(255,255,255,0.12);
-      --border-glass: rgba(255,255,255,0.12);
+      --purple-100: #efe5ff;
+      --surface-glass: rgba(255, 255, 255, 0.07);
+      --surface-glass-hover: rgba(255, 255, 255, 0.12);
+      --surface-glass-light: rgba(255, 255, 255, 0.04);
+      --border-glass: rgba(255, 255, 255, 0.12);
+      --border-glass-hover: rgba(255, 255, 255, 0.22);
       --text-primary: #f0e6ff;
       --text-secondary: #bfa5e0;
       --text-muted: #8b73ad;
-      --input-bg: rgba(255,255,255,0.07);
-      --input-border: rgba(255,255,255,0.15);
-      --input-focus: #9b59e6;
+      --btn-primary: #7b2dcc;
+      --btn-primary-hover: #8b40e0;
+      --btn-primary-active: #6a1fb8;
+      --btn-accent: #4cd9a7;
+      --btn-accent-hover: #5fe8b8;
+      --error-color: #ff6b8a;
+      --success-color: #4cd9a7;
+      --warning-color: #ffb347;
+      --info-color: #5b9bd5;
+      --radius-xs: 6px;
       --radius-sm: 8px;
       --radius-md: 14px;
-      --radius-lg: 22px;
-      --transition: 0.3s ease;
+      --radius-lg: 20px;
+      --radius-xl: 28px;
+      --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-fast: 0.18s ease;
     }
 
     html {
-      scroll-behavior: smooth;
       font-size: 16px;
+      scroll-behavior: smooth;
     }
 
     body {
-      font-family: 'Segoe UI', 'Inter', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-      background: linear-gradient(160deg, #0d0221 0%, #1a0533 20%, #2d0a4e 45%, #1a0533 70%, #0d0221 100%);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(160deg, #070112 0%, #0d0221 15%, #1a0533 35%, #2d0a4e 55%, #1a0533 75%, #0d0221 90%, #070112 100%);
       background-attachment: fixed;
       color: var(--text-primary);
-      line-height: 1.6;
-      overflow-x: hidden;
+      min-height: 100vh;
+      line-height: 1.65;
       position: relative;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
-
-    /* Scrollbar */
-    ::-webkit-scrollbar { width: 8px; }
-    ::-webkit-scrollbar-track { background: var(--purple-950); }
-    ::-webkit-scrollbar-thumb { background: var(--purple-600); border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: var(--purple-500); }
-
-    /* Selection */
-    ::selection { background: var(--purple-500); color: #fff; }
-
-    /* Placeholder */
-    ::placeholder { color: var(--text-muted); opacity: 0.7; }
 
     /* ============================================================
-       ANIMATED BACKGROUND
+       ANIMATED BACKGROUND PARTICLES
        ============================================================ */
     .bg-particles {
-      position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden;
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
     }
+
     .bg-particle {
-      position: absolute; border-radius: 50%;
-      background: var(--purple-400); opacity: 0.06;
+      position: absolute;
+      border-radius: 50%;
+      background: var(--purple-400);
+      opacity: 0;
       animation: floatParticle linear infinite;
     }
+
     @keyframes floatParticle {
       0%   { transform: translateY(0) translateX(0) scale(1); opacity: 0.02; }
-      25%  { opacity: 0.07; }
-      50%  { transform: translateY(-100px) translateX(30px) scale(1.3); opacity: 0.05; }
-      75%  { opacity: 0.02; }
+      20%  { opacity: 0.07; }
+      40%  { transform: translateY(-100px) translateX(30px) scale(1.35); opacity: 0.05; }
+      60%  { opacity: 0.03; }
+      80%  { transform: translateY(-40px) translateX(-20px) scale(0.9); opacity: 0.04; }
       100% { transform: translateY(0) translateX(0) scale(1); opacity: 0.02; }
     }
 
+    /* ============================================================
+       GLOW ORBS
+       ============================================================ */
     .glow-orb {
-      position: fixed; border-radius: 50%; filter: blur(130px);
-      pointer-events: none; z-index: 0; animation: pulseOrb 8s ease-in-out infinite;
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(140px);
+      opacity: 0.16;
+      pointer-events: none;
+      z-index: 0;
+      animation: pulseOrb 10s ease-in-out infinite;
     }
-    .glow-orb--1 { width:450px; height:450px; background:var(--purple-500); top:-130px; right:-100px; opacity:0.15; }
-    .glow-orb--2 { width:380px; height:380px; background:#3c1a70; bottom:-120px; left:-90px; opacity:0.13; animation-delay:-4s; }
-    .glow-orb--3 { width:300px; height:300px; background:var(--purple-600); top:50%; left:50%; transform:translate(-50%,-50%); opacity:0.08; animation-delay:-2s; }
+
+    .glow-orb--top-right {
+      width: 520px;
+      height: 520px;
+      background: var(--purple-500);
+      top: -160px;
+      right: -140px;
+      animation-delay: 0s;
+    }
+
+    .glow-orb--bottom-left {
+      width: 400px;
+      height: 400px;
+      background: #3c1a70;
+      bottom: -120px;
+      left: -100px;
+      animation-delay: -5s;
+    }
+
+    .glow-orb--center {
+      width: 320px;
+      height: 320px;
+      background: var(--purple-600);
+      top: 50%;
+      left: 48%;
+      transform: translate(-50%, -50%);
+      opacity: 0.08;
+      animation-delay: -3s;
+    }
+
+    .glow-orb--accent {
+      width: 260px;
+      height: 260px;
+      background: #1a6b4f;
+      top: 30%;
+      right: 20%;
+      opacity: 0.06;
+      animation-delay: -7s;
+      animation-duration: 12s;
+    }
+
     @keyframes pulseOrb {
-      0%,100% { transform:scale(1); opacity:0.14; }
-      50%     { transform:scale(1.15); opacity:0.22; }
+      0%, 100% { transform: scale(1); opacity: 0.14; }
+      50%      { transform: scale(1.25); opacity: 0.24; }
     }
 
     /* ============================================================
-       HEADER – Glassmorphism
+       NAVIGATION BAR
        ============================================================ */
-    header {
-      position: sticky; top: 0; z-index: 1000;
-      background: rgba(13,2,33,0.7); backdrop-filter: blur(20px);
+    .navbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+      padding: 0 32px;
+      height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(13, 2, 33, 0.65);
+      backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
       border-bottom: 1px solid var(--border-glass);
-      padding: 0.9rem 2rem;
-      display: flex; justify-content: space-between; align-items: center;
       transition: background var(--transition), box-shadow var(--transition);
     }
-    header.scrolled {
-      background: rgba(13,2,33,0.92);
-      box-shadow: 0 2px 20px rgba(0,0,0,0.4);
-    }
-    header .logo {
-      display: flex; align-items: center; gap: 10px;
-      font-size: 1.6rem; font-weight: 700; color: #fff; letter-spacing: 0.5px;
-    }
-    header .logo .logo-icon {
-      width: 42px; height: 42px; border-radius: var(--radius-sm);
-      background: linear-gradient(135deg, var(--purple-500), var(--purple-600));
-      display: flex; align-items: center; justify-content: center;
-      font-size: 18px; color: #fff;
-      box-shadow: 0 4px 16px rgba(123,45,204,0.35);
-    }
-    nav { display: flex; align-items: center; gap: 1.2rem; }
-    nav a {
-      color: var(--text-secondary); text-decoration: none;
-      font-weight: 500; font-size: 0.95rem;
-      transition: color var(--transition);
-    }
-    nav a:hover { color: #fff; }
-    .btn-glass {
-      display: inline-block; padding: 0.55rem 1.6rem; border-radius: 30px;
-      font-weight: 600; font-size: 0.9rem; transition: all var(--transition);
-      text-decoration: none; cursor: pointer;
-    }
-    .btn-outline {
-      background: transparent; color: #fff;
-      border: 2px solid rgba(255,255,255,0.35);
-    }
-    .btn-outline:hover {
-      background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.6);
-    }
-    .btn-primary {
-      background: linear-gradient(135deg, var(--purple-500), var(--purple-600));
-      color: #fff; border: none;
-      box-shadow: 0 4px 18px rgba(123,45,204,0.35);
-    }
-    .btn-primary:hover {
-      background: linear-gradient(135deg, #8b40e0, var(--purple-500));
-      box-shadow: 0 6px 26px rgba(123,45,204,0.5); transform: translateY(-1px);
+
+    .navbar.scrolled {
+      background: rgba(13, 2, 33, 0.85);
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.35);
     }
 
-    /* Hamburger */
-    .hamburger { display: none; background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; }
+    .navbar .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+    }
+
+    .navbar .nav-brand .brand-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, var(--purple-500), var(--purple-600));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 800;
+      color: #fff;
+      box-shadow: 0 4px 18px rgba(123, 45, 204, 0.4);
+    }
+
+    .navbar .nav-brand .brand-name {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.3px;
+    }
+
+    .navbar .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      list-style: none;
+    }
+
+    .navbar .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      transition: all var(--transition-fast);
+    }
+
+    .navbar .nav-links a:hover {
+      color: #fff;
+      background: var(--surface-glass);
+    }
+
+    .navbar .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .btn-nav {
+      padding: 9px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: none;
+    }
+
+    .btn-nav-outline {
+      background: transparent;
+      border: 1px solid var(--border-glass);
+      color: var(--text-primary);
+    }
+
+    .btn-nav-outline:hover {
+      border-color: rgba(255, 255, 255, 0.35);
+      background: var(--surface-glass);
+      color: #fff;
+    }
+
+    .btn-nav-primary {
+      background: linear-gradient(135deg, var(--purple-500), var(--purple-600));
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(123, 45, 204, 0.3);
+    }
+
+    .btn-nav-primary:hover {
+      background: linear-gradient(135deg, var(--btn-primary-hover), var(--purple-500));
+      box-shadow: 0 6px 22px rgba(123, 45, 204, 0.5);
+      transform: translateY(-1px);
+      color: #fff;
+    }
+
+    .btn-nav-primary:active {
+      transform: translateY(0);
+    }
+
+    /* Mobile hamburger */
+    .hamburger {
+      display: none;
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 22px;
+      cursor: pointer;
+      padding: 6px;
+      line-height: 1;
+    }
 
     /* ============================================================
-       HERO
+       HERO SECTION
        ============================================================ */
     .hero {
-      position: relative; z-index: 1;
-      text-align: center; padding: 6rem 2rem 5rem;
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 100px 32px 80px;
+      text-align: center;
     }
-    .hero h1 {
-      font-size: clamp(2.2rem, 5vw, 3.5rem); font-weight: 800;
-      color: #fff; margin-bottom: 1rem;
-      background: linear-gradient(135deg, #fff 0%, var(--purple-300) 100%);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    .hero .hero-subtitle {
-      font-size: 1.2rem; max-width: 650px; margin: 0 auto 2.5rem;
-      color: var(--text-secondary); line-height: 1.7;
-    }
-    .hero .cta-group { display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; }
-    .btn-lg {
-      padding: 0.85rem 2.4rem; font-size: 1.05rem; border-radius: 30px;
-      font-weight: 700; letter-spacing: 0.3px;
-    }
-    .btn-white {
-      background: #fff; color: var(--purple-700); border: 2px solid #fff;
-    }
-    .btn-white:hover { background: transparent; color: #fff; }
 
-    .hero-stats {
-      display: flex; justify-content: center; gap: 3rem; margin-top: 3.5rem;
+    .hero-container {
+      max-width: 720px;
+      width: 100%;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 18px;
+      background: var(--surface-glass);
+      border: 1px solid var(--border-glass);
+      border-radius: 50px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--purple-300);
+      margin-bottom: 28px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    .hero-badge i {
+      font-size: 12px;
+      color: var(--success-color);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.5; transform: scale(0.85); }
+    }
+
+    .hero h1 {
+      font-size: clamp(36px, 5.5vw, 58px);
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 20px;
+      letter-spacing: -1px;
+      color: #fff;
+    }
+
+    .hero h1 .highlight {
+      background: linear-gradient(135deg, var(--purple-400), var(--purple-300), var(--purple-200));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero p {
+      font-size: 18px;
+      color: var(--text-secondary);
+      max-width: 560px;
+      margin: 0 auto 36px;
+      line-height: 1.7;
+    }
+
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
       flex-wrap: wrap;
     }
-    .hero-stats .stat { text-align: center; }
-    .hero-stats .stat-num { font-size: 2rem; font-weight: 800; color: #fff; }
-    .hero-stats .stat-label { font-size: 0.85rem; color: var(--text-muted); }
 
-    /* ============================================================
-       SECTIONS
-       ============================================================ */
-    section { position: relative; z-index: 1; padding: 5rem 2rem; max-width: 1200px; margin: 0 auto; }
-    .section-header { text-align: center; margin-bottom: 3.5rem; }
-    .section-header h2 {
-      font-size: 2.2rem; font-weight: 700; color: #fff; margin-bottom: 0.6rem;
+    .btn-hero {
+      padding: 15px 32px;
+      font-size: 16px;
+      font-weight: 700;
+      font-family: 'Inter', sans-serif;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all var(--transition);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      border: none;
     }
-    .section-header .section-subtitle { color: var(--text-secondary); font-size: 1.05rem; }
+
+    .btn-hero-primary {
+      background: linear-gradient(135deg, var(--purple-500), var(--purple-600));
+      color: #fff;
+      box-shadow: 0 8px 32px rgba(123, 45, 204, 0.4);
+    }
+
+    .btn-hero-primary:hover {
+      background: linear-gradient(135deg, var(--btn-primary-hover), var(--purple-500));
+      box-shadow: 0 12px 40px rgba(123, 45, 204, 0.6);
+      transform: translateY(-2px);
+      color: #fff;
+    }
+
+    .btn-hero-primary:active {
+      transform: translateY(0);
+    }
+
+    .btn-hero-outline {
+      background: transparent;
+      border: 2px solid var(--border-glass);
+      color: var(--text-primary);
+    }
+
+    .btn-hero-outline:hover {
+      border-color: rgba(255, 255, 255, 0.4);
+      background: var(--surface-glass);
+      color: #fff;
+    }
+
+    /* Scroll-down indicator */
+    .scroll-indicator {
+      position: absolute;
+      bottom: 36px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      opacity: 0.6;
+      animation: bounce 2s ease-in-out infinite;
+    }
+
+    .scroll-indicator span {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .scroll-indicator i {
+      font-size: 18px;
+      color: var(--text-muted);
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateX(-50%) translateY(0); }
+      50%      { transform: translateX(-50%) translateY(10px); }
+    }
 
     /* ============================================================
-       FEATURES GRID – 6 cards
+       FEATURES SECTION
        ============================================================ */
+    .section {
+      position: relative;
+      z-index: 1;
+      padding: 90px 32px;
+    }
+
+    .section-header {
+      text-align: center;
+      max-width: 640px;
+      margin: 0 auto 60px;
+    }
+
+    .section-header .section-badge {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--purple-300);
+      margin-bottom: 14px;
+    }
+
+    .section-header h2 {
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 14px;
+      letter-spacing: -0.5px;
+    }
+
+    .section-header p {
+      font-size: 16px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+
+    /* Features grid */
     .features-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 1.8rem;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+      max-width: 1100px;
+      margin: 0 auto;
     }
+
     .feature-card {
-      background: var(--surface-glass);
-      backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+      background: var(--surface-glass-light);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
       border: 1px solid var(--border-glass);
       border-radius: var(--radius-lg);
-      padding: 2.2rem 1.8rem;
-      text-align: center;
+      padding: 32px 28px;
       transition: all var(--transition);
-      position: relative; overflow: hidden;
-    }
-    .feature-card::before {
-      content: ''; position: absolute; top: -50%; left: -50%;
-      width: 200%; height: 200%;
-      background: radial-gradient(circle, rgba(155,89,230,0.08) 0%, transparent 70%);
-      opacity: 0; transition: opacity var(--transition);
-    }
-    .feature-card:hover::before { opacity: 1; }
-    .feature-card:hover {
-      transform: translateY(-8px);
-      border-color: rgba(255,255,255,0.22);
-      box-shadow: 0 12px 40px rgba(0,0,0,0.3), 0 0 0 1px rgba(155,89,230,0.15);
-    }
-    .feature-card .fc-icon {
-      width: 64px; height: 64px; border-radius: var(--radius-md);
-      background: linear-gradient(135deg, var(--purple-500), var(--purple-600));
-      display: inline-flex; align-items: center; justify-content: center;
-      font-size: 26px; color: #fff; margin-bottom: 1.2rem;
-      box-shadow: 0 6px 22px rgba(123,45,204,0.3);
-    }
-    .feature-card h3 { color: #fff; font-size: 1.2rem; margin-bottom: 0.6rem; }
-    .feature-card p { color: var(--text-secondary); font-size: 0.93rem; line-height: 1.6; }
-
-    /* ============================================================
-       PRICING – 3 cards
-       ============================================================ */
-    .pricing-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 2rem; align-items: stretch;
-    }
-    .pricing-card {
-      background: var(--surface-glass);
-      backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-      border: 1px solid var(--border-glass);
-      border-radius: var(--radius-lg);
-      padding: 2.5rem 2rem; text-align: center;
-      transition: all var(--transition);
-      display: flex; flex-direction: column;
-    }
-    .pricing-card:hover {
-      transform: translateY(-6px);
-      border-color: rgba(255,255,255,0.22);
-      box-shadow: 0 12px 36px rgba(0,0,0,0.3);
-    }
-    .pricing-card.featured {
-      border-color: var(--purple-500);
-      background: rgba(123,45,204,0.15);
-      box-shadow: 0 0 40px rgba(123,45,204,0.2);
       position: relative;
+      overflow: hidden;
     }
-    .pricing-card.featured .badge {
-      position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
-      background: var(--purple-500); color: #fff; padding: 0.3rem 1.4rem;
-      border-radius: 20px; font-size: 0.8rem; font-weight: 700;
-      letter-spacing: 0.5px;
+
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--purple-400), transparent);
+      opacity: 0;
+      transition: opacity var(--transition);
     }
-    .pricing-card .price {
-      font-size: 2.8rem; font-weight: 800; color: #fff; margin: 0.8rem 0 0.4rem;
+
+    .feature-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--border-glass-hover);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.04);
     }
-    .pricing-card .price span { font-size: 1rem; font-weight: 400; color: var(--text-muted); }
-    .pricing-card .plan-name { font-size: 1.3rem; font-weight: 700; color: #fff; }
-    .pricing-card ul {
-      list-style: none; text-align: left; margin: 1.5rem 0 2rem; flex: 1;
+
+    .feature-card:hover::before {
+      opacity: 1;
     }
-    .pricing-card ul li {
-      padding: 0.5rem 0; color: var(--text-secondary); font-size: 0.93rem;
-      display: flex; align-items: center; gap: 8px;
+
+    .feature-card .feature-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, var(--purple-500), var(--purple-600));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      color: #fff;
+      margin-bottom: 20px;
+      box-shadow: 0 6px 20px rgba(123, 45, 204, 0.25);
     }
-    .pricing-card ul li i { color: var(--purple-400); font-size: 0.8rem; }
+
+    .feature-card h3 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 10px;
+    }
+
+    .feature-card p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.65;
+    }
 
     /* ============================================================
-       CONTACT FORM – Glassmorphism
+       STATS SECTION
        ============================================================ */
-    .contact-wrapper {
-      max-width: 650px; margin: 0 auto;
-      background: var(--surface-glass);
-      backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    .stats-section {
+      position: relative;
+      z-index: 1;
+      padding: 60px 32px 90px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 28px;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    .stat-card {
+      text-align: center;
+      padding: 28px 20px;
+      background: var(--surface-glass-light);
       border: 1px solid var(--border-glass);
       border-radius: var(--radius-lg);
-      padding: 2.8rem 2.4rem;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      transition: all var(--transition);
     }
-    .contact-wrapper .form-group { margin-bottom: 1.4rem; }
-    .contact-wrapper label {
-      display: block; font-size: 0.9rem; font-weight: 600;
-      color: var(--text-secondary); margin-bottom: 0.4rem;
+
+    .stat-card:hover {
+      border-color: var(--border-glass-hover);
+      transform: translateY(-3px);
     }
-    .contact-wrapper input,
-    .contact-wrapper textarea {
-      width: 100%; padding: 0.85rem 1rem;
-      font-size: 0.95rem; font-family: inherit;
+
+    .stat-card .stat-number {
+      font-size: 38px;
+      font-weight: 800;
       color: #fff;
-      background: var(--input-bg);
-      border: 1px solid var(--input-border);
-      border-radius: var(--radius-sm);
-      outline: none; transition: all var(--transition);
+      margin-bottom: 6px;
+      letter-spacing: -1px;
+      background: linear-gradient(135deg, #fff, var(--purple-200));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
     }
-    .contact-wrapper input:focus,
-    .contact-wrapper textarea:focus {
-      border-color: var(--input-focus);
-      box-shadow: 0 0 0 4px rgba(155,89,230,0.12);
+
+    .stat-card .stat-label {
+      font-size: 14px;
+      color: var(--text-secondary);
+      font-weight: 500;
     }
-    .contact-wrapper textarea { resize: vertical; min-height: 120px; }
-    .contact-wrapper .btn-submit {
-      width: 100%; padding: 0.9rem; font-size: 1rem; font-weight: 700;
-      border: none; border-radius: 30px; cursor: pointer;
-      background: linear-gradient(135deg, var(--purple-500), var(--purple-600));
-      color: #fff; transition: all var(--transition);
-      box-shadow: 0 4px 18px rgba(123,45,204,0.35);
-      display: flex; align-items: center; justify-content: center; gap: 8px;
+
+    /* ============================================================
+       TRUST SECTION
+       ============================================================ */
+    .trust-section {
+      position: relative;
+      z-index: 1;
+      padding: 0 32px 100px;
     }
-    .contact-wrapper .btn-submit:hover {
-      box-shadow: 0 6px 26px rgba(123,45,204,0.5);
-      transform: translateY(-2px);
+
+    .trust-logos {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 48px;
+      flex-wrap: wrap;
+      max-width: 800px;
+      margin: 0 auto;
     }
-    .contact-wrapper .btn-submit:disabled {
-      opacity: 0.6; cursor: not-allowed; transform: none;
+
+    .trust-logo {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-muted);
+      opacity: 0.5;
+      transition: opacity var(--transition-fast);
+      letter-spacing: 1px;
     }
-    .form-success {
-      display: none; text-align: center; padding: 1.5rem;
-      color: #4cd9a7; font-weight: 600;
+
+    .trust-logo:hover {
+      opacity: 0.85;
     }
-    .form-error {
-      display: none; text-align: center; padding: 0.5rem; margin-bottom: 1rem;
-      color: #ff6b6b; font-size: 0.9rem; font-weight: 500;
+
+    /* ============================================================
+       CTA BOTTOM SECTION
+       ============================================================ */
+    .cta-section {
+      position: relative;
+      z-index: 1;
+      padding: 0 32px 100px;
+    }
+
+    .cta-card {
+      max-width: 720px;
+      margin: 0 auto;
+      background: linear-gradient(135deg, rgba(91, 26, 153, 0.3), rgba(63, 14, 107, 0.25));
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(155, 89, 230, 0.25);
+      border-radius: var(--radius-xl);
+      padding: 56px 40px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+
+    .cta-card h2 {
+      font-size: clamp(26px, 3.5vw, 36px);
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 16px;
+    }
+
+    .cta-card p {
+      font-size: 16px;
+      color: var(--text-secondary);
+      max-width: 460px;
+      margin: 0 auto 32px;
+      line-height: 1.7;
+    }
+
+    .cta-card .btn-hero-primary {
+      font-size: 17px;
+      padding: 16px 36px;
     }
 
     /* ============================================================
        FOOTER
        ============================================================ */
-    footer {
-      position: relative; z-index: 1;
-      background: rgba(13,2,33,0.6); backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+    .site-footer {
+      position: relative;
+      z-index: 1;
       border-top: 1px solid var(--border-glass);
-      text-align: center; padding: 2.5rem 2rem;
+      padding: 32px;
+      text-align: center;
     }
-    footer .footer-links {
-      display: flex; justify-content: center; gap: 2rem; flex-wrap: wrap;
-      margin-bottom: 1.2rem;
-    }
-    footer .footer-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: color var(--transition); }
-    footer .footer-links a:hover { color: #fff; }
-    footer .social { margin-bottom: 1rem; }
-    footer .social a {
-      color: var(--text-muted); margin: 0 0.6rem; font-size: 1.3rem;
-      transition: color var(--transition), transform var(--transition);
-      display: inline-block;
-    }
-    footer .social a:hover { color: var(--purple-400); transform: translateY(-3px); }
-    footer .copyright { color: var(--text-muted); font-size: 0.85rem; }
 
-    /* ============================================================
-       BACK TO TOP
-       ============================================================ */
-    .back-to-top {
-      position: fixed; bottom: 28px; right: 28px; z-index: 999;
-      width: 46px; height: 46px; border-radius: 50%;
+    .site-footer .footer-content {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .site-footer .footer-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .site-footer .footer-brand .brand-icon-sm {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
       background: linear-gradient(135deg, var(--purple-500), var(--purple-600));
-      color: #fff; border: none; cursor: pointer;
-      font-size: 1.2rem; display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 4px 18px rgba(123,45,204,0.4);
-      opacity: 0; transform: translateY(20px);
-      pointer-events: none;
-      transition: opacity 0.35s ease, transform 0.35s ease, box-shadow var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
     }
-    .back-to-top.visible {
-      opacity: 1; transform: translateY(0); pointer-events: auto;
+
+    .site-footer .footer-brand span {
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
     }
-    .back-to-top:hover {
-      box-shadow: 0 6px 26px rgba(123,45,204,0.6);
-      transform: translateY(-3px);
+
+    .site-footer .footer-links {
+      display: flex;
+      gap: 28px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .site-footer .footer-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      transition: color var(--transition-fast);
+    }
+
+    .site-footer .footer-links a:hover {
+      color: var(--purple-300);
+    }
+
+    .site-footer .footer-copy {
+      font-size: 12px;
+      color: var(--text-muted);
+      opacity: 0.6;
     }
 
     /* ============================================================
-       ANIMATIONS
+       MOBILE MENU OVERLAY
        ============================================================ */
-    @keyframes fadeInUp {
-      from { opacity: 0; transform: translateY(24px); }
-      to   { opacity: 1; transform: translateY(0); }
+    .mobile-menu {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      background: rgba(7, 1, 18, 0.96);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 28px;
     }
-    .animate-on-scroll {
-      opacity: 0; transform: translateY(24px);
-      transition: opacity 0.6s ease, transform 0.6s ease;
+
+    .mobile-menu.open {
+      display: flex;
     }
-    .animate-on-scroll.visible { opacity: 1; transform: translateY(0); }
 
-    /* Stagger children */
-    .features-grid .animate-on-scroll:nth-child(1) { transition-delay: 0s; }
-    .features-grid .animate-on-scroll:nth-child(2) { transition-delay: 0.08s; }
-    .features-grid .animate-on-scroll:nth-child(3) { transition-delay: 0.16s; }
-    .features-grid .animate-on-scroll:nth-child(4) { transition-delay: 0.24s; }
-    .features-grid .animate-on-scroll:nth-child(5) { transition-delay: 0.32s; }
-    .features-grid .animate-on-scroll:nth-child(6) { transition-delay: 0.40s; }
+    .mobile-menu .mobile-close {
+      position: absolute;
+      top: 22px;
+      right: 28px;
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 28px;
+      cursor: pointer;
+    }
 
-    .pricing-grid .animate-on-scroll:nth-child(1) { transition-delay: 0s; }
-    .pricing-grid .animate-on-scroll:nth-child(2) { transition-delay: 0.1s; }
-    .pricing-grid .animate-on-scroll:nth-child(3) { transition-delay: 0.2s; }
+    .mobile-menu a {
+      font-size: 20px;
+      font-weight: 600;
+      color: #fff;
+      text-decoration: none;
+      transition: color var(--transition-fast);
+    }
+
+    .mobile-menu a:hover {
+      color: var(--purple-300);
+    }
+
+    .mobile-menu .btn-hero-primary {
+      margin-top: 12px;
+    }
 
     /* ============================================================
        RESPONSIVE
        ============================================================ */
     @media (max-width: 768px) {
-      header { padding: 0.7rem 1.2rem; }
-      nav { gap: 0.8rem; }
-      nav a { font-size: 0.85rem; }
-      .hero { padding: 4rem 1.2rem 2.5rem; }
-      .hero-stats { gap: 1.5rem; }
-      section { padding: 3rem 1.2rem; }
-      .features-grid { grid-template-columns: 1fr; }
-      .pricing-grid { grid-template-columns: 1fr; }
-      .contact-wrapper { padding: 2rem 1.4rem; }
-      .hamburger { display: block; }
-      nav .nav-links {
+      .navbar {
+        padding: 0 20px;
+      }
+
+      .navbar .nav-links {
         display: none;
-        flex-direction: column; position: absolute;
-        top: 100%; left: 0; right: 0;
-        background: rgba(13,2,33,0.95); backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        padding: 1.2rem; gap: 1rem;
-        border-bottom: 1px solid var(--border-glass);
-        border-radius: 0 0 var(--radius-md) var(--radius-md);
-        box-shadow: 0 12px 30px rgba(0,0,0,0.5);
-        animation: slideDown 0.25s ease;
       }
-      nav.open .nav-links {
-        display: flex;
+
+      .navbar .nav-actions .btn-nav-outline {
+        display: none;
       }
-      .back-to-top { bottom: 16px; right: 16px; width: 40px; height: 40px; font-size: 1rem; }
+
+      .hamburger {
+        display: block;
+      }
+
+      .hero {
+        padding: 80px 20px 60px;
+      }
+
+      .hero h1 {
+        font-size: 32px;
+      }
+
+      .hero p {
+        font-size: 16px;
+      }
+
+      .hero-actions {
+        flex-direction: column;
+      }
+
+      .btn-hero {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .section {
+        padding: 60px 20px;
+      }
+
+      .features-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+
+      .cta-card {
+        padding: 36px 24px;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      .stat-card .stat-number {
+        font-size: 30px;
+      }
+
+      .trust-logos {
+        gap: 28px;
+      }
+
+      .scroll-indicator {
+        display: none;
+      }
     }
 
-    @keyframes slideDown {
-      from { opacity: 0; transform: translateY(-8px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
-    @media (min-width: 769px) {
-      nav .nav-links { display: flex; align-items: center; gap: 1.2rem; }
-    }
     @media (max-width: 480px) {
-      .hero h1 { font-size: 1.8rem; }
-      .hero .hero-subtitle { font-size: 1rem; }
-      .section-header h2 { font-size: 1.7rem; }
-      .hero-stats .stat-num { font-size: 1.5rem; }
-      .pricing-card .price { font-size: 2.2rem; }
+      .navbar {
+        height: 60px;
+      }
+
+      .navbar .nav-brand .brand-name {
+        font-size: 17px;
+      }
+
+      .navbar .nav-brand .brand-icon {
+        width: 34px;
+        height: 34px;
+        font-size: 16px;
+      }
+
+      .hero {
+        min-height: auto;
+        padding: 90px 16px 50px;
+      }
+
+      .hero h1 {
+        font-size: 28px;
+      }
+
+      .hero p {
+        font-size: 15px;
+      }
+
+      .btn-hero {
+        padding: 13px 24px;
+        font-size: 15px;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .feature-card {
+        padding: 24px 20px;
+      }
+
+      .cta-card h2 {
+        font-size: 22px;
+      }
     }
   </style>
 </head>
 <body>
-
   <!-- ============================================================
        BACKGROUND EFFECTS
        ============================================================ -->
   <div class="bg-particles" id="bgParticles"></div>
-  <div class="glow-orb glow-orb--1"></div>
-  <div class="glow-orb glow-orb--2"></div>
-  <div class="glow-orb glow-orb--3"></div>
+
+  <div class="glow-orb glow-orb--top-right"></div>
+  <div class="glow-orb glow-orb--bottom-left"></div>
+  <div class="glow-orb glow-orb--center"></div>
+  <div class="glow-orb glow-orb--accent"></div>
 
   <!-- ============================================================
-       HEADER
+       NAVIGATION
        ============================================================ -->
-  <header id="siteHeader">
-    <div class="logo">
-      <div class="logo-icon"><i class="fas fa-utensils"></i></div>
-      GastroHub
+  <nav class="navbar" id="navbar">
+    <a href="/" class="nav-brand">
+      <div class="brand-icon">GH</div>
+      <span class="brand-name">GastroHub</span>
+    </a>
+
+    <ul class="nav-links">
+      <li><a href="#features">Funcționalități</a></li>
+      <li><a href="#stats">Statistici</a></li>
+      <li><a href="#cta">Prețuri</a></li>
+    </ul>
+
+    <div class="nav-actions">
+      <a href="/customer/login" class="btn-nav btn-nav-outline">
+        <i class="fas fa-sign-in-alt"></i> Conectează-te
+      </a>
+      <a href="/customer/register" class="btn-nav btn-nav-primary">
+        <i class="fas fa-user-plus"></i> Înregistrează-te gratuit
+      </a>
+      <button class="hamburger" id="hamburger" aria-label="Meniu">
+        <i class="fas fa-bars"></i>
+      </button>
     </div>
-    <button class="hamburger" id="hamburger" aria-label="Meniu">
-      <i class="fas fa-bars"></i>
+  </nav>
+
+  <!-- ============================================================
+       MOBILE MENU
+       ============================================================ -->
+  <div class="mobile-menu" id="mobileMenu">
+    <button class="mobile-close" id="mobileClose" aria-label="Închide meniu">
+      <i class="fas fa-times"></i>
     </button>
-    <nav id="mainNav">
-      <div class="nav-links">
-        <a href="#features">Funcționalități</a>
-        <a href="#pricing">Prețuri</a>
-        <a href="#contact">Contact</a>
-        <a href="/customer/login" class="btn-glass btn-outline"><i class="fas fa-sign-in-alt"></i> Login</a>
-      </div>
-    </nav>
-  </header>
+    <a href="#features">Funcționalități</a>
+    <a href="#stats">Statistici</a>
+    <a href="#cta">Prețuri</a>
+    <a href="/customer/login">
+      <i class="fas fa-sign-in-alt"></i> Conectează-te
+    </a>
+    <a href="/customer/register" class="btn-hero btn-hero-primary">
+      <i class="fas fa-user-plus"></i> Înregistrează-te gratuit
+    </a>
+  </div>
 
   <!-- ============================================================
-       HERO
+       HERO SECTION
        ============================================================ -->
-  <section class="hero">
-    <h1>Transformă-ți restaurantul cu GastroHub</h1>
-    <p class="hero-subtitle">
-      Platforma all-in-one pentru gestionarea restaurantului: meniu, comenzi online,
-      livrări, inventar, rezervări, resurse umane și program de loialitate – totul într-un singur loc.
-    </p>
-    <div class="cta-group">
-      <a href="/customer/register" class="btn-glass btn-primary btn-lg">
-        <i class="fas fa-rocket"></i> Înregistrează-te gratuit
-      </a>
-      <a href="#features" class="btn-glass btn-outline btn-lg">
-        <i class="fas fa-arrow-down"></i> Descoperă mai mult
-      </a>
+  <section class="hero" id="hero">
+    <div class="hero-container">
+      <div class="hero-badge">
+        <i class="fas fa-circle"></i> Platformă lansată — gratuit pentru clienți
+      </div>
+
+      <h1>
+        Gestionarea restaurantului tău,
+        <br />
+        <span class="highlight">mai simplă ca niciodată</span>
+      </h1>
+
+      <p>
+        GastroHub este platforma all-in-one care conectează restaurantele,
+        hotelurile și clienții. Gestionare comenzi, rezervări, inventar,
+        loialitate și multe altele — totul într-un singur loc.
+      </p>
+
+      <div class="hero-actions">
+        <a href="/customer/register" class="btn-hero btn-hero-primary">
+          <i class="fas fa-rocket"></i> Înregistrează-te gratuit
+        </a>
+        <a href="/customer/login" class="btn-hero btn-hero-outline">
+          <i class="fas fa-sign-in-alt"></i> Am deja cont
+        </a>
+      </div>
     </div>
-    <div class="hero-stats">
-      <div class="stat">
-        <div class="stat-num" data-count="500">0+</div>
-        <div class="stat-label">Restaurante active</div>
-      </div>
-      <div class="stat">
-        <div class="stat-num" data-count="50">0k+</div>
-        <div class="stat-label">Comenzi procesate</div>
-      </div>
-      <div class="stat">
-        <div class="stat-num" data-count="99.9" data-decimal="true">0%</div>
-        <div class="stat-label">Uptime garantat</div>
-      </div>
+
+    <!-- Scroll indicator -->
+    <div class="scroll-indicator">
+      <span>Descoperă</span>
+      <i class="fas fa-chevron-down"></i>
     </div>
   </section>
 
   <!-- ============================================================
-       FEATURES
+       FEATURES SECTION
        ============================================================ -->
-  <section id="features">
+  <section class="section" id="features">
     <div class="section-header">
-      <h2>Funcționalități principale</h2>
-      <p class="section-subtitle">6 module integrate care acoperă fiecare aspect al restaurantului tău</p>
+      <div class="section-badge">Funcționalități</div>
+      <h2>Tot ce ai nevoie pentru afacerea ta</h2>
+      <p>
+        De la gestionarea comenzilor și a rezervărilor până la inventar,
+        loialitate și rapoarte detaliate — GastroHub acoperă fiecare aspect.
+      </p>
     </div>
+
     <div class="features-grid">
-      <!-- Card 1: Meniu -->
-      <div class="feature-card animate-on-scroll">
-        <div class="fc-icon"><i class="fas fa-clipboard-list"></i></div>
-        <h3>Gestionare Meniu</h3>
-        <p>Creează, editează și organizează preparatele pe categorii. Actualizări instantanee, prețuri flexibile și poze atractive.</p>
+      <!-- Feature 1 -->
+      <div class="feature-card">
+        <div class="feature-icon">
+          <i class="fas fa-utensils"></i>
+        </div>
+        <h3>Gestionare restaurante</h3>
+        <p>
+          Administrează meniuri, mese și personal. Urmărește comenzile în
+          timp real și optimizează fluxul operațional al restaurantului tău.
+        </p>
       </div>
 
-      <!-- Card 2: Comenzi & Livrări -->
-      <div class="feature-card animate-on-scroll">
-        <div class="fc-icon"><i class="fas fa-shopping-cart"></i></div>
-        <h3>Comenzi &amp; Livrări</h3>
-        <p>Primești și gestionezi comenzi online în timp real. Urmărește livrările de la preparare până la client.</p>
+      <!-- Feature 2 -->
+      <div class="feature-card">
+        <div class="feature-icon">
+          <i class="fas fa-calendar-check"></i>
+        </div>
+        <h3>Rezervări inteligente</h3>
+        <p>
+          Permite clienților să facă rezervări online 24/7. Confirmări
+          automate, gestionare mese și notificări integrate.
+        </p>
       </div>
 
-      <!-- Card 3: Inventar -->
-      <div class="feature-card animate-on-scroll">
-        <div class="fc-icon"><i class="fas fa-boxes"></i></div>
-        <h3>Inventar &amp; Furnizori</h3>
-        <p>Monitorizează stocurile, primești alerte când nivelul e scăzut și centralizează contactele furnizorilor.</p>
+      <!-- Feature 3 -->
+      <div class="feature-card">
+        <div class="feature-icon">
+          <i class="fas fa-boxes"></i>
+        </div>
+        <h3>Management inventar</h3>
+        <p>
+          Ține evidența stocurilor, furnizorilor și livrărilor. Alerte
+          automate pentru stocuri minime și rapoarte de consum.
+        </p>
       </div>
 
-      <!-- Card 4: Rezervări -->
-      <div class="feature-card animate-on-scroll">
-        <div class="fc-icon"><i class="fas fa-calendar-alt"></i></div>
-        <h3>Rezervări Mese</h3>
-        <p>Administrează mesele și rezervările clienților cu un calendar intuitiv. Sincronizare automată și notificări.</p>
+      <!-- Feature 4 -->
+      <div class="feature-card">
+        <div class="feature-icon">
+          <i class="fas fa-star"></i>
+        </div>
+        <h3>Program de loialitate</h3>
+        <p>
+          Recompensează-ți clienții fideli cu puncte, cupoane și oferte
+          personalizate. Crește retenția și frecvența vizitelor.
+        </p>
       </div>
 
-      <!-- Card 5: HR -->
-      <div class="feature-card animate-on-scroll">
-        <div class="fc-icon"><i class="fas fa-users"></i></div>
-        <h3>Resurse Umane</h3>
-        <p>Gestionează pontajul, programul de lucru și salariile angajaților direct din platformă.</p>
+      <!-- Feature 5 -->
+      <div class="feature-card">
+        <div class="feature-icon">
+          <i class="fas fa-chart-line"></i>
+        </div>
+        <h3>Rapoarte &amp; analize</h3>
+        <p>
+          Obține insight-uri valoroase despre vânzări, tendințe și
+          performanță. Rapoarte detaliate pentru decizii informate.
+        </p>
       </div>
 
-      <!-- Card 6: Loialitate -->
-      <div class="feature-card animate-on-scroll">
-        <div class="fc-icon"><i class="fas fa-gem"></i></div>
-        <h3>Program de Loialitate</h3>
-        <p>Fidelizează clienții cu puncte, recompense și oferte personalizate. Crește retenția cu 40%.</p>
+      <!-- Feature 6 -->
+      <div class="feature-card">
+        <div class="feature-icon">
+          <i class="fas fa-mobile-alt"></i>
+        </div>
+        <h3>Accesibil de oriunde</h3>
+        <p>
+          Platformă responsive, optimizată pentru desktop, tabletă și mobil.
+          Funcționează ca PWA — instaleaz-o pe orice dispozitiv.
+        </p>
       </div>
     </div>
   </section>
 
   <!-- ============================================================
-       PRICING
+       STATS SECTION
        ============================================================ -->
-  <section id="pricing">
+  <section class="stats-section" id="stats">
     <div class="section-header">
-      <h2>Planuri tarifare</h2>
-      <p class="section-subtitle">Alege planul potrivit pentru restaurantul tău</p>
+      <div class="section-badge">În cifre</div>
+      <h2>Platforma în care poți avea încredere</h2>
     </div>
-    <div class="pricing-grid">
-      <!-- Plan: Starter -->
-      <div class="pricing-card animate-on-scroll">
-        <div class="plan-name">Starter</div>
-        <div class="price">0<span> RON/lună</span></div>
-        <p style="color:var(--text-muted);margin-bottom:1rem;">Gratuit pentru început</p>
-        <ul>
-          <li><i class="fas fa-check-circle"></i> Până la 50 de preparate în meniu</li>
-          <li><i class="fas fa-check-circle"></i> Gestionare comenzi de bază</li>
-          <li><i class="fas fa-check-circle"></i> 1 utilizator</li>
-          <li><i class="fas fa-check-circle"></i> Acces prin browser și mobil</li>
-          <li style="color:var(--text-muted);"><i class="fas fa-minus-circle"></i> Fără loialitate</li>
-          <li style="color:var(--text-muted);"><i class="fas fa-minus-circle"></i> Fără inventar avansat</li>
-        </ul>
-        <a href="/customer/register" class="btn-glass btn-outline" style="margin-top:auto;">Începe gratuit</a>
-      </div>
 
-      <!-- Plan: Profesional (Featured) -->
-      <div class="pricing-card featured animate-on-scroll">
-        <div class="badge">Cel mai popular</div>
-        <div class="plan-name">Profesional</div>
-        <div class="price">149<span> RON/lună</span></div>
-        <p style="color:var(--text-muted);margin-bottom:1rem;">Pentru restaurante în creștere</p>
-        <ul>
-          <li><i class="fas fa-check-circle"></i> Meniu nelimitat</li>
-          <li><i class="fas fa-check-circle"></i> Comenzi online + livrări</li>
-          <li><i class="fas fa-check-circle"></i> Până la 10 utilizatori</li>
-          <li><i class="fas fa-check-circle"></i> Inventar &amp; furnizori</li>
-          <li><i class="fas fa-check-circle"></i> Program loialitate</li>
-          <li><i class="fas fa-check-circle"></i> Suport prioritar 24/7</li>
-        </ul>
-        <a href="/customer/register" class="btn-glass btn-primary" style="margin-top:auto;">Înregistrează-te</a>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-number">100%</div>
+        <div class="stat-label">Gratuit pentru clienți</div>
       </div>
-
-      <!-- Plan: Enterprise -->
-      <div class="pricing-card animate-on-scroll">
-        <div class="plan-name">Enterprise</div>
-        <div class="price">349<span> RON/lună</span></div>
-        <p style="color:var(--text-muted);margin-bottom:1rem;">Lanțuri și francize</p>
-        <ul>
-          <li><i class="fas fa-check-circle"></i> Toate din Profesional</li>
-          <li><i class="fas fa-check-circle"></i> Utilizatori nelimitați</li>
-          <li><i class="fas fa-check-circle"></i> Locații multiple</li>
-          <li><i class="fas fa-check-circle"></i> API personalizat</li>
-          <li><i class="fas fa-check-circle"></i> Manager dedicat</li>
-          <li><i class="fas fa-check-circle"></i> Rapoarte avansate &amp; analytics</li>
-        </ul>
-        <a href="/customer/register" class="btn-glass btn-outline" style="margin-top:auto;">Contactează-ne</a>
+      <div class="stat-card">
+        <div class="stat-number">24/7</div>
+        <div class="stat-label">Disponibilitate</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number">6+</div>
+        <div class="stat-label">Module operaționale</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number">SSL</div>
+        <div class="stat-label">Date criptate &amp; sigure</div>
       </div>
     </div>
   </section>
 
   <!-- ============================================================
-       CONTACT
+       TRUST / PARTNERS
        ============================================================ -->
-  <section id="contact">
-    <div class="section-header">
-      <h2>Contactează-ne</h2>
-      <p class="section-subtitle">Ai întrebări? Suntem aici să te ajutăm.</p>
+  <section class="trust-section">
+    <div class="section-header" style="margin-bottom: 36px;">
+      <div class="section-badge">Încredere</div>
+      <p style="font-size: 15px; color: var(--text-muted);">
+        Tehnologie modernă construită pentru industria ospitalității
+      </p>
     </div>
-    <div class="contact-wrapper">
-      <div class="form-error" id="formError"></div>
-      <form id="contactForm">
-        <div class="form-group">
-          <label for="contactName">Numele tău *</label>
-          <input type="text" id="contactName" name="name" placeholder="ex: Andrei Popescu" required />
-        </div>
-        <div class="form-group">
-          <label for="contactEmail">Adresa de email *</label>
-          <input type="email" id="contactEmail" name="email" placeholder="ex: andrei@restaurant.ro" required />
-        </div>
-        <div class="form-group">
-          <label for="contactMessage">Mesajul tău *</label>
-          <textarea id="contactMessage" name="message" placeholder="Spune-ne cum te putem ajuta..." required></textarea>
-        </div>
-        <button type="submit" class="btn-submit">
-          <i class="fas fa-paper-plane"></i> Trimite mesajul
-        </button>
-      </form>
-      <div class="form-success" id="formSuccess">
-        <i class="fas fa-check-circle" style="font-size:2rem;"></i>
-        <p style="margin-top:0.5rem;">Mesajul tău a fost trimis cu succes! Te vom contacta în curând.</p>
-      </div>
+    <div class="trust-logos">
+      <span class="trust-logo">Node.js</span>
+      <span class="trust-logo">Express</span>
+      <span class="trust-logo">SQLite</span>
+      <span class="trust-logo">PWA</span>
+      <span class="trust-logo">JWT</span>
+      <span class="trust-logo">HTTPS</span>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       CTA BOTTOM
+       ============================================================ -->
+  <section class="cta-section" id="cta">
+    <div class="cta-card">
+      <h2>Începe chiar astăzi — este gratuit</h2>
+      <p>
+        Creează-ți un cont gratuit de client în mai puțin de 2 minute.
+        Descoperă restaurante, fă rezervări, plasează comenzi și
+        câștigă puncte de loialitate.
+      </p>
+      <a href="/customer/register" class="btn-hero btn-hero-primary">
+        <i class="fas fa-user-plus"></i> Înregistrează-te gratuit
+      </a>
     </div>
   </section>
 
   <!-- ============================================================
        FOOTER
        ============================================================ -->
-  <footer>
-    <div class="footer-links">
-      <a href="#features">Funcționalități</a>
-      <a href="#pricing">Prețuri</a>
-      <a href="#contact">Contact</a>
-      <a href="/terms">Termeni</a>
-      <a href="/privacy">Confidențialitate</a>
-    </div>
-    <div class="social">
-      <a href="#" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
-      <a href="#" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
-      <a href="#" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
-      <a href="#" aria-label="Twitter"><i class="fab fa-x-twitter"></i></a>
-    </div>
-    <p class="copyright">&copy; 2025 GastroHub. Toate drepturile rezervate.</p>
-  </footer>
+  <footer class="site-footer">
+    <div class="footer-content">
+      <div class="footer-brand">
+        <div class="brand-icon-sm">GH</div>
+        <span>GastroHub</span>
+      </div>
 
-  <!-- Back to Top -->
-  <button class="back-to-top" id="backToTop" aria-label="Înapoi sus">
-    <i class="fas fa-chevron-up"></i>
-  </button>
+      <div class="footer-links">
+        <a href="/customer/login">Autentificare</a>
+        <a href="/customer/register">Înregistrare</a>
+        <a href="/terms">Termeni și condiții</a>
+        <a href="/privacy">Confidențialitate</a>
+        <a href="/contact">Contact</a>
+      </div>
+
+      <div class="footer-copy">
+        &copy; 2026 GastroHub. Toate drepturile rezervate.
+      </div>
+    </div>
+  </footer>
 
   <!-- ============================================================
        SCRIPTS
        ============================================================ -->
   <script>
-    (function() {
+    (function () {
       'use strict';
 
-      // ----------------------------------------------------------------
+      // ===============================================================
       // Background particles
-      // ----------------------------------------------------------------
+      // ===============================================================
       function createParticles() {
         var container = document.getElementById('bgParticles');
         if (!container) return;
-        var count = window.innerWidth < 768 ? 10 : 20;
+
+        var count = window.innerWidth < 768 ? 10 : 22;
         var fragment = document.createDocumentFragment();
+
         for (var i = 0; i < count; i++) {
-          var p = document.createElement('div');
-          p.className = 'bg-particle';
-          var size = Math.random() * 8 + 3;
-          p.style.cssText =
+          var particle = document.createElement('div');
+          particle.className = 'bg-particle';
+
+          var size = Math.random() * 8 + 3;         // 3px – 11px
+          var left = Math.random() * 100;
+          var top  = Math.random() * 100;
+          var delay = Math.random() * 16;
+          var duration = Math.random() * 10 + 12;    // 12s – 22s
+          var opacity = Math.random() * 0.05 + 0.015;
+
+          particle.style.cssText =
             'width:' + size + 'px;' +
             'height:' + size + 'px;' +
-            'left:' + (Math.random() * 100) + '%;' +
-            'top:' + (Math.random() * 100) + '%;' +
-            'animation-delay:' + (Math.random() * 16) + 's;' +
-            'animation-duration:' + (Math.random() * 10 + 10) + 's;' +
-            'opacity:' + (Math.random() * 0.05 + 0.02) + ';';
-          fragment.appendChild(p);
+            'left:' + left + '%;' +
+            'top:' + top + '%;' +
+            'animation-delay:' + delay + 's;' +
+            'animation-duration:' + duration + 's;' +
+            'opacity:' + opacity + ';';
+
+          fragment.appendChild(particle);
         }
+
         container.appendChild(fragment);
       }
 
-      // ----------------------------------------------------------------
-      // Hamburger menu
-      // ----------------------------------------------------------------
-      var hamburger = document.getElementById('hamburger');
-      var mainNav = document.getElementById('mainNav');
-      if (hamburger && mainNav) {
-        hamburger.addEventListener('click', function() {
-          mainNav.classList.toggle('open');
-          var icon = hamburger.querySelector('i');
-          if (icon) {
-            icon.className = mainNav.classList.contains('open')
-              ? 'fas fa-times'
-              : 'fas fa-bars';
+      // ===============================================================
+      // Navbar scroll effect
+      // ===============================================================
+      function initNavbarScroll() {
+        var navbar = document.getElementById('navbar');
+        if (!navbar) return;
+
+        var scrollThreshold = 40;
+
+        function onScroll() {
+          if (window.scrollY > scrollThreshold) {
+            navbar.classList.add('scrolled');
+          } else {
+            navbar.classList.remove('scrolled');
+          }
+        }
+
+        // Check on load
+        onScroll();
+
+        window.addEventListener('scroll', onScroll, { passive: true });
+      }
+
+      // ===============================================================
+      // Mobile menu toggles
+      // ===============================================================
+      function initMobileMenu() {
+        var hamburger    = document.getElementById('hamburger');
+        var mobileMenu   = document.getElementById('mobileMenu');
+        var mobileClose  = document.getElementById('mobileClose');
+        var menuLinks    = mobileMenu ? mobileMenu.querySelectorAll('a') : [];
+
+        if (!hamburger || !mobileMenu) return;
+
+        function openMenu() {
+          mobileMenu.classList.add('open');
+          document.body.style.overflow = 'hidden';
+        }
+
+        function closeMenu() {
+          mobileMenu.classList.remove('open');
+          document.body.style.overflow = '';
+        }
+
+        hamburger.addEventListener('click', openMenu);
+
+        if (mobileClose) {
+          mobileClose.addEventListener('click', closeMenu);
+        }
+
+        // Close on link click
+        for (var i = 0; i < menuLinks.length; i++) {
+          menuLinks[i].addEventListener('click', function () {
+            closeMenu();
+          });
+        }
+
+        // Close on Escape
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && mobileMenu.classList.contains('open')) {
+            closeMenu();
           }
         });
+      }
 
-        // Close menu when clicking a nav link (mobile)
-        var navLinks = mainNav.querySelectorAll('.nav-links a');
-        for (var i = 0; i < navLinks.length; i++) {
-          navLinks[i].addEventListener('click', function() {
-            mainNav.classList.remove('open');
-            var icon = hamburger.querySelector('i');
-            if (icon) { icon.className = 'fas fa-bars'; }
+      // ===============================================================
+      // Smooth scroll for anchor links
+      // ===============================================================
+      function initSmoothScroll() {
+        var anchors = document.querySelectorAll('a[href^="#"]');
+
+        for (var i = 0; i < anchors.length; i++) {
+          anchors[i].addEventListener('click', function (e) {
+            var href = this.getAttribute('href');
+            if (!href || href === '#') return;
+
+            var target = document.querySelector(href);
+            if (!target) return;
+
+            e.preventDefault();
+
+            target.scrollIntoView({
+              behavior: 'smooth',
+              block: 'start',
+            });
           });
         }
       }
 
-      // ----------------------------------------------------------------
-      // Header scroll effect
-      // ----------------------------------------------------------------
-      var siteHeader = document.getElementById('siteHeader');
-      window.addEventListener('scroll', function() {
-        if (siteHeader) {
-          if (window.scrollY > 10) {
-            siteHeader.classList.add('scrolled');
-          } else {
-            siteHeader.classList.remove('scrolled');
-          }
-        }
-      });
-
-      // ----------------------------------------------------------------
-      // Back to top button
-      // ----------------------------------------------------------------
-      var backToTop = document.getElementById('backToTop');
-      if (backToTop) {
-        window.addEventListener('scroll', function() {
-          if (window.scrollY > 500) {
-            backToTop.classList.add('visible');
-          } else {
-            backToTop.classList.remove('visible');
-          }
-        });
-        backToTop.addEventListener('click', function() {
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        });
-      }
-
-      // ----------------------------------------------------------------
-      // Counter animation for hero stats
-      // ----------------------------------------------------------------
-      function animateCounters() {
-        var counters = document.querySelectorAll('.hero-stats .stat-num[data-count]');
-        for (var i = 0; i < counters.length; i++) {
-          (function(counterEl) {
-            var countTo = parseFloat(counterEl.getAttribute('data-count'));
-            var isDecimal = counterEl.getAttribute('data-decimal') === 'true';
-            var suffix = isDecimal ? '%' : (countTo >= 100 ? '+' : '+');
-            var duration = 2000;
-            var startTime = null;
-
-            function step(timestamp) {
-              if (!startTime) startTime = timestamp;
-              var progress = Math.min((timestamp - startTime) / duration, 1);
-              // Ease-out
-              progress = 1 - Math.pow(1 - progress, 3);
-              var current = progress * countTo;
-              if (isDecimal) {
-                counterEl.textContent = current.toFixed(1) + suffix;
-              } else {
-                counterEl.textContent = Math.floor(current) + suffix;
-              }
-              if (progress < 1) {
-                requestAnimationFrame(step);
-              } else {
-                counterEl.textContent = (isDecimal ? countTo.toFixed(1) : countTo) + suffix;
-              }
-            }
-
-            // Use IntersectionObserver to trigger once
-            var observer = new IntersectionObserver(function(entries) {
-              if (entries[0].isIntersecting) {
-                requestAnimationFrame(step);
-                observer.unobserve(counterEl);
-              }
-            }, { threshold: 0.6 });
-            observer.observe(counterEl);
-          })(counters[i]);
-        }
-      }
-
-      // ----------------------------------------------------------------
-      // Scroll reveal animation
-      // ----------------------------------------------------------------
-      function revealOnScroll() {
-        var elements = document.querySelectorAll('.animate-on-scroll');
-        var windowHeight = window.innerHeight;
-        for (var i = 0; i < elements.length; i++) {
-          var el = elements[i];
-          var rect = el.getBoundingClientRect();
-          if (rect.top < windowHeight - 80) {
-            el.classList.add('visible');
-          }
-        }
-      }
-
-      // ----------------------------------------------------------------
-      // Contact form
-      // ----------------------------------------------------------------
-      var contactForm = document.getElementById('contactForm');
-      var formSuccess = document.getElementById('formSuccess');
-      var formError = document.getElementById('formError');
-
-      function showFormError(msg) {
-        if (formError) {
-          formError.textContent = msg;
-          formError.style.display = 'block';
-        }
-      }
-
-      function clearFormError() {
-        if (formError) {
-          formError.textContent = '';
-          formError.style.display = 'none';
-        }
-      }
-
-      if (contactForm) {
-        contactForm.addEventListener('submit', function(e) {
-          e.preventDefault();
-          clearFormError();
-
-          var name = document.getElementById('contactName').value.trim();
-          var email = document.getElementById('contactEmail').value.trim();
-          var message = document.getElementById('contactMessage').value.trim();
-          var submitBtn = contactForm.querySelector('.btn-submit');
-
-          if (!name || !email || !message) {
-            showFormError('Te rugăm să completezi toate câmpurile obligatorii.');
-            return;
-          }
-
-          if (name.length < 2) {
-            showFormError('Numele trebuie să aibă cel puțin 2 caractere.');
-            return;
-          }
-
-          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-            showFormError('Te rugăm să introduci o adresă de email validă.');
-            return;
-          }
-
-          if (message.length < 10) {
-            showFormError('Mesajul trebuie să aibă cel puțin 10 caractere.');
-            return;
-          }
-
-          // Disable button to prevent double submission
-          if (submitBtn) {
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Se trimite...';
-          }
-
-          // Send to API
-          fetch('/api/contact', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: name, email: email, message: message })
-          })
-          .then(function(response) {
-            if (!response.ok) {
-              throw new Error('Server error: ' + response.status);
-            }
-            return response.json();
-          })
-          .then(function() {
-            contactForm.style.display = 'none';
-            formSuccess.style.display = 'block';
-            clearFormError();
-          })
-          .catch(function() {
-            // Demo / fallback: show success anyway for landing page
-            contactForm.style.display = 'none';
-            formSuccess.style.display = 'block';
-            clearFormError();
-          })
-          .finally(function() {
-            if (submitBtn && contactForm.style.display !== 'none') {
-              submitBtn.disabled = false;
-              submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Trimite mesajul';
-            }
-          });
-        });
-      }
-
-      // ----------------------------------------------------------------
+      // ===============================================================
       // Init
-      // ----------------------------------------------------------------
-      document.addEventListener('DOMContentLoaded', function() {
+      // ===============================================================
+      document.addEventListener('DOMContentLoaded', function () {
         createParticles();
-        revealOnScroll();
-        animateCounters();
-        window.addEventListener('scroll', revealOnScroll);
+        initNavbarScroll();
+        initMobileMenu();
+        initSmoothScroll();
       });
-
-      // Service Worker
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js')
-          .then(function() { console.log('[SW] Service Worker înregistrat'); })
-          .catch(function(err) { console.warn('[SW] Eroare la înregistrare:', err); });
-      }
     })();
   </script>
 </body>
