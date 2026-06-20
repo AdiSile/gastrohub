@@ -10,7 +10,7 @@
 // Tabela: menu_items
 // ---------------------------------------------------------------------------
 
-const getDb = require('../config/db');
+const { getDb } = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
 
 // ---------------------------------------------------------------------------

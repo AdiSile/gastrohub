@@ -884,20 +884,15 @@ async function createReservation(data) {
  * @param {string|number} id - ID-ul rezervarii
  * @returns {Promise<Object|null>}
  */
-function getReservationById(id) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!id) {
-        return reject(new Error('ID-ul rezervarii este invalid.'));
-      }
+async function getReservationById(id) {
+  if (!id) {
+    throw new Error('ID-ul rezervarii este invalid.');
+  }
 
-      const intId = toIntId(id);
-      const row = get('SELECT * FROM reservations WHERE id = ?', [intId]);
-      resolve(normalizeReservation(row));
-    } catch (err) {
-      reject(new Error(`Eroare la cautarea rezervarii: ${err.message}`));
-    }
-  });
+  const intId = toIntId(id);
+  const db = await getDb();
+  const row = _dbGet(db, 'SELECT * FROM reservations WHERE id = ?', [intId]);
+  return normalizeReservation(row);
 }
 
 /**
@@ -905,22 +900,18 @@ function getReservationById(id) {
  * @param {string} hotelId - ID-ul hotelului
  * @returns {Promise<Object[]>}
  */
-function getReservationsByHotel(hotelId) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!hotelId) {
-        return reject(new Error('ID-ul hotelului este invalid.'));
-      }
+async function getReservationsByHotel(hotelId) {
+  if (!hotelId) {
+    throw new Error('ID-ul hotelului este invalid.');
+  }
 
-      const rows = all(
-        'SELECT * FROM reservations WHERE hotelId = ? ORDER BY checkIn ASC',
-        [String(hotelId)]
-      );
-      resolve(rows.map(normalizeReservation));
-    } catch (err) {
-      reject(new Error(`Eroare la cautarea rezervarilor: ${err.message}`));
-    }
-  });
+  const db = await getDb();
+  const rows = _dbAll(
+    db,
+    'SELECT * FROM reservations WHERE hotelId = ? ORDER BY checkIn ASC',
+    [String(hotelId)]
+  );
+  return rows.map(normalizeReservation);
 }
 
 /**
@@ -928,26 +919,21 @@ function getReservationsByHotel(hotelId) {
  * @param {string} guestInfo - Nume, telefon sau email
  * @returns {Promise<Object[]>}
  */
-function getReservationsByGuest(guestInfo) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!guestInfo || typeof guestInfo !== 'string' || guestInfo.trim().length === 0) {
-        return reject(new Error('Informatiile despre guest sunt invalide.'));
-      }
+async function getReservationsByGuest(guestInfo) {
+  if (!guestInfo || typeof guestInfo !== 'string' || guestInfo.trim().length === 0) {
+    throw new Error('Informatiile despre guest sunt invalide.');
+  }
 
-      const searchTerm = `%${guestInfo.trim()}%`;
-
-      const rows = all(
-        `SELECT * FROM reservations
-         WHERE numeClient LIKE ? OR telefonClient LIKE ? OR emailClient LIKE ?
-         ORDER BY checkIn DESC`,
-        [searchTerm, searchTerm, searchTerm]
-      );
-      resolve(rows.map(normalizeReservation));
-    } catch (err) {
-      reject(new Error(`Eroare la cautarea rezervarilor: ${err.message}`));
-    }
-  });
+  const searchTerm = `%${guestInfo.trim()}%`;
+  const db = await getDb();
+  const rows = _dbAll(
+    db,
+    `SELECT * FROM reservations
+     WHERE numeClient LIKE ? OR telefonClient LIKE ? OR emailClient LIKE ?
+     ORDER BY checkIn DESC`,
+    [searchTerm, searchTerm, searchTerm]
+  );
+  return rows.map(normalizeReservation);
 }
 
 /**
@@ -956,35 +942,31 @@ function getReservationsByGuest(guestInfo) {
  * @param {string} status - Noul status
  * @returns {Promise<Object|null>}
  */
-function updateReservationStatus(id, status) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!id) {
-        return reject(new Error('ID-ul rezervarii este invalid.'));
-      }
+async function updateReservationStatus(id, status) {
+  if (!id) {
+    throw new Error('ID-ul rezervarii este invalid.');
+  }
 
-      if (!status || !isValidReservationStatus(status)) {
-        return reject(new Error(`Statusul "${status}" nu este valid. Statusuri permise: ${VALID_RESERVATION_STATUSES.join(', ')}.`));
-      }
+  if (!status || !isValidReservationStatus(status)) {
+    throw new Error(`Statusul "${status}" nu este valid. Statusuri permise: ${VALID_RESERVATION_STATUSES.join(', ')}.`);
+  }
 
-      const intId = toIntId(id);
-      const now = nowISO();
+  const intId = toIntId(id);
+  const now = nowISO();
+  const db = await getDb();
 
-      const result = run(
-        'UPDATE reservations SET status = ?, updatedAt = ? WHERE id = ?',
-        [status, now, intId]
-      );
+  const result = _dbRun(
+    db,
+    'UPDATE reservations SET status = ?, updatedAt = ? WHERE id = ?',
+    [status, now, intId]
+  );
 
-      if (result.changes === 0) {
-        return reject(new Error('Rezervarea nu a fost gasita.'));
-      }
+  if (result.changes === 0) {
+    throw new Error('Rezervarea nu a fost gasita.');
+  }
 
-      const updated = get('SELECT * FROM reservations WHERE id = ?', [intId]);
-      resolve(normalizeReservation(updated));
-    } catch (err) {
-      reject(new Error(`Eroare la actualizarea statusului rezervarii: ${err.message}`));
-    }
-  });
+  const updated = _dbGet(db, 'SELECT * FROM reservations WHERE id = ?', [intId]);
+  return normalizeReservation(updated);
 }
 
 /**
@@ -992,40 +974,36 @@ function updateReservationStatus(id, status) {
  * @param {string|number} id - ID-ul rezervarii
  * @returns {Promise<Object|null>}
  */
-function cancelReservation(id) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!id) {
-        return reject(new Error('ID-ul rezervarii este invalid.'));
-      }
+async function cancelReservation(id) {
+  if (!id) {
+    throw new Error('ID-ul rezervarii este invalid.');
+  }
 
-      const intId = toIntId(id);
+  const intId = toIntId(id);
+  const db = await getDb();
 
-      const reservation = get('SELECT * FROM reservations WHERE id = ?', [intId]);
-      if (!reservation) {
-        return reject(new Error('Rezervarea nu a fost gasita.'));
-      }
+  const reservation = _dbGet(db, 'SELECT * FROM reservations WHERE id = ?', [intId]);
+  if (!reservation) {
+    throw new Error('Rezervarea nu a fost gasita.');
+  }
 
-      if (reservation.status === 'anulata') {
-        return reject(new Error('Rezervarea este deja anulata.'));
-      }
+  if (reservation.status === 'anulata') {
+    throw new Error('Rezervarea este deja anulata.');
+  }
 
-      if (reservation.status === 'finalizata' || reservation.status === 'check-out') {
-        return reject(new Error('Rezervarile finalizate nu pot fi anulate.'));
-      }
+  if (reservation.status === 'finalizata' || reservation.status === 'check-out') {
+    throw new Error('Rezervarile finalizate nu pot fi anulate.');
+  }
 
-      const now = nowISO();
-      run(
-        'UPDATE reservations SET status = ?, updatedAt = ? WHERE id = ?',
-        ['anulata', now, intId]
-      );
+  const now = nowISO();
+  _dbRun(
+    db,
+    'UPDATE reservations SET status = ?, updatedAt = ? WHERE id = ?',
+    ['anulata', now, intId]
+  );
 
-      const updated = get('SELECT * FROM reservations WHERE id = ?', [intId]);
-      resolve(normalizeReservation(updated));
-    } catch (err) {
-      reject(new Error(`Eroare la anularea rezervarii: ${err.message}`));
-    }
-  });
+  const updated = _dbGet(db, 'SELECT * FROM reservations WHERE id = ?', [intId]);
+  return normalizeReservation(updated);
 }
 
 // =========================================================================

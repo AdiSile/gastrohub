@@ -1139,46 +1139,47 @@ async function countDeliveries(tenantId, options = {}) {
  * @param {string} [options.status] - Filtrare după status
  * @returns {Promise<number>} Valoarea totală
  */
-function getTotalDeliveryValue(tenantId, options = {}) {
-  return new Promise((resolve, reject) => {
-    if (!tenantId) {
-      return resolve(0);
+async function getTotalDeliveryValue(tenantId, options = {}) {
+  if (!tenantId) {
+    return 0;
+  }
+
+  if (options.status && !isValidDeliveryStatus(options.status)) {
+    throw new AppError(
+      `Statusul "${options.status}" nu este valid. Statusuri permise: ${VALID_DELIVERY_STATUSES.join(', ')}.`,
+      400,
+      'INVALID_DELIVERY_STATUS'
+    );
+  }
+
+  try {
+    const db = await getDb();
+
+    const conditions = ['tenantId = ?'];
+    const params = [tenantId];
+
+    if (options.status) {
+      conditions.push('status = ?');
+      params.push(options.status);
     }
 
-    if (options.status && !isValidDeliveryStatus(options.status)) {
-      return reject(new AppError(
-        `Statusul "${options.status}" nu este valid. Statusuri permise: ${VALID_DELIVERY_STATUSES.join(', ')}.`,
-        400,
-        'INVALID_DELIVERY_STATUS'
-      ));
-    }
+    const whereClause = conditions.join(' AND ');
 
-    try {
-      const conditions = ['tenantId = ?'];
-      const params = [tenantId];
+    const row = _dbGet(
+      db,
+      `SELECT COALESCE(SUM(totalValue), 0) AS total FROM deliveries WHERE ${whereClause}`,
+      params
+    );
 
-      if (options.status) {
-        conditions.push('status = ?');
-        params.push(options.status);
-      }
-
-      const whereClause = conditions.join(' AND ');
-
-      const row = get(
-        `SELECT COALESCE(SUM(totalValue), 0) AS total FROM deliveries WHERE ${whereClause}`,
-        params
-      );
-
-      const total = row ? row.total : 0;
-      resolve(+Number(total).toFixed(2));
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la obținerea valorii totale: ${err.message}`,
-        500,
-        'DB_QUERY_ERROR'
-      ));
-    }
-  });
+    const total = row ? row.total : 0;
+    return +Number(total).toFixed(2);
+  } catch (err) {
+    throw new AppError(
+      `Eroare la obținerea valorii totale: ${err.message}`,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 /**
@@ -1186,38 +1187,39 @@ function getTotalDeliveryValue(tenantId, options = {}) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Object>} Statistici pe statusuri
  */
-function getDeliveryStatsByStatus(tenantId) {
-  return new Promise((resolve, reject) => {
-    if (!tenantId) {
-      return resolve({});
+async function getDeliveryStatsByStatus(tenantId) {
+  if (!tenantId) {
+    return {};
+  }
+
+  try {
+    const db = await getDb();
+
+    const rows = _dbAll(
+      db,
+      `SELECT status, COUNT(*) AS cnt, COALESCE(SUM(totalValue), 0) AS totalValue
+       FROM deliveries
+       WHERE tenantId = ?
+       GROUP BY status`,
+      [tenantId]
+    );
+
+    const stats = {};
+    for (const row of (rows || [])) {
+      stats[row.status] = {
+        count: row.cnt,
+        totalValue: +Number(row.totalValue).toFixed(2),
+      };
     }
 
-    try {
-      const rows = all(
-        `SELECT status, COUNT(*) AS cnt, COALESCE(SUM(totalValue), 0) AS totalValue
-         FROM deliveries
-         WHERE tenantId = ?
-         GROUP BY status`,
-        [tenantId]
-      );
-
-      const stats = {};
-      for (const row of (rows || [])) {
-        stats[row.status] = {
-          count: row.cnt,
-          totalValue: +Number(row.totalValue).toFixed(2),
-        };
-      }
-
-      resolve(stats);
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la obținerea statisticilor: ${err.message}`,
-        500,
-        'DB_QUERY_ERROR'
-      ));
-    }
-  });
+    return stats;
+  } catch (err) {
+    throw new AppError(
+      `Eroare la obținerea statisticilor: ${err.message}`,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 /**
@@ -1225,23 +1227,28 @@ function getDeliveryStatsByStatus(tenantId) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<number>} Numărul de livrări șterse
  */
-function deleteDeliveriesByTenant(tenantId) {
-  return new Promise((resolve, reject) => {
-    if (!tenantId) {
-      return resolve(0);
-    }
+async function deleteDeliveriesByTenant(tenantId) {
+  if (!tenantId) {
+    return 0;
+  }
 
-    try {
-      const result = run('DELETE FROM deliveries WHERE tenantId = ?', [tenantId]);
-      resolve(result.changes || 0);
-    } catch (err) {
-      return reject(new AppError(
-        `Eroare la ștergerea livrărilor: ${err.message}`,
-        500,
-        'DB_DELETE_ERROR'
-      ));
-    }
-  });
+  try {
+    const db = await getDb();
+
+    const result = _dbRun(
+      db,
+      'DELETE FROM deliveries WHERE tenantId = ?',
+      [tenantId]
+    );
+
+    return result.changes || 0;
+  } catch (err) {
+    throw new AppError(
+      `Eroare la ștergerea livrărilor: ${err.message}`,
+      500,
+      'DB_DELETE_ERROR'
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

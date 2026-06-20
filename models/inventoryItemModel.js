@@ -200,10 +200,10 @@ function transformRow(row) {
  * @returns {Promise<Object>} Itemul creat
  * @throws {AppError} Dacă validarea eșuează
  */
-function createInventoryItem(itemData) {
+async function createInventoryItem(itemData) {
   // Validare câmpuri obligatorii
   if (!itemData || typeof itemData !== 'object') {
-    return Promise.reject(new AppError('Datele itemului de inventar sunt invalide.', 400, 'INVALID_ITEM_DATA'));
+    throw new AppError('Datele itemului de inventar sunt invalide.', 400, 'INVALID_ITEM_DATA');
   }
 
   const {
@@ -220,65 +220,65 @@ function createInventoryItem(itemData) {
 
   // Validare name
   if (!name || !isValidName(name)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Denumirea itemului trebuie să fie un șir de caractere între 1 și 200.',
       400,
       'INVALID_NAME'
-    ));
+    );
   }
 
   // Validare category
   if (!category || !isValidCategory(category)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Categoria "' + category + '" nu este validă. Categorii acceptate: ' + VALID_CATEGORIES.join(', ') + '.',
       400,
       'INVALID_CATEGORY'
-    ));
+    );
   }
 
   // Validare quantity
   if (quantity === undefined || quantity === null || !isValidQuantity(quantity)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Cantitatea trebuie să fie un număr mai mare sau egal cu 0.',
       400,
       'INVALID_QUANTITY'
-    ));
+    );
   }
 
   // Validare unit
   if (!unit || !isValidUnit(unit)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Unitatea de măsură "' + unit + '" nu este validă. Unități acceptate: ' + VALID_UNITS.join(', ') + '.',
       400,
       'INVALID_UNIT'
-    ));
+    );
   }
 
   // Validare locationId
   if (!locationId) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'ID-ul locației este obligatoriu.',
       400,
       'INVALID_LOCATION_ID'
-    ));
+    );
   }
 
   // Validare locationType
   if (!locationType || !isValidLocationType(locationType)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Tipul locației trebuie să fie "restaurant" sau "hotel".',
       400,
       'INVALID_LOCATION_TYPE'
-    ));
+    );
   }
 
   // Validare tenantId
   if (!tenantId) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'ID-ul tenant-ului este obligatoriu.',
       400,
       'INVALID_TENANT_ID'
-    ));
+    );
   }
 
   // Validare minThreshold (opțional, default 0)
@@ -286,11 +286,11 @@ function createInventoryItem(itemData) {
     ? minThreshold
     : 0;
   if (!isValidThreshold(finalThreshold)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Pragul minim trebuie să fie un număr mai mare sau egal cu 0.',
       400,
       'INVALID_THRESHOLD'
-    ));
+    );
   }
 
   // Validare supplierId (opțional)
@@ -300,7 +300,7 @@ function createInventoryItem(itemData) {
   const locationValue = buildLocationValue(locationType, locationId);
 
   try {
-    const db = getDb();
+    const db = await getDb();
 
     // Verificare duplicat: același nume + tenantId + location
     const existing = db.get(
@@ -309,11 +309,11 @@ function createInventoryItem(itemData) {
     );
 
     if (existing) {
-      return Promise.reject(new AppError(
+      throw new AppError(
         'Există deja un item cu denumirea "' + trimmedName + '" în această locație.',
         409,
         'DUPLICATE_ITEM'
-      ));
+      );
     }
 
     // Creare înregistrare
@@ -332,13 +332,13 @@ function createInventoryItem(itemData) {
       [newId]
     );
 
-    return Promise.resolve(transformRow(created));
+    return transformRow(created);
   } catch (err) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Eroare la crearea itemului de inventar: ' + err.message,
       500,
       'DB_INSERT_ERROR'
-    ));
+    );
   }
 }
 
@@ -347,26 +347,26 @@ function createInventoryItem(itemData) {
  * @param {string|number} id - ID-ul itemului
  * @returns {Promise<Object|null>} Itemul sau null
  */
-function findInventoryItemById(id) {
+async function findInventoryItemById(id) {
   if (!id) {
-    return Promise.reject(new AppError('ID-ul itemului de inventar este invalid.', 400, 'INVALID_ITEM_ID'));
+    throw new AppError('ID-ul itemului de inventar este invalid.', 400, 'INVALID_ITEM_ID');
   }
 
   try {
-    const db = getDb();
+    const db = await getDb();
 
     const row = db.get(
       'SELECT id AS _id, name, category, quantity, unit, minQuantity AS minThreshold, location, supplierId, tenantId, createdAt, updatedAt FROM inventory_items WHERE id = ?',
       [id]
     );
 
-    return Promise.resolve(transformRow(row));
+    return transformRow(row);
   } catch (err) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Eroare la căutarea itemului: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -382,15 +382,15 @@ function findInventoryItemById(id) {
  * @param {string} [options.sortOrder='asc'] - 'asc' sau 'desc'
  * @returns {Promise<Array>} Lista de iteme
  */
-function findInventoryItemsByTenant(tenantId, options) {
+async function findInventoryItemsByTenant(tenantId, options) {
   if (!options) options = {};
 
   if (!tenantId) {
-    return Promise.reject(new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID'));
+    throw new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID');
   }
 
   try {
-    const db = getDb();
+    const db = await getDb();
 
     // Construim clauza WHERE dinamic
     const conditions = ['tenantId = ?'];
@@ -443,13 +443,13 @@ function findInventoryItemsByTenant(tenantId, options) {
       params
     );
 
-    return Promise.resolve((rows || []).map(transformRow));
+    return (rows || []).map(transformRow);
   } catch (err) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Eroare la căutarea itemelor: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -459,21 +459,21 @@ function findInventoryItemsByTenant(tenantId, options) {
  * @param {string} locationType - Tipul locației ('restaurant' sau 'hotel')
  * @returns {Promise<Array>} Lista de iteme
  */
-function findInventoryItemsByLocation(locationId, locationType) {
+async function findInventoryItemsByLocation(locationId, locationType) {
   if (!locationId) {
-    return Promise.reject(new AppError('ID-ul locației este invalid.', 400, 'INVALID_LOCATION_ID'));
+    throw new AppError('ID-ul locației este invalid.', 400, 'INVALID_LOCATION_ID');
   }
 
   if (!locationType || !isValidLocationType(locationType)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Tipul locației trebuie să fie "restaurant" sau "hotel".',
       400,
       'INVALID_LOCATION_TYPE'
-    ));
+    );
   }
 
   try {
-    const db = getDb();
+    const db = await getDb();
 
     const locationValue = buildLocationValue(locationType, locationId);
 
@@ -482,13 +482,13 @@ function findInventoryItemsByLocation(locationId, locationType) {
       [locationValue]
     );
 
-    return Promise.resolve((rows || []).map(transformRow));
+    return (rows || []).map(transformRow);
   } catch (err) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Eroare la căutarea itemelor: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -497,26 +497,26 @@ function findInventoryItemsByLocation(locationId, locationType) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Array>} Lista de iteme sub prag
  */
-function findLowStockItems(tenantId) {
+async function findLowStockItems(tenantId) {
   if (!tenantId) {
-    return Promise.reject(new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID'));
+    throw new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID');
   }
 
   try {
-    const db = getDb();
+    const db = await getDb();
 
     const rows = db.all(
       'SELECT id AS _id, name, category, quantity, unit, minQuantity AS minThreshold, location, supplierId, tenantId, createdAt, updatedAt FROM inventory_items WHERE tenantId = ? AND quantity < minQuantity ORDER BY name ASC',
       [tenantId]
     );
 
-    return Promise.resolve((rows || []).map(transformRow));
+    return (rows || []).map(transformRow);
   } catch (err) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Eroare la căutarea itemelor: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -526,21 +526,21 @@ function findLowStockItems(tenantId) {
  * @param {number} newQuantity - Noua cantitate
  * @returns {Promise<Object>} Itemul actualizat
  */
-function updateQuantity(id, newQuantity) {
+async function updateQuantity(id, newQuantity) {
   if (!id) {
-    return Promise.reject(new AppError('ID-ul itemului de inventar este invalid.', 400, 'INVALID_ITEM_ID'));
+    throw new AppError('ID-ul itemului de inventar este invalid.', 400, 'INVALID_ITEM_ID');
   }
 
   if (!isValidQuantity(newQuantity)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Cantitatea trebuie să fie un număr mai mare sau egal cu 0.',
       400,
       'INVALID_QUANTITY'
-    ));
+    );
   }
 
   try {
-    const db = getDb();
+    const db = await getDb();
     const now = new Date().toISOString();
 
     const result = db.run(
@@ -549,7 +549,7 @@ function updateQuantity(id, newQuantity) {
     );
 
     if (result.changes === 0) {
-      return Promise.reject(new AppError('Itemul de inventar nu a fost găsit.', 404, 'ITEM_NOT_FOUND'));
+      throw new AppError('Itemul de inventar nu a fost găsit.', 404, 'ITEM_NOT_FOUND');
     }
 
     const updated = db.get(
@@ -557,13 +557,13 @@ function updateQuantity(id, newQuantity) {
       [id]
     );
 
-    return Promise.resolve(transformRow(updated));
+    return transformRow(updated);
   } catch (err) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Eroare la actualizarea cantității: ' + err.message,
       500,
       'DB_UPDATE_ERROR'
-    ));
+    );
   }
 }
 
@@ -573,21 +573,21 @@ function updateQuantity(id, newQuantity) {
  * @param {number} delta - Valoarea de adăugat (poate fi negativă)
  * @returns {Promise<Object>} Itemul actualizat
  */
-function adjustQuantity(id, delta) {
+async function adjustQuantity(id, delta) {
   if (!id) {
-    return Promise.reject(new AppError('ID-ul itemului de inventar este invalid.', 400, 'INVALID_ITEM_ID'));
+    throw new AppError('ID-ul itemului de inventar este invalid.', 400, 'INVALID_ITEM_ID');
   }
 
   if (typeof delta !== 'number' || isNaN(delta)) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Valoarea de ajustare trebuie să fie un număr.',
       400,
       'INVALID_DELTA'
-    ));
+    );
   }
 
   try {
-    const db = getDb();
+    const db = await getDb();
 
     // Căutăm itemul existent
     const item = db.get(
@@ -596,17 +596,17 @@ function adjustQuantity(id, delta) {
     );
 
     if (!item) {
-      return Promise.reject(new AppError('Itemul de inventar nu a fost găsit.', 404, 'ITEM_NOT_FOUND'));
+      throw new AppError('Itemul de inventar nu a fost găsit.', 404, 'ITEM_NOT_FOUND');
     }
 
     const newQuantity = item.quantity + delta;
 
     if (newQuantity < 0) {
-      return Promise.reject(new AppError(
+      throw new AppError(
         'Cantitatea rezultată nu poate fi negativă.',
         400,
         'NEGATIVE_QUANTITY'
-      ));
+      );
     }
 
     const now = new Date().toISOString();
@@ -617,7 +617,7 @@ function adjustQuantity(id, delta) {
     );
 
     if (result.changes === 0) {
-      return Promise.reject(new AppError('Itemul de inventar nu a fost găsit.', 404, 'ITEM_NOT_FOUND'));
+      throw new AppError('Itemul de inventar nu a fost găsit.', 404, 'ITEM_NOT_FOUND');
     }
 
     const updated = db.get(
@@ -625,17 +625,17 @@ function adjustQuantity(id, delta) {
       [id]
     );
 
-    return Promise.resolve(transformRow(updated));
+    return transformRow(updated);
   } catch (err) {
     // Dacă eroarea este deja AppError, o pasăm mai departe
     if (err instanceof AppError) {
-      return Promise.reject(err);
+      throw err;
     }
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Eroare la ajustarea cantității: ' + err.message,
       500,
       'DB_UPDATE_ERROR'
-    ));
+    );
   }
 }
 
@@ -645,13 +645,13 @@ function adjustQuantity(id, delta) {
  * @param {Object} updateData - Datele de actualizat (câmpurile permise)
  * @returns {Promise<Object>} Itemul actualizat
  */
-function updateInventoryItem(id, updateData) {
+async function updateInventoryItem(id, updateData) {
   if (!id) {
-    return Promise.reject(new AppError('ID-ul itemului de inventar este invalid.', 400, 'INVALID_ITEM_ID'));
+    throw new AppError('ID-ul itemului de inventar este invalid.', 400, 'INVALID_ITEM_ID');
   }
 
   if (!updateData || typeof updateData !== 'object') {
-    return Promise.reject(new AppError('Datele de actualizare sunt invalide.', 400, 'INVALID_UPDATE_DATA'));
+    throw new AppError('Datele de actualizare sunt invalide.', 400, 'INVALID_UPDATE_DATA');
   }
 
   // Construim obiectul de actualizat doar cu câmpurile permise
@@ -667,44 +667,44 @@ function updateInventoryItem(id, updateData) {
       switch (field) {
         case 'name':
           if (!isValidName(updateData[field])) {
-            return Promise.reject(new AppError(
+            throw new AppError(
               'Denumirea itemului trebuie să fie un șir de caractere între 1 și 200.',
               400,
               'INVALID_NAME'
-            ));
+            );
           }
           setClauses.push('name = ?');
           params.push(updateData[field].trim());
           break;
         case 'category':
           if (!isValidCategory(updateData[field])) {
-            return Promise.reject(new AppError(
+            throw new AppError(
               'Categoria "' + updateData[field] + '" nu este validă.',
               400,
               'INVALID_CATEGORY'
-            ));
+            );
           }
           setClauses.push('category = ?');
           params.push(updateData[field]);
           break;
         case 'unit':
           if (!isValidUnit(updateData[field])) {
-            return Promise.reject(new AppError(
+            throw new AppError(
               'Unitatea de măsură "' + updateData[field] + '" nu este validă.',
               400,
               'INVALID_UNIT'
-            ));
+            );
           }
           setClauses.push('unit = ?');
           params.push(updateData[field]);
           break;
         case 'minThreshold':
           if (!isValidThreshold(updateData[field])) {
-            return Promise.reject(new AppError(
+            throw new AppError(
               'Pragul minim trebuie să fie un număr mai mare sau egal cu 0.',
               400,
               'INVALID_THRESHOLD'
-            ));
+            );
           }
           setClauses.push('minQuantity = ?');
           params.push(updateData[field]);
@@ -719,11 +719,11 @@ function updateInventoryItem(id, updateData) {
   }
 
   if (!hasValidFields) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Nu există câmpuri valide de actualizat.',
       400,
       'NO_VALID_FIELDS'
-    ));
+    );
   }
 
   // Actualizăm și updatedAt
@@ -735,7 +735,7 @@ function updateInventoryItem(id, updateData) {
   params.push(id);
 
   try {
-    const db = getDb();
+    const db = await getDb();
 
     const result = db.run(
       'UPDATE inventory_items SET ' + setClauses.join(', ') + ' WHERE id = ?',
@@ -743,7 +743,7 @@ function updateInventoryItem(id, updateData) {
     );
 
     if (result.changes === 0) {
-      return Promise.reject(new AppError('Itemul de inventar nu a fost găsit.', 404, 'ITEM_NOT_FOUND'));
+      throw new AppError('Itemul de inventar nu a fost găsit.', 404, 'ITEM_NOT_FOUND');
     }
 
     const updated = db.get(
@@ -751,13 +751,13 @@ function updateInventoryItem(id, updateData) {
       [id]
     );
 
-    return Promise.resolve(transformRow(updated));
+    return transformRow(updated);
   } catch (err) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Eroare la actualizarea itemului: ' + err.message,
       500,
       'DB_UPDATE_ERROR'
-    ));
+    );
   }
 }
 
@@ -766,13 +766,13 @@ function updateInventoryItem(id, updateData) {
  * @param {string|number} id - ID-ul itemului
  * @returns {Promise<boolean>} true dacă a fost șters
  */
-function deleteInventoryItem(id) {
+async function deleteInventoryItem(id) {
   if (!id) {
-    return Promise.reject(new AppError('ID-ul itemului de inventar este invalid.', 400, 'INVALID_ITEM_ID'));
+    throw new AppError('ID-ul itemului de inventar este invalid.', 400, 'INVALID_ITEM_ID');
   }
 
   try {
-    const db = getDb();
+    const db = await getDb();
 
     const result = db.run(
       'DELETE FROM inventory_items WHERE id = ?',
@@ -780,16 +780,16 @@ function deleteInventoryItem(id) {
     );
 
     if (result.changes === 0) {
-      return Promise.reject(new AppError('Itemul de inventar nu a fost găsit.', 404, 'ITEM_NOT_FOUND'));
+      throw new AppError('Itemul de inventar nu a fost găsit.', 404, 'ITEM_NOT_FOUND');
     }
 
-    return Promise.resolve(true);
+    return true;
   } catch (err) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Eroare la ștergerea itemului: ' + err.message,
       500,
       'DB_DELETE_ERROR'
-    ));
+    );
   }
 }
 
@@ -800,15 +800,15 @@ function deleteInventoryItem(id) {
  * @param {string} [options.category] - Filtrare după categorie
  * @returns {Promise<number>}
  */
-function countInventoryItems(tenantId, options) {
+async function countInventoryItems(tenantId, options) {
   if (!options) options = {};
 
   if (!tenantId) {
-    return Promise.resolve(0);
+    return 0;
   }
 
   try {
-    const db = getDb();
+    const db = await getDb();
 
     const conditions = ['tenantId = ?'];
     const params = [tenantId];
@@ -825,13 +825,13 @@ function countInventoryItems(tenantId, options) {
       params
     );
 
-    return Promise.resolve(row ? row.cnt : 0);
+    return row ? row.cnt : 0;
   } catch (err) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Eroare la numărarea itemelor: ' + err.message,
       500,
       'DB_COUNT_ERROR'
-    ));
+    );
   }
 }
 
@@ -840,26 +840,26 @@ function countInventoryItems(tenantId, options) {
  * @param {string} supplierId - ID-ul furnizorului
  * @returns {Promise<Array>} Lista de iteme
  */
-function findInventoryItemsBySupplier(supplierId) {
+async function findInventoryItemsBySupplier(supplierId) {
   if (!supplierId) {
-    return Promise.reject(new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID'));
+    throw new AppError('ID-ul furnizorului este invalid.', 400, 'INVALID_SUPPLIER_ID');
   }
 
   try {
-    const db = getDb();
+    const db = await getDb();
 
     const rows = db.all(
       'SELECT id AS _id, name, category, quantity, unit, minQuantity AS minThreshold, location, supplierId, tenantId, createdAt, updatedAt FROM inventory_items WHERE supplierId = ? ORDER BY name ASC',
       [supplierId]
     );
 
-    return Promise.resolve((rows || []).map(transformRow));
+    return (rows || []).map(transformRow);
   } catch (err) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Eroare la căutarea itemelor: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 
@@ -868,32 +868,32 @@ function findInventoryItemsBySupplier(supplierId) {
  * @param {string} tenantId - ID-ul tenant-ului
  * @returns {Promise<Array>} Lista de obiecte { category, count, totalQuantity }
  */
-function getInventorySummary(tenantId) {
+async function getInventorySummary(tenantId) {
   if (!tenantId) {
-    return Promise.reject(new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID'));
+    throw new AppError('ID-ul tenant-ului este invalid.', 400, 'INVALID_TENANT_ID');
   }
 
   try {
-    const db = getDb();
+    const db = await getDb();
 
     const rows = db.all(
       'SELECT category, COUNT(*) AS count, SUM(quantity) AS totalQuantity FROM inventory_items WHERE tenantId = ? GROUP BY category ORDER BY category ASC',
       [tenantId]
     );
 
-    return Promise.resolve((rows || []).map(function (r) {
+    return (rows || []).map(function (r) {
       return {
         category: r.category,
         count: r.count,
         totalQuantity: r.totalQuantity || 0,
       };
-    }));
+    });
   } catch (err) {
-    return Promise.reject(new AppError(
+    throw new AppError(
       'Eroare la căutarea itemelor: ' + err.message,
       500,
       'DB_QUERY_ERROR'
-    ));
+    );
   }
 }
 

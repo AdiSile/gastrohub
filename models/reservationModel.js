@@ -2,11 +2,10 @@
 
 // ---------------------------------------------------------------------------
 // Model Reservation – GastroHub
-// Gestionează rezervările (restaurant + hotel) cu compatibilitate duală:
-// SQLite (primar, prin getDb()) + NeDB (fallback).
+// Gestionează rezervările (restaurant + hotel) prin SQLite.
 //
 // Structura unui document:
-//   _id              {string}  – generat automat (NeDB) / conversie din id (SQLite)
+//   _id              {string}  – conversie din id (SQLite)
 //   tenantId         {string}  – tenant-ul proprietar (obligatoriu)
 //   tip              {string}  – 'restaurant' | 'hotel' (obligatoriu)
 //   restaurantId     {string}  – ID restaurant (dacă tip='restaurant')
@@ -31,19 +30,8 @@
 //   updatedAt        {string}  – data actualizării (ISO 8601)
 // ---------------------------------------------------------------------------
 
-const path = require('path');
-const Datastore = require('nedb');
 const { getDb, run, get, all } = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
-
-// ---------------------------------------------------------------------------
-// NeDB – Datastore pentru fallback
-// ---------------------------------------------------------------------------
-
-const reservations = new Datastore({
-  filename: path.join(__dirname, '..', 'data', 'reservations.db'),
-  autoload: true,
-});
 
 // ---------------------------------------------------------------------------
 // Detecție backend SQLite
@@ -64,16 +52,15 @@ async function _isSqlAvailable() {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers de conversie rând SQL → document compatibil NeDB
+// Helpers de conversie rând SQL → document
 // ---------------------------------------------------------------------------
 
 /**
- * Convertește un rând SQL (id INTEGER) într-un obiect compatibil cu NeDB
- * (cu _id string).
+ * Convertește un rând SQL (id INTEGER) într-un obiect cu _id string.
  * @param {Object} row
- * @returns {Object}
+ * @returns {Promise<Object>}
  */
-function _sqlRowToDoc(row) {
+async function _sqlRowToDoc(row) {
   if (!row) return row;
   const doc = {};
   const keys = Object.keys(row);
@@ -177,91 +164,6 @@ function nowISO() {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers – construire query + sortare/paginare (NeDB)
-// ---------------------------------------------------------------------------
-
-/**
- * Construiește query-ul de bază pentru NeDB pe baza tenantId-ului și a
- * opțiunilor primite.
- */
-function buildQuery(tenantId, options) {
-  if (!options) options = {};
-  const query = { tenantId: tenantId };
-
-  if (options.tip) {
-    query.tip = options.tip;
-  }
-
-  if (options.status) {
-    query.status = options.status;
-  }
-
-  if (options.data) {
-    query.data = options.data;
-  }
-
-  if (options.restaurantId) {
-    query.restaurantId = options.restaurantId;
-  }
-
-  if (options.hotelId) {
-    query.hotelId = options.hotelId;
-  }
-
-  if (options.camera) {
-    query.camera = options.camera;
-  }
-
-  if (options.masa !== undefined && options.masa !== null) {
-    query.masa = Number(options.masa);
-  }
-
-  return query;
-}
-
-/**
- * Construiește obiectul de sortare pentru NeDB.
- */
-function buildSort(sort) {
-  if (!sort) return undefined;
-
-  const sortObj = {};
-  const isDesc = sort.startsWith('-');
-  const field = isDesc ? sort.slice(1) : sort;
-
-  sortObj[field] = isDesc ? -1 : 1;
-  return sortObj;
-}
-
-/**
- * Aplică sort, skip, limit pe un cursor NeDB și returnează o Promisiune.
- */
-function executeQuery(query, options) {
-  if (!options) options = {};
-  return new Promise(function (resolve, reject) {
-    let cursor = reservations.find(query);
-
-    const sortObj = buildSort(options.sort);
-    if (sortObj) {
-      cursor = cursor.sort(sortObj);
-    }
-
-    if (options.skip !== undefined && options.skip !== null) {
-      cursor = cursor.skip(Number(options.skip));
-    }
-
-    if (options.limit !== undefined && options.limit !== null) {
-      cursor = cursor.limit(Number(options.limit));
-    }
-
-    cursor.exec(function (err, docs) {
-      if (err) return reject(err);
-      resolve(docs);
-    });
-  });
-}
-
-// ---------------------------------------------------------------------------
 // Helpers SQLite – construire WHERE + ORDER BY + LIMIT/OFFSET din opțiuni
 // ---------------------------------------------------------------------------
 
@@ -346,7 +248,6 @@ function _applySqlPagination(baseSql, params, options) {
 
 /**
  * Creează o rezervare nouă (restaurant sau hotel).
- * Compatibilitate duală: SQLite (primar) + NeDB (fallback).
  *
  * @param {Object} data
  * @param {string} data.tenantId       - ID-ul tenant-ului (obligatoriu)
@@ -475,79 +376,40 @@ async function createReservation(data) {
   const finalCheckOut = tip === 'hotel' && checkOut ? checkOut : null;
 
   // -------------------------------------------------------------------
-  // Încercare SQLite
+  // SQLite
   // -------------------------------------------------------------------
-  if (await _isSqlAvailable()) {
-    try {
-      const result = await run(
-        'INSERT INTO reservations (' +
-        'tenantId, tip, restaurantId, hotelId, data, ora, ' +
-        'numarPersoane, numeClient, emailClient, telefonClient, ' +
-        'observatii, masa, camera, checkIn, checkOut, ' +
-        'status, statusFacturare, sumaTotala, moneda, guestId, ' +
-        'createdAt, updatedAt' +
-        ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [
-          tenantId, tip, finalRestaurantId, finalHotelId, dataRez, ora || null,
-          numarPersoane, finalNume, finalEmail, finalTelefon,
-          finalObs, finalMasa, finalCamera, finalCheckIn, finalCheckOut,
-          'confirmată', 'nefacturat', 0, 'RON', guestId || null,
-          now, now,
-        ]
-      );
-
-      const newId = result.lastInsertRowid;
-      const newRow = await get('SELECT * FROM reservations WHERE id = ?', [newId]);
-      return _sqlRowToDoc(newRow);
-    } catch (sqlErr) {
-      throw new AppError(
-        'Eroare la crearea rezervării (SQL): ' + sqlErr.message,
-        500,
-        'DB_INSERT_ERROR'
-      );
-    }
+  if (!(await _isSqlAvailable())) {
+    throw new AppError('Baza de date nu este disponibilă.', 500, 'DB_UNAVAILABLE');
   }
 
-  // -------------------------------------------------------------------
-  // Fallback NeDB
-  // -------------------------------------------------------------------
-  const doc = {
-    tenantId: tenantId,
-    tip: tip,
-    restaurantId: finalRestaurantId,
-    hotelId: finalHotelId,
-    data: dataRez,
-    ora: ora || null,
-    numarPersoane: numarPersoane,
-    numeClient: finalNume,
-    emailClient: finalEmail,
-    telefonClient: finalTelefon,
-    observatii: finalObs,
-    masa: finalMasa,
-    camera: finalCamera,
-    checkIn: finalCheckIn,
-    checkOut: finalCheckOut,
-    status: 'confirmată',
-    statusFacturare: 'nefacturat',
-    sumaTotala: 0,
-    moneda: 'RON',
-    guestId: guestId || null,
-    createdAt: now,
-    updatedAt: now,
-  };
+  try {
+    const result = await run(
+      'INSERT INTO reservations (' +
+      'tenantId, tip, restaurantId, hotelId, data, ora, ' +
+      'numarPersoane, numeClient, emailClient, telefonClient, ' +
+      'observatii, masa, camera, checkIn, checkOut, ' +
+      'status, statusFacturare, sumaTotala, moneda, guestId, ' +
+      'createdAt, updatedAt' +
+      ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        tenantId, tip, finalRestaurantId, finalHotelId, dataRez, ora || null,
+        numarPersoane, finalNume, finalEmail, finalTelefon,
+        finalObs, finalMasa, finalCamera, finalCheckIn, finalCheckOut,
+        'confirmată', 'nefacturat', 0, 'RON', guestId || null,
+        now, now,
+      ]
+    );
 
-  return new Promise(function (resolve, reject) {
-    reservations.insert(doc, function (err, newDoc) {
-      if (err) {
-        return reject(new AppError(
-          'Eroare la crearea rezervării: ' + err.message,
-          500,
-          'DB_INSERT_ERROR'
-        ));
-      }
-      resolve(newDoc);
-    });
-  });
+    const newId = result.lastInsertRowid;
+    const newRow = await get('SELECT * FROM reservations WHERE id = ?', [newId]);
+    return await _sqlRowToDoc(newRow);
+  } catch (sqlErr) {
+    throw new AppError(
+      'Eroare la crearea rezervării (SQL): ' + sqlErr.message,
+      500,
+      'DB_INSERT_ERROR'
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -556,7 +418,6 @@ async function createReservation(data) {
 
 /**
  * Găsește o rezervare după ID (_id) și tenantId.
- * Compatibilitate duală: SQLite (primar) + NeDB (fallback).
  *
  * @param {string} id       - ID-ul documentului
  * @param {string} tenantId - ID-ul tenant-ului
@@ -572,44 +433,32 @@ async function findReservationById(id, tenantId) {
   }
 
   // ---- SQLite ----
-  if (await _isSqlAvailable()) {
-    try {
-      const numericId = parseInt(id, 10);
-      let row;
-      if (isNaN(numericId)) {
-        row = await get(
-          'SELECT * FROM reservations WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
-          [String(id), tenantId]
-        );
-      } else {
-        row = await get(
-          'SELECT * FROM reservations WHERE id = ? AND tenantId = ?',
-          [numericId, tenantId]
-        );
-      }
-      return row ? _sqlRowToDoc(row) : null;
-    } catch (sqlErr) {
-      throw new AppError(
-        'Eroare la căutarea rezervării (SQL): ' + sqlErr.message,
-        500,
-        'DB_QUERY_ERROR'
-      );
-    }
+  if (!(await _isSqlAvailable())) {
+    throw new AppError('Baza de date nu este disponibilă.', 500, 'DB_UNAVAILABLE');
   }
 
-  // ---- NeDB ----
-  return new Promise(function (resolve, reject) {
-    reservations.findOne({ _id: id, tenantId: tenantId }, function (err, doc) {
-      if (err) {
-        return reject(new AppError(
-          'Eroare la căutarea rezervării: ' + err.message,
-          500,
-          'DB_QUERY_ERROR'
-        ));
-      }
-      resolve(doc || null);
-    });
-  });
+  try {
+    const numericId = parseInt(id, 10);
+    let row;
+    if (isNaN(numericId)) {
+      row = await get(
+        'SELECT * FROM reservations WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
+        [String(id), tenantId]
+      );
+    } else {
+      row = await get(
+        'SELECT * FROM reservations WHERE id = ? AND tenantId = ?',
+        [numericId, tenantId]
+      );
+    }
+    return row ? await _sqlRowToDoc(row) : null;
+  } catch (sqlErr) {
+    throw new AppError(
+      'Eroare la căutarea rezervării (SQL): ' + sqlErr.message,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -618,7 +467,6 @@ async function findReservationById(id, tenantId) {
 
 /**
  * Returnează rezervările unui restaurant, cu opțiuni de filtrare.
- * Compatibilitate duală: SQLite (primar) + NeDB (fallback).
  */
 async function findReservationsByRestaurant(restaurantId, tenantId, options) {
   if (!options) options = {};
@@ -632,39 +480,29 @@ async function findReservationsByRestaurant(restaurantId, tenantId, options) {
   }
 
   // ---- SQLite ----
-  if (await _isSqlAvailable()) {
-    try {
-      const built = _buildSqlWhere(tenantId, Object.assign({}, options, {
-        tip: 'restaurant',
-        restaurantId: restaurantId,
-      }));
-
-      let sql = 'SELECT * FROM reservations WHERE ' + built.whereClause;
-      sql += _buildSqlOrderBy(options.sort);
-
-      const paginated = _applySqlPagination(sql, built.params, options);
-      const rows = await all(paginated.sql, paginated.params);
-      return rows.map(function (r) { return _sqlRowToDoc(r); });
-    } catch (sqlErr) {
-      throw new AppError(
-        'Eroare la căutarea rezervărilor (SQL): ' + sqlErr.message,
-        500,
-        'DB_QUERY_ERROR'
-      );
-    }
+  if (!(await _isSqlAvailable())) {
+    throw new AppError('Baza de date nu este disponibilă.', 500, 'DB_UNAVAILABLE');
   }
 
-  // ---- NeDB ----
-  const query = buildQuery(tenantId, Object.assign({}, options, {
-    tip: 'restaurant',
-    restaurantId: restaurantId,
-  }));
+  try {
+    const built = _buildSqlWhere(tenantId, Object.assign({}, options, {
+      tip: 'restaurant',
+      restaurantId: restaurantId,
+    }));
 
-  if (options.masa !== undefined && options.masa !== null) {
-    query.masa = Number(options.masa);
+    let sql = 'SELECT * FROM reservations WHERE ' + built.whereClause;
+    sql += _buildSqlOrderBy(options.sort);
+
+    const paginated = _applySqlPagination(sql, built.params, options);
+    const rows = await all(paginated.sql, paginated.params);
+    return Promise.all(rows.map(function (r) { return _sqlRowToDoc(r); }));
+  } catch (sqlErr) {
+    throw new AppError(
+      'Eroare la căutarea rezervărilor (SQL): ' + sqlErr.message,
+      500,
+      'DB_QUERY_ERROR'
+    );
   }
-
-  return executeQuery(query, options);
 }
 
 // ---------------------------------------------------------------------------
@@ -673,7 +511,6 @@ async function findReservationsByRestaurant(restaurantId, tenantId, options) {
 
 /**
  * Returnează rezervările unui hotel, cu opțiuni de filtrare.
- * Compatibilitate duală: SQLite (primar) + NeDB (fallback).
  */
 async function findReservationsByHotel(hotelId, tenantId, options) {
   if (!options) options = {};
@@ -687,39 +524,29 @@ async function findReservationsByHotel(hotelId, tenantId, options) {
   }
 
   // ---- SQLite ----
-  if (await _isSqlAvailable()) {
-    try {
-      const built = _buildSqlWhere(tenantId, Object.assign({}, options, {
-        tip: 'hotel',
-        hotelId: hotelId,
-      }));
-
-      let sql = 'SELECT * FROM reservations WHERE ' + built.whereClause;
-      sql += _buildSqlOrderBy(options.sort);
-
-      const paginated = _applySqlPagination(sql, built.params, options);
-      const rows = await all(paginated.sql, paginated.params);
-      return rows.map(function (r) { return _sqlRowToDoc(r); });
-    } catch (sqlErr) {
-      throw new AppError(
-        'Eroare la căutarea rezervărilor (SQL): ' + sqlErr.message,
-        500,
-        'DB_QUERY_ERROR'
-      );
-    }
+  if (!(await _isSqlAvailable())) {
+    throw new AppError('Baza de date nu este disponibilă.', 500, 'DB_UNAVAILABLE');
   }
 
-  // ---- NeDB ----
-  const query = buildQuery(tenantId, Object.assign({}, options, {
-    tip: 'hotel',
-    hotelId: hotelId,
-  }));
+  try {
+    const built = _buildSqlWhere(tenantId, Object.assign({}, options, {
+      tip: 'hotel',
+      hotelId: hotelId,
+    }));
 
-  if (options.camera) {
-    query.camera = options.camera;
+    let sql = 'SELECT * FROM reservations WHERE ' + built.whereClause;
+    sql += _buildSqlOrderBy(options.sort);
+
+    const paginated = _applySqlPagination(sql, built.params, options);
+    const rows = await all(paginated.sql, paginated.params);
+    return Promise.all(rows.map(function (r) { return _sqlRowToDoc(r); }));
+  } catch (sqlErr) {
+    throw new AppError(
+      'Eroare la căutarea rezervărilor (SQL): ' + sqlErr.message,
+      500,
+      'DB_QUERY_ERROR'
+    );
   }
-
-  return executeQuery(query, options);
 }
 
 // ---------------------------------------------------------------------------
@@ -728,7 +555,6 @@ async function findReservationsByHotel(hotelId, tenantId, options) {
 
 /**
  * Returnează toate rezervările unui tenant, cu opțiuni de filtrare.
- * Compatibilitate duală: SQLite (primar) + NeDB (fallback).
  */
 async function findReservationsByTenant(tenantId, options) {
   if (!options) options = {};
@@ -738,27 +564,25 @@ async function findReservationsByTenant(tenantId, options) {
   }
 
   // ---- SQLite ----
-  if (await _isSqlAvailable()) {
-    try {
-      const built = _buildSqlWhere(tenantId, options);
-      let sql = 'SELECT * FROM reservations WHERE ' + built.whereClause;
-      sql += _buildSqlOrderBy(options.sort);
-
-      const paginated = _applySqlPagination(sql, built.params, options);
-      const rows = await all(paginated.sql, paginated.params);
-      return rows.map(function (r) { return _sqlRowToDoc(r); });
-    } catch (sqlErr) {
-      throw new AppError(
-        'Eroare la căutarea rezervărilor (SQL): ' + sqlErr.message,
-        500,
-        'DB_QUERY_ERROR'
-      );
-    }
+  if (!(await _isSqlAvailable())) {
+    throw new AppError('Baza de date nu este disponibilă.', 500, 'DB_UNAVAILABLE');
   }
 
-  // ---- NeDB ----
-  const query = buildQuery(tenantId, options);
-  return executeQuery(query, options);
+  try {
+    const built = _buildSqlWhere(tenantId, options);
+    let sql = 'SELECT * FROM reservations WHERE ' + built.whereClause;
+    sql += _buildSqlOrderBy(options.sort);
+
+    const paginated = _applySqlPagination(sql, built.params, options);
+    const rows = await all(paginated.sql, paginated.params);
+    return Promise.all(rows.map(function (r) { return _sqlRowToDoc(r); }));
+  } catch (sqlErr) {
+    throw new AppError(
+      'Eroare la căutarea rezervărilor (SQL): ' + sqlErr.message,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -767,7 +591,6 @@ async function findReservationsByTenant(tenantId, options) {
 
 /**
  * Caută rezervări după nume, email sau telefon ale clientului.
- * Compatibilitate duală: SQLite (primar) + NeDB (fallback).
  */
 async function findReservationsByPerson(searchTerm, tenantId, options) {
   if (!options) options = {};
@@ -781,41 +604,28 @@ async function findReservationsByPerson(searchTerm, tenantId, options) {
   }
 
   // ---- SQLite ----
-  if (await _isSqlAvailable()) {
-    try {
-      const likeTerm = '%' + searchTerm.trim() + '%';
-      const whereClause = 'tenantId = ? AND (numeClient LIKE ? OR emailClient LIKE ? OR telefonClient LIKE ?)';
-      let params = [tenantId, likeTerm, likeTerm, likeTerm];
-
-      let sql = 'SELECT * FROM reservations WHERE ' + whereClause;
-      sql += _buildSqlOrderBy(options.sort);
-
-      const paginated = _applySqlPagination(sql, params, options);
-      const rows = await all(paginated.sql, paginated.params);
-      return rows.map(function (r) { return _sqlRowToDoc(r); });
-    } catch (sqlErr) {
-      throw new AppError(
-        'Eroare la căutarea rezervărilor (SQL): ' + sqlErr.message,
-        500,
-        'DB_QUERY_ERROR'
-      );
-    }
+  if (!(await _isSqlAvailable())) {
+    throw new AppError('Baza de date nu este disponibilă.', 500, 'DB_UNAVAILABLE');
   }
 
-  // ---- NeDB ----
-  const escapedTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(escapedTerm, 'i');
+  try {
+    const likeTerm = '%' + searchTerm.trim() + '%';
+    const whereClause = 'tenantId = ? AND (numeClient LIKE ? OR emailClient LIKE ? OR telefonClient LIKE ?)';
+    let params = [tenantId, likeTerm, likeTerm, likeTerm];
 
-  const query = {
-    tenantId: tenantId,
-    $or: [
-      { numeClient: regex },
-      { emailClient: regex },
-      { telefonClient: regex },
-    ],
-  };
+    let sql = 'SELECT * FROM reservations WHERE ' + whereClause;
+    sql += _buildSqlOrderBy(options.sort);
 
-  return executeQuery(query, options);
+    const paginated = _applySqlPagination(sql, params, options);
+    const rows = await all(paginated.sql, paginated.params);
+    return Promise.all(rows.map(function (r) { return _sqlRowToDoc(r); }));
+  } catch (sqlErr) {
+    throw new AppError(
+      'Eroare la căutarea rezervărilor (SQL): ' + sqlErr.message,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -824,7 +634,6 @@ async function findReservationsByPerson(searchTerm, tenantId, options) {
 
 /**
  * Returnează rezervările cu un anumit status.
- * Compatibilitate duală: SQLite (primar) + NeDB (fallback).
  */
 async function findReservationsByStatus(status, tenantId, options) {
   if (!options) options = {};
@@ -842,27 +651,25 @@ async function findReservationsByStatus(status, tenantId, options) {
   }
 
   // ---- SQLite ----
-  if (await _isSqlAvailable()) {
-    try {
-      const built = _buildSqlWhere(tenantId, Object.assign({}, options, { status: status }));
-      let sql = 'SELECT * FROM reservations WHERE ' + built.whereClause;
-      sql += _buildSqlOrderBy(options.sort);
-
-      const paginated = _applySqlPagination(sql, built.params, options);
-      const rows = await all(paginated.sql, paginated.params);
-      return rows.map(function (r) { return _sqlRowToDoc(r); });
-    } catch (sqlErr) {
-      throw new AppError(
-        'Eroare la căutarea rezervărilor (SQL): ' + sqlErr.message,
-        500,
-        'DB_QUERY_ERROR'
-      );
-    }
+  if (!(await _isSqlAvailable())) {
+    throw new AppError('Baza de date nu este disponibilă.', 500, 'DB_UNAVAILABLE');
   }
 
-  // ---- NeDB ----
-  const query = buildQuery(tenantId, Object.assign({}, options, { status: status }));
-  return executeQuery(query, options);
+  try {
+    const built = _buildSqlWhere(tenantId, Object.assign({}, options, { status: status }));
+    let sql = 'SELECT * FROM reservations WHERE ' + built.whereClause;
+    sql += _buildSqlOrderBy(options.sort);
+
+    const paginated = _applySqlPagination(sql, built.params, options);
+    const rows = await all(paginated.sql, paginated.params);
+    return Promise.all(rows.map(function (r) { return _sqlRowToDoc(r); }));
+  } catch (sqlErr) {
+    throw new AppError(
+      'Eroare la căutarea rezervărilor (SQL): ' + sqlErr.message,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -871,7 +678,6 @@ async function findReservationsByStatus(status, tenantId, options) {
 
 /**
  * Returnează rezervările pentru o anumită dată.
- * Compatibilitate duală: SQLite (primar) + NeDB (fallback).
  */
 async function findReservationsByDate(date, tenantId, options) {
   if (!options) options = {};
@@ -885,27 +691,25 @@ async function findReservationsByDate(date, tenantId, options) {
   }
 
   // ---- SQLite ----
-  if (await _isSqlAvailable()) {
-    try {
-      const built = _buildSqlWhere(tenantId, Object.assign({}, options, { data: date }));
-      let sql = 'SELECT * FROM reservations WHERE ' + built.whereClause;
-      sql += _buildSqlOrderBy(options.sort);
-
-      const paginated = _applySqlPagination(sql, built.params, options);
-      const rows = await all(paginated.sql, paginated.params);
-      return rows.map(function (r) { return _sqlRowToDoc(r); });
-    } catch (sqlErr) {
-      throw new AppError(
-        'Eroare la căutarea rezervărilor (SQL): ' + sqlErr.message,
-        500,
-        'DB_QUERY_ERROR'
-      );
-    }
+  if (!(await _isSqlAvailable())) {
+    throw new AppError('Baza de date nu este disponibilă.', 500, 'DB_UNAVAILABLE');
   }
 
-  // ---- NeDB ----
-  const query = buildQuery(tenantId, Object.assign({}, options, { data: date }));
-  return executeQuery(query, options);
+  try {
+    const built = _buildSqlWhere(tenantId, Object.assign({}, options, { data: date }));
+    let sql = 'SELECT * FROM reservations WHERE ' + built.whereClause;
+    sql += _buildSqlOrderBy(options.sort);
+
+    const paginated = _applySqlPagination(sql, built.params, options);
+    const rows = await all(paginated.sql, paginated.params);
+    return Promise.all(rows.map(function (r) { return _sqlRowToDoc(r); }));
+  } catch (sqlErr) {
+    throw new AppError(
+      'Eroare la căutarea rezervărilor (SQL): ' + sqlErr.message,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -914,7 +718,6 @@ async function findReservationsByDate(date, tenantId, options) {
 
 /**
  * Returnează rezervările cu o anumită dată de check-in.
- * Compatibilitate duală: SQLite (primar) + NeDB (fallback).
  */
 async function findReservationsByCheckInDate(date, tenantId, options) {
   if (!options) options = {};
@@ -928,41 +731,32 @@ async function findReservationsByCheckInDate(date, tenantId, options) {
   }
 
   // ---- SQLite ----
-  if (await _isSqlAvailable()) {
-    try {
-      let whereClause = 'tenantId = ? AND tip = ? AND checkIn = ?';
-      const params = [tenantId, 'hotel', date];
-
-      if (options.status) {
-        whereClause += ' AND status = ?';
-        params.push(options.status);
-      }
-
-      let sql = 'SELECT * FROM reservations WHERE ' + whereClause;
-      sql += _buildSqlOrderBy(options.sort);
-
-      const paginated = _applySqlPagination(sql, params, options);
-      const rows = await all(paginated.sql, paginated.params);
-      return rows.map(function (r) { return _sqlRowToDoc(r); });
-    } catch (sqlErr) {
-      throw new AppError(
-        'Eroare la căutarea rezervărilor (SQL): ' + sqlErr.message,
-        500,
-        'DB_QUERY_ERROR'
-      );
-    }
+  if (!(await _isSqlAvailable())) {
+    throw new AppError('Baza de date nu este disponibilă.', 500, 'DB_UNAVAILABLE');
   }
 
-  // ---- NeDB ----
-  const query = {
-    tenantId: tenantId,
-    tip: 'hotel',
-    checkIn: date,
-  };
+  try {
+    let whereClause = 'tenantId = ? AND tip = ? AND checkIn = ?';
+    const params = [tenantId, 'hotel', date];
 
-  if (options.status) query.status = options.status;
+    if (options.status) {
+      whereClause += ' AND status = ?';
+      params.push(options.status);
+    }
 
-  return executeQuery(query, options);
+    let sql = 'SELECT * FROM reservations WHERE ' + whereClause;
+    sql += _buildSqlOrderBy(options.sort);
+
+    const paginated = _applySqlPagination(sql, params, options);
+    const rows = await all(paginated.sql, paginated.params);
+    return Promise.all(rows.map(function (r) { return _sqlRowToDoc(r); }));
+  } catch (sqlErr) {
+    throw new AppError(
+      'Eroare la căutarea rezervărilor (SQL): ' + sqlErr.message,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -971,7 +765,6 @@ async function findReservationsByCheckInDate(date, tenantId, options) {
 
 /**
  * Returnează rezervările cu o anumită dată de check-out.
- * Compatibilitate duală: SQLite (primar) + NeDB (fallback).
  */
 async function findReservationsByCheckOutDate(date, tenantId, options) {
   if (!options) options = {};
@@ -985,41 +778,32 @@ async function findReservationsByCheckOutDate(date, tenantId, options) {
   }
 
   // ---- SQLite ----
-  if (await _isSqlAvailable()) {
-    try {
-      let whereClause = 'tenantId = ? AND tip = ? AND checkOut = ?';
-      const params = [tenantId, 'hotel', date];
-
-      if (options.status) {
-        whereClause += ' AND status = ?';
-        params.push(options.status);
-      }
-
-      let sql = 'SELECT * FROM reservations WHERE ' + whereClause;
-      sql += _buildSqlOrderBy(options.sort);
-
-      const paginated = _applySqlPagination(sql, params, options);
-      const rows = await all(paginated.sql, paginated.params);
-      return rows.map(function (r) { return _sqlRowToDoc(r); });
-    } catch (sqlErr) {
-      throw new AppError(
-        'Eroare la căutarea rezervărilor (SQL): ' + sqlErr.message,
-        500,
-        'DB_QUERY_ERROR'
-      );
-    }
+  if (!(await _isSqlAvailable())) {
+    throw new AppError('Baza de date nu este disponibilă.', 500, 'DB_UNAVAILABLE');
   }
 
-  // ---- NeDB ----
-  const query = {
-    tenantId: tenantId,
-    tip: 'hotel',
-    checkOut: date,
-  };
+  try {
+    let whereClause = 'tenantId = ? AND tip = ? AND checkOut = ?';
+    const params = [tenantId, 'hotel', date];
 
-  if (options.status) query.status = options.status;
+    if (options.status) {
+      whereClause += ' AND status = ?';
+      params.push(options.status);
+    }
 
-  return executeQuery(query, options);
+    let sql = 'SELECT * FROM reservations WHERE ' + whereClause;
+    sql += _buildSqlOrderBy(options.sort);
+
+    const paginated = _applySqlPagination(sql, params, options);
+    const rows = await all(paginated.sql, paginated.params);
+    return Promise.all(rows.map(function (r) { return _sqlRowToDoc(r); }));
+  } catch (sqlErr) {
+    throw new AppError(
+      'Eroare la căutarea rezervărilor (SQL): ' + sqlErr.message,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1028,7 +812,6 @@ async function findReservationsByCheckOutDate(date, tenantId, options) {
 
 /**
  * Returnează istoricul rezervărilor pentru un oaspete (guestId).
- * Compatibilitate duală: SQLite (primar) + NeDB (fallback).
  */
 async function findReservationsByGuestId(guestId, tenantId, options) {
   if (!options) options = {};
@@ -1042,27 +825,25 @@ async function findReservationsByGuestId(guestId, tenantId, options) {
   }
 
   // ---- SQLite ----
-  if (await _isSqlAvailable()) {
-    try {
-      let sql = 'SELECT * FROM reservations WHERE tenantId = ? AND guestId = ?';
-      const params = [tenantId, guestId];
-      sql += _buildSqlOrderBy(options.sort);
-
-      const paginated = _applySqlPagination(sql, params, options);
-      const rows = await all(paginated.sql, paginated.params);
-      return rows.map(function (r) { return _sqlRowToDoc(r); });
-    } catch (sqlErr) {
-      throw new AppError(
-        'Eroare la căutarea rezervărilor (SQL): ' + sqlErr.message,
-        500,
-        'DB_QUERY_ERROR'
-      );
-    }
+  if (!(await _isSqlAvailable())) {
+    throw new AppError('Baza de date nu este disponibilă.', 500, 'DB_UNAVAILABLE');
   }
 
-  // ---- NeDB ----
-  const query = { tenantId: tenantId, guestId: guestId };
-  return executeQuery(query, options);
+  try {
+    let sql = 'SELECT * FROM reservations WHERE tenantId = ? AND guestId = ?';
+    const params = [tenantId, guestId];
+    sql += _buildSqlOrderBy(options.sort);
+
+    const paginated = _applySqlPagination(sql, params, options);
+    const rows = await all(paginated.sql, paginated.params);
+    return Promise.all(rows.map(function (r) { return _sqlRowToDoc(r); }));
+  } catch (sqlErr) {
+    throw new AppError(
+      'Eroare la căutarea rezervărilor (SQL): ' + sqlErr.message,
+      500,
+      'DB_QUERY_ERROR'
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1071,7 +852,6 @@ async function findReservationsByGuestId(guestId, tenantId, options) {
 
 /**
  * Actualizează complet o rezervare.
- * Compatibilitate duală: SQLite (primar) + NeDB (fallback).
  */
 async function updateReservation(id, tenantId, updates) {
   if (!id || typeof id !== 'string' || id.trim().length === 0) {
@@ -1099,10 +879,13 @@ async function updateReservation(id, tenantId, updates) {
     'observatii', 'masa', 'camera', 'checkIn', 'checkOut',
   ];
 
-  const setFields = {};
   const sqlSetClauses = [];
   const sqlParams = [];
   const now = nowISO();
+
+  // Pentru validarea cross-field
+  let finalCheckIn = existing.checkIn;
+  let finalCheckOut = existing.checkOut;
 
   for (let i = 0; i < allowedFields.length; i++) {
     const field = allowedFields[i];
@@ -1119,7 +902,6 @@ async function updateReservation(id, tenantId, updates) {
               'INVALID_RESERVATION_TYPE'
             );
           }
-          setFields.tip = val;
           sqlSetClauses.push('tip = ?');
           sqlParams.push(val);
           break;
@@ -1128,7 +910,6 @@ async function updateReservation(id, tenantId, updates) {
           if (val && !isValidDate(val)) {
             throw new AppError('Data trebuie să fie în format YYYY-MM-DD.', 400, 'INVALID_DATE');
           }
-          setFields.data = val;
           sqlSetClauses.push('data = ?');
           sqlParams.push(val);
           break;
@@ -1137,7 +918,6 @@ async function updateReservation(id, tenantId, updates) {
           if (val && !isValidTime(val)) {
             throw new AppError('Ora trebuie să fie în format HH:mm.', 400, 'INVALID_TIME');
           }
-          setFields.ora = val;
           sqlSetClauses.push('ora = ?');
           sqlParams.push(val);
           break;
@@ -1146,7 +926,6 @@ async function updateReservation(id, tenantId, updates) {
           if (!Number.isInteger(val) || val < 1) {
             throw new AppError('Numărul de persoane trebuie să fie un întreg pozitiv.', 400, 'INVALID_GUEST_COUNT');
           }
-          setFields.numarPersoane = val;
           sqlSetClauses.push('numarPersoane = ?');
           sqlParams.push(val);
           break;
@@ -1155,7 +934,6 @@ async function updateReservation(id, tenantId, updates) {
           if (val && !isValidString(val, 2, 200)) {
             throw new AppError('Numele clientului trebuie să aibă 2-200 caractere.', 400, 'INVALID_CLIENT_NAME');
           }
-          setFields.numeClient = val.trim();
           sqlSetClauses.push('numeClient = ?');
           sqlParams.push(val.trim());
           break;
@@ -1164,7 +942,6 @@ async function updateReservation(id, tenantId, updates) {
           if (val && !isValidEmail(val)) {
             throw new AppError('Email-ul clientului nu este valid.', 400, 'INVALID_EMAIL');
           }
-          setFields.emailClient = val.trim().toLowerCase();
           sqlSetClauses.push('emailClient = ?');
           sqlParams.push(val.trim().toLowerCase());
           break;
@@ -1173,13 +950,11 @@ async function updateReservation(id, tenantId, updates) {
           if (val && !isValidPhone(val)) {
             throw new AppError('Telefonul clientului nu este valid.', 400, 'INVALID_PHONE');
           }
-          setFields.telefonClient = val.trim();
           sqlSetClauses.push('telefonClient = ?');
           sqlParams.push(val.trim());
           break;
 
         case 'observatii':
-          setFields.observatii = typeof val === 'string' ? val.trim() : '';
           sqlSetClauses.push('observatii = ?');
           sqlParams.push(typeof val === 'string' ? val.trim() : '');
           break;
@@ -1188,13 +963,11 @@ async function updateReservation(id, tenantId, updates) {
           if (val !== null && (!Number.isInteger(val) || val < 1)) {
             throw new AppError('Numărul mesei trebuie să fie un întreg pozitiv.', 400, 'INVALID_TABLE_NUMBER');
           }
-          setFields.masa = val;
           sqlSetClauses.push('masa = ?');
           sqlParams.push(val);
           break;
 
         case 'camera':
-          setFields.camera = val ? val.trim() : null;
           sqlSetClauses.push('camera = ?');
           sqlParams.push(val ? val.trim() : null);
           break;
@@ -1203,118 +976,83 @@ async function updateReservation(id, tenantId, updates) {
           if (val && !isValidDate(val)) {
             throw new AppError('Data de check-in nu este validă (YYYY-MM-DD).', 400, 'INVALID_CHECKIN_DATE');
           }
-          setFields.checkIn = val || null;
+          finalCheckIn = val || null;
           sqlSetClauses.push('checkIn = ?');
-          sqlParams.push(val || null);
+          sqlParams.push(finalCheckIn);
           break;
 
         case 'checkOut':
           if (val && !isValidDate(val)) {
             throw new AppError('Data de check-out nu este validă (YYYY-MM-DD).', 400, 'INVALID_CHECKOUT_DATE');
           }
-          setFields.checkOut = val || null;
+          finalCheckOut = val || null;
           sqlSetClauses.push('checkOut = ?');
-          sqlParams.push(val || null);
+          sqlParams.push(finalCheckOut);
           break;
 
         case 'restaurantId':
-          setFields.restaurantId = val || null;
           sqlSetClauses.push('restaurantId = ?');
           sqlParams.push(val || null);
           break;
 
         case 'hotelId':
-          setFields.hotelId = val || null;
           sqlSetClauses.push('hotelId = ?');
           sqlParams.push(val || null);
           break;
 
         default:
-          setFields[field] = val;
+          break;
       }
     }
   }
 
   // Validare cross-field: checkOut > checkIn
-  const finalCheckIn = setFields.checkIn !== undefined ? setFields.checkIn : existing.checkIn;
-  const finalCheckOut = setFields.checkOut !== undefined ? setFields.checkOut : existing.checkOut;
   if (finalCheckIn && finalCheckOut && new Date(finalCheckOut + 'T00:00:00.000Z') <= new Date(finalCheckIn + 'T00:00:00.000Z')) {
     throw new AppError('Data de check-out trebuie să fie după data de check-in.', 400, 'CHECKOUT_BEFORE_CHECKIN');
   }
 
-  setFields.updatedAt = now;
   sqlSetClauses.push('updatedAt = ?');
   sqlParams.push(now);
 
   // ---- SQLite ----
-  if (await _isSqlAvailable()) {
-    try {
-      const numericId = parseInt(id, 10);
-      if (!isNaN(numericId)) {
-        sqlParams.push(numericId);
-        sqlParams.push(tenantId);
-        const result = await run(
-          'UPDATE reservations SET ' + sqlSetClauses.join(', ') + ' WHERE id = ? AND tenantId = ?',
-          sqlParams
-        );
-        if (result.changes === 0) {
-          return null;
-        }
-        const updatedRow = await get('SELECT * FROM reservations WHERE id = ?', [numericId]);
-        return _sqlRowToDoc(updatedRow);
-      } else {
-        sqlParams.push(String(id));
-        sqlParams.push(tenantId);
-        const result = await run(
-          'UPDATE reservations SET ' + sqlSetClauses.join(', ') + ' WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
-          sqlParams
-        );
-        if (result.changes === 0) {
-          return null;
-        }
-        const updatedRow = await get('SELECT * FROM reservations WHERE CAST(id AS TEXT) = ?', [String(id)]);
-        return _sqlRowToDoc(updatedRow);
-      }
-    } catch (sqlErr) {
-      throw new AppError(
-        'Eroare la actualizarea rezervării (SQL): ' + sqlErr.message,
-        500,
-        'DB_UPDATE_ERROR'
-      );
-    }
+  if (!(await _isSqlAvailable())) {
+    throw new AppError('Baza de date nu este disponibilă.', 500, 'DB_UNAVAILABLE');
   }
 
-  // ---- NeDB ----
-  return new Promise(function (resolve, reject) {
-    reservations.update(
-      { _id: id, tenantId: tenantId },
-      { $set: setFields },
-      {},
-      function (err, numReplaced) {
-        if (err) {
-          return reject(new AppError(
-            'Eroare la actualizarea rezervării: ' + err.message,
-            500,
-            'DB_UPDATE_ERROR'
-          ));
-        }
-        if (numReplaced === 0) {
-          return resolve(null);
-        }
-        // Returnăm documentul actualizat
-        reservations.findOne({ _id: id, tenantId: tenantId }, function (err2, doc) {
-          if (err2) {
-            return reject(new AppError(
-              'Eroare la citirea rezervării actualizate: ' + err2.message,
-              500,
-              'DB_QUERY_ERROR'
-            ));
-          }
-          resolve(doc || null);
-        });
+  try {
+    const numericId = parseInt(id, 10);
+    if (!isNaN(numericId)) {
+      sqlParams.push(numericId);
+      sqlParams.push(tenantId);
+      const result = await run(
+        'UPDATE reservations SET ' + sqlSetClauses.join(', ') + ' WHERE id = ? AND tenantId = ?',
+        sqlParams
+      );
+      if (result.changes === 0) {
+        return null;
       }
+      const updatedRow = await get('SELECT * FROM reservations WHERE id = ?', [numericId]);
+      return await _sqlRowToDoc(updatedRow);
+    } else {
+      sqlParams.push(String(id));
+      sqlParams.push(tenantId);
+      const result = await run(
+        'UPDATE reservations SET ' + sqlSetClauses.join(', ') + ' WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
+        sqlParams
+      );
+      if (result.changes === 0) {
+        return null;
+      }
+      const updatedRow = await get('SELECT * FROM reservations WHERE CAST(id AS TEXT) = ?', [String(id)]);
+      return await _sqlRowToDoc(updatedRow);
+    }
+  } catch (sqlErr) {
+    throw new AppError(
+      'Eroare la actualizarea rezervării (SQL): ' + sqlErr.message,
+      500,
+      'DB_UPDATE_ERROR'
     );
-  });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1323,7 +1061,6 @@ async function updateReservation(id, tenantId, updates) {
 
 /**
  * Actualizează statusul unei rezervări.
- * Compatibilitate duală: SQLite (primar) + NeDB (fallback).
  */
 async function updateReservationStatus(id, tenantId, status) {
   if (!id || typeof id !== 'string' || id.trim().length === 0) {
@@ -1360,61 +1097,35 @@ async function updateReservationStatus(id, tenantId, status) {
   const now = nowISO();
 
   // ---- SQLite ----
-  if (await _isSqlAvailable()) {
-    try {
-      const numericId = parseInt(id, 10);
-      let result;
-      if (!isNaN(numericId)) {
-        result = await run(
-          'UPDATE reservations SET status = ?, updatedAt = ? WHERE id = ? AND tenantId = ?',
-          [status, now, numericId, tenantId]
-        );
-      } else {
-        result = await run(
-          'UPDATE reservations SET status = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
-          [status, now, String(id), tenantId]
-        );
-      }
-      if (result.changes === 0) {
-        return null;
-      }
-      return findReservationById(id, tenantId);
-    } catch (sqlErr) {
-      throw new AppError(
-        'Eroare la actualizarea statusului (SQL): ' + sqlErr.message,
-        500,
-        'DB_UPDATE_ERROR'
-      );
-    }
+  if (!(await _isSqlAvailable())) {
+    throw new AppError('Baza de date nu este disponibilă.', 500, 'DB_UNAVAILABLE');
   }
 
-  // ---- NeDB ----
-  return new Promise(function (resolve, reject) {
-    reservations.update(
-      { _id: id, tenantId: tenantId },
-      { $set: { status: status, updatedAt: now } },
-      {},
-      function (err) {
-        if (err) {
-          return reject(new AppError(
-            'Eroare la actualizarea statusului: ' + err.message,
-            500,
-            'DB_UPDATE_ERROR'
-          ));
-        }
-        reservations.findOne({ _id: id, tenantId: tenantId }, function (err2, doc) {
-          if (err2) {
-            return reject(new AppError(
-              'Eroare la citirea rezervării: ' + err2.message,
-              500,
-              'DB_QUERY_ERROR'
-            ));
-          }
-          resolve(doc || null);
-        });
-      }
+  try {
+    const numericId = parseInt(id, 10);
+    let result;
+    if (!isNaN(numericId)) {
+      result = await run(
+        'UPDATE reservations SET status = ?, updatedAt = ? WHERE id = ? AND tenantId = ?',
+        [status, now, numericId, tenantId]
+      );
+    } else {
+      result = await run(
+        'UPDATE reservations SET status = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
+        [status, now, String(id), tenantId]
+      );
+    }
+    if (result.changes === 0) {
+      return null;
+    }
+    return findReservationById(id, tenantId);
+  } catch (sqlErr) {
+    throw new AppError(
+      'Eroare la actualizarea statusului (SQL): ' + sqlErr.message,
+      500,
+      'DB_UPDATE_ERROR'
     );
-  });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1423,7 +1134,6 @@ async function updateReservationStatus(id, tenantId, status) {
 
 /**
  * Șterge o rezervare.
- * Compatibilitate duală: SQLite (primar) + NeDB (fallback).
  */
 async function deleteReservation(id, tenantId) {
   if (!id || typeof id !== 'string' || id.trim().length === 0) {
@@ -1435,44 +1145,32 @@ async function deleteReservation(id, tenantId) {
   }
 
   // ---- SQLite ----
-  if (_isSqlAvailable()) {
-    try {
-      const numericId = parseInt(id, 10);
-      let result;
-      if (!isNaN(numericId)) {
-        result = run(
-          'DELETE FROM reservations WHERE id = ? AND tenantId = ?',
-          [numericId, tenantId]
-        );
-      } else {
-        result = run(
-          'DELETE FROM reservations WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
-          [String(id), tenantId]
-        );
-      }
-      return result.changes > 0;
-    } catch (sqlErr) {
-      throw new AppError(
-        'Eroare la ștergerea rezervării (SQL): ' + sqlErr.message,
-        500,
-        'DB_DELETE_ERROR'
-      );
-    }
+  if (!(await _isSqlAvailable())) {
+    throw new AppError('Baza de date nu este disponibilă.', 500, 'DB_UNAVAILABLE');
   }
 
-  // ---- NeDB ----
-  return new Promise(function (resolve, reject) {
-    reservations.remove({ _id: id, tenantId: tenantId }, {}, function (err, numRemoved) {
-      if (err) {
-        return reject(new AppError(
-          'Eroare la ștergerea rezervării: ' + err.message,
-          500,
-          'DB_DELETE_ERROR'
-        ));
-      }
-      resolve(numRemoved > 0);
-    });
-  });
+  try {
+    const numericId = parseInt(id, 10);
+    let result;
+    if (!isNaN(numericId)) {
+      result = await run(
+        'DELETE FROM reservations WHERE id = ? AND tenantId = ?',
+        [numericId, tenantId]
+      );
+    } else {
+      result = await run(
+        'DELETE FROM reservations WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
+        [String(id), tenantId]
+      );
+    }
+    return result.changes > 0;
+  } catch (sqlErr) {
+    throw new AppError(
+      'Eroare la ștergerea rezervării (SQL): ' + sqlErr.message,
+      500,
+      'DB_DELETE_ERROR'
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1481,7 +1179,6 @@ async function deleteReservation(id, tenantId) {
 
 /**
  * Efectuează check-in pentru o rezervare de tip hotel.
- * Compatibilitate duală: SQLite (primar) + NeDB (fallback).
  */
 async function checkInReservation(id, tenantId) {
   if (!id || typeof id !== 'string' || id.trim().length === 0) {
@@ -1516,57 +1213,31 @@ async function checkInReservation(id, tenantId) {
   const now = nowISO();
 
   // ---- SQLite ----
-  if (_isSqlAvailable()) {
-    try {
-      const numericId = parseInt(id, 10);
-      if (!isNaN(numericId)) {
-        run(
-          'UPDATE reservations SET status = ?, updatedAt = ? WHERE id = ? AND tenantId = ?',
-          ['check-in', now, numericId, tenantId]
-        );
-      } else {
-        run(
-          'UPDATE reservations SET status = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
-          ['check-in', now, String(id), tenantId]
-        );
-      }
-      return findReservationById(id, tenantId);
-    } catch (sqlErr) {
-      throw new AppError(
-        'Eroare la check-in (SQL): ' + sqlErr.message,
-        500,
-        'DB_UPDATE_ERROR'
-      );
-    }
+  if (!(await _isSqlAvailable())) {
+    throw new AppError('Baza de date nu este disponibilă.', 500, 'DB_UNAVAILABLE');
   }
 
-  // ---- NeDB ----
-  return new Promise(function (resolve, reject) {
-    reservations.update(
-      { _id: id, tenantId: tenantId },
-      { $set: { status: 'check-in', updatedAt: now } },
-      {},
-      function (err) {
-        if (err) {
-          return reject(new AppError(
-            'Eroare la check-in: ' + err.message,
-            500,
-            'DB_UPDATE_ERROR'
-          ));
-        }
-        reservations.findOne({ _id: id, tenantId: tenantId }, function (err2, doc) {
-          if (err2) {
-            return reject(new AppError(
-              'Eroare la citirea rezervării: ' + err2.message,
-              500,
-              'DB_QUERY_ERROR'
-            ));
-          }
-          resolve(doc || null);
-        });
-      }
+  try {
+    const numericId = parseInt(id, 10);
+    if (!isNaN(numericId)) {
+      await run(
+        'UPDATE reservations SET status = ?, updatedAt = ? WHERE id = ? AND tenantId = ?',
+        ['check-in', now, numericId, tenantId]
+      );
+    } else {
+      await run(
+        'UPDATE reservations SET status = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
+        ['check-in', now, String(id), tenantId]
+      );
+    }
+    return findReservationById(id, tenantId);
+  } catch (sqlErr) {
+    throw new AppError(
+      'Eroare la check-in (SQL): ' + sqlErr.message,
+      500,
+      'DB_UPDATE_ERROR'
     );
-  });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1575,7 +1246,6 @@ async function checkInReservation(id, tenantId) {
 
 /**
  * Efectuează check-out pentru o rezervare de tip hotel.
- * Compatibilitate duală: SQLite (primar) + NeDB (fallback).
  */
 async function checkOutReservation(id, tenantId) {
   if (!id || typeof id !== 'string' || id.trim().length === 0) {
@@ -1614,57 +1284,31 @@ async function checkOutReservation(id, tenantId) {
   const now = nowISO();
 
   // ---- SQLite ----
-  if (_isSqlAvailable()) {
-    try {
-      const numericId = parseInt(id, 10);
-      if (!isNaN(numericId)) {
-        run(
-          'UPDATE reservations SET status = ?, updatedAt = ? WHERE id = ? AND tenantId = ?',
-          ['check-out', now, numericId, tenantId]
-        );
-      } else {
-        run(
-          'UPDATE reservations SET status = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
-          ['check-out', now, String(id), tenantId]
-        );
-      }
-      return findReservationById(id, tenantId);
-    } catch (sqlErr) {
-      throw new AppError(
-        'Eroare la check-out (SQL): ' + sqlErr.message,
-        500,
-        'DB_UPDATE_ERROR'
-      );
-    }
+  if (!(await _isSqlAvailable())) {
+    throw new AppError('Baza de date nu este disponibilă.', 500, 'DB_UNAVAILABLE');
   }
 
-  // ---- NeDB ----
-  return new Promise(function (resolve, reject) {
-    reservations.update(
-      { _id: id, tenantId: tenantId },
-      { $set: { status: 'check-out', updatedAt: now } },
-      {},
-      function (err) {
-        if (err) {
-          return reject(new AppError(
-            'Eroare la check-out: ' + err.message,
-            500,
-            'DB_UPDATE_ERROR'
-          ));
-        }
-        reservations.findOne({ _id: id, tenantId: tenantId }, function (err2, doc) {
-          if (err2) {
-            return reject(new AppError(
-              'Eroare la citirea rezervării: ' + err2.message,
-              500,
-              'DB_QUERY_ERROR'
-            ));
-          }
-          resolve(doc || null);
-        });
-      }
+  try {
+    const numericId = parseInt(id, 10);
+    if (!isNaN(numericId)) {
+      await run(
+        'UPDATE reservations SET status = ?, updatedAt = ? WHERE id = ? AND tenantId = ?',
+        ['check-out', now, numericId, tenantId]
+      );
+    } else {
+      await run(
+        'UPDATE reservations SET status = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
+        ['check-out', now, String(id), tenantId]
+      );
+    }
+    return findReservationById(id, tenantId);
+  } catch (sqlErr) {
+    throw new AppError(
+      'Eroare la check-out (SQL): ' + sqlErr.message,
+      500,
+      'DB_UPDATE_ERROR'
     );
-  });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1673,7 +1317,6 @@ async function checkOutReservation(id, tenantId) {
 
 /**
  * Actualizează informațiile de facturare ale unei rezervări.
- * Compatibilitate duală: SQLite (primar) + NeDB (fallback).
  */
 async function updateReservationBilling(id, tenantId, billingData) {
   if (!id || typeof id !== 'string' || id.trim().length === 0) {
@@ -1719,86 +1362,47 @@ async function updateReservationBilling(id, tenantId, billingData) {
   const finalMoneda = moneda ? moneda.trim().toUpperCase() : undefined;
 
   // ---- SQLite ----
-  if (_isSqlAvailable()) {
-    try {
-      const numericId = parseInt(id, 10);
-      const setClauses = ['statusFacturare = ?', 'updatedAt = ?'];
-      const params = [statusFacturare, now];
+  if (!(await _isSqlAvailable())) {
+    throw new AppError('Baza de date nu este disponibilă.', 500, 'DB_UNAVAILABLE');
+  }
 
-      if (sumaTotala !== undefined && sumaTotala !== null) {
-        setClauses.push('sumaTotala = ?');
-        params.push(sumaTotala);
-      }
-      if (finalMoneda !== undefined) {
-        setClauses.push('moneda = ?');
-        params.push(finalMoneda);
-      }
+  try {
+    const numericId = parseInt(id, 10);
+    const setClauses = ['statusFacturare = ?', 'updatedAt = ?'];
+    const params = [statusFacturare, now];
 
-      if (!isNaN(numericId)) {
-        params.push(numericId);
-        params.push(tenantId);
-        run(
-          'UPDATE reservations SET ' + setClauses.join(', ') + ' WHERE id = ? AND tenantId = ?',
-          params
-        );
-      } else {
-        params.push(String(id));
-        params.push(tenantId);
-        run(
-          'UPDATE reservations SET ' + setClauses.join(', ') + ' WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
-          params
-        );
-      }
-      return findReservationById(id, tenantId);
-    } catch (sqlErr) {
-      throw new AppError(
-        'Eroare la actualizarea facturării (SQL): ' + sqlErr.message,
-        500,
-        'DB_UPDATE_ERROR'
+    if (sumaTotala !== undefined && sumaTotala !== null) {
+      setClauses.push('sumaTotala = ?');
+      params.push(sumaTotala);
+    }
+    if (finalMoneda !== undefined) {
+      setClauses.push('moneda = ?');
+      params.push(finalMoneda);
+    }
+
+    if (!isNaN(numericId)) {
+      params.push(numericId);
+      params.push(tenantId);
+      await run(
+        'UPDATE reservations SET ' + setClauses.join(', ') + ' WHERE id = ? AND tenantId = ?',
+        params
+      );
+    } else {
+      params.push(String(id));
+      params.push(tenantId);
+      await run(
+        'UPDATE reservations SET ' + setClauses.join(', ') + ' WHERE CAST(id AS TEXT) = ? AND tenantId = ?',
+        params
       );
     }
-  }
-
-  // ---- NeDB ----
-  const setFields = {
-    statusFacturare: statusFacturare,
-    updatedAt: now,
-  };
-
-  if (sumaTotala !== undefined && sumaTotala !== null) {
-    setFields.sumaTotala = sumaTotala;
-  }
-
-  if (finalMoneda !== undefined) {
-    setFields.moneda = finalMoneda;
-  }
-
-  return new Promise(function (resolve, reject) {
-    reservations.update(
-      { _id: id, tenantId: tenantId },
-      { $set: setFields },
-      {},
-      function (err) {
-        if (err) {
-          return reject(new AppError(
-            'Eroare la actualizarea facturării: ' + err.message,
-            500,
-            'DB_UPDATE_ERROR'
-          ));
-        }
-        reservations.findOne({ _id: id, tenantId: tenantId }, function (err2, doc) {
-          if (err2) {
-            return reject(new AppError(
-              'Eroare la citirea rezervării: ' + err2.message,
-              500,
-              'DB_QUERY_ERROR'
-            ));
-          }
-          resolve(doc || null);
-        });
-      }
+    return findReservationById(id, tenantId);
+  } catch (sqlErr) {
+    throw new AppError(
+      'Eroare la actualizarea facturării (SQL): ' + sqlErr.message,
+      500,
+      'DB_UPDATE_ERROR'
     );
-  });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1899,6 +1503,4 @@ module.exports = {
   // Expunere pentru testare și debugging
   _isSqlAvailable: _isSqlAvailable,
   _sqlRowToDoc: _sqlRowToDoc,
-  _ensureSqlSchema: _ensureSqlSchema,
-  _resetSqlMigrated: function () { _sqlMigrated = false; },
 };
