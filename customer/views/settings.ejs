@@ -1,0 +1,605 @@
+<%
+  // ============================================================
+  // customer/views/settings.ejs
+  // Pagină setări cont — preferințe, notificări, securitate
+  // Folosește layout.ejs ca wrapper
+  // ============================================================
+
+  const user = locals.user || {};
+  const customer = locals.customer || user || {};
+%>
+
+<style>
+  /* ============================================================
+     SETTINGS PAGE STYLES
+     ============================================================ */
+  .settings-page .page-intro {
+    margin-bottom: 24px;
+  }
+
+  .settings-page .page-intro h1 {
+    font-size: 24px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .settings-page .page-intro h1 i {
+    color: var(--color-primary);
+  }
+
+  .settings-page .page-intro p {
+    color: var(--color-text-muted);
+    margin-top: 4px;
+    font-size: 14px;
+  }
+
+  .settings-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 700px;
+  }
+
+  .settings-section {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .settings-section .section-header {
+    padding: 18px 24px;
+    background: rgba(13, 110, 253, 0.03);
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .settings-section .section-header i {
+    color: var(--color-primary);
+    font-size: 17px;
+    width: 20px;
+    text-align: center;
+  }
+
+  .settings-section .section-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .settings-section .section-body {
+    padding: 20px 24px;
+  }
+
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    gap: 16px;
+  }
+
+  .setting-row:last-child {
+    border-bottom: none;
+  }
+
+  .setting-row .setting-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .setting-row .setting-label {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .setting-row .setting-desc {
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+
+  /* Toggle switch */
+  .toggle-switch {
+    position: relative;
+    width: 46px;
+    height: 26px;
+    flex-shrink: 0;
+  }
+
+  .toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .toggle-switch .toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #ccc;
+    border-radius: 26px;
+    transition: all 0.3s ease;
+  }
+
+  .toggle-switch .toggle-slider::before {
+    content: '';
+    position: absolute;
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background: #fff;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+  }
+
+  .toggle-switch input:checked + .toggle-slider {
+    background: var(--color-primary);
+  }
+
+  .toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(20px);
+  }
+
+  .toggle-switch input:disabled + .toggle-slider {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Select language */
+  .setting-row select {
+    padding: 8px 12px;
+    font-size: 13px;
+    font-family: var(--font-family);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    min-width: 140px;
+  }
+
+  /* Danger zone */
+  .danger-zone {
+    border-color: var(--color-danger);
+  }
+
+  .danger-zone .section-header {
+    background: rgba(220, 53, 69, 0.03);
+    border-bottom-color: rgba(220, 53, 69, 0.15);
+  }
+
+  .danger-zone .section-header i {
+    color: var(--color-danger);
+  }
+
+  .success-toast-fixed {
+    background: #e8f5e9;
+    color: #2e7d32;
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    margin-bottom: 20px;
+    display: none;
+    align-items: center;
+    gap: 8px;
+  }
+
+  @media (max-width: 480px) {
+    .settings-page .page-intro h1 {
+      font-size: 20px;
+    }
+
+    .settings-section .section-body {
+      padding: 16px;
+    }
+
+    .setting-row {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+    }
+  }
+</style>
+
+<!-- ============================================================
+     SETTINGS PAGE
+     ============================================================ -->
+<div class="settings-page" data-page="settings" data-customer-id="<%= customer._id || '' %>" data-tenant-id="<%= customer.tenantId || '' %>">
+
+  <!-- Page intro -->
+  <div class="page-intro">
+    <h1>
+      <i class="fas fa-cog"></i>
+      Setări
+    </h1>
+    <p>Configurează preferințele contului tău.</p>
+  </div>
+
+  <!-- Success toast -->
+  <div class="success-toast-fixed" id="settingsSuccess">
+    <i class="fas fa-check-circle"></i>
+    <span id="settingsSuccessMsg">Setările au fost salvate cu succes.</span>
+  </div>
+
+  <!-- Flash -->
+  <% if (locals.flash && flash.message) { %>
+    <div class="alert" style="margin-bottom:20px;padding:12px 16px;border-radius:8px;background:<%= flash.type === 'success' ? '#e8f5e9' : '#fce4ec' %>;color:<%= flash.type === 'success' ? '#2e7d32' : '#c62828' %>;">
+      <i class="fas fa-<%= flash.type === 'success' ? 'check-circle' : 'exclamation-circle' %>"></i>
+      <%= flash.message %>
+    </div>
+  <% } %>
+
+  <div class="settings-sections">
+    <!-- ============================================================
+         NOTIFICĂRI
+         ============================================================ -->
+    <div class="settings-section">
+      <div class="section-header">
+        <i class="fas fa-bell"></i>
+        <h3>Notificări</h3>
+      </div>
+      <div class="section-body">
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Notificări email</div>
+            <div class="setting-desc">Primește actualizări despre comenzi și rezervări prin email.</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="notifEmail" checked onchange="saveSetting('notifications.email', this.checked)" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Notificări SMS</div>
+            <div class="setting-desc">Primește alerte prin SMS pentru statusul comenzilor.</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="notifSms" onchange="saveSetting('notifications.sms', this.checked)" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Notificări push</div>
+            <div class="setting-desc">Primește notificări în browser pentru oferte și status comenzi.</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="notifPush" checked onchange="saveSetting('notifications.push', this.checked)" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Newsletter și oferte</div>
+            <div class="setting-desc">Primește oferte speciale, cupoane și noutăți.</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="notifMarketing" onchange="saveSetting('notifications.marketing', this.checked)" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         PREFERINȚE
+         ============================================================ -->
+    <div class="settings-section">
+      <div class="section-header">
+        <i class="fas fa-sliders-h"></i>
+        <h3>Preferințe</h3>
+      </div>
+      <div class="section-body">
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Limbă</div>
+            <div class="setting-desc">Alege limba preferată pentru interfață.</div>
+          </div>
+          <select id="languageSelect" onchange="saveSetting('preferences.language', this.value)">
+            <option value="ro">🇷🇴 Română</option>
+            <option value="en">🇬🇧 English</option>
+            <option value="hu">🇭🇺 Magyar</option>
+            <option value="de">🇩🇪 Deutsch</option>
+          </select>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Monedă implicită</div>
+            <div class="setting-desc">Moneda folosită pentru afișarea prețurilor.</div>
+          </div>
+          <select id="currencySelect" onchange="saveSetting('preferences.currency', this.value)">
+            <option value="RON">RON - Leu românesc</option>
+            <option value="EUR">EUR - Euro</option>
+            <option value="USD">USD - Dolar american</option>
+          </select>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Afișare prețuri cu TVA</div>
+            <div class="setting-desc">Prețurile vor include TVA în mod implicit.</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="prefTva" checked onchange="saveSetting('preferences.showTva', this.checked)" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         CONFIDENȚIALITATE
+         ============================================================ -->
+    <div class="settings-section">
+      <div class="section-header">
+        <i class="fas fa-shield-alt"></i>
+        <h3>Confidențialitate</h3>
+      </div>
+      <div class="section-body">
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Profil public</div>
+            <div class="setting-desc">Permite altor utilizatori să vadă recenziile tale.</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="privPublic" onchange="saveSetting('privacy.publicProfile', this.checked)" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Partajare date cu restaurantele</div>
+            <div class="setting-desc">Permite restaurantelor să vadă preferințele tale pentru recomandări personalizate.</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="privShareData" checked onchange="saveSetting('privacy.shareWithRestaurants', this.checked)" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Cookie-uri de analiză</div>
+            <div class="setting-desc">Permite cookie-uri pentru analiza și îmbunătățirea experienței.</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="privAnalytics" checked onchange="saveSetting('privacy.analyticsCookies', this.checked)" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         ZONA DE PERICOL
+         ============================================================ -->
+    <div class="settings-section danger-zone">
+      <div class="section-header">
+        <i class="fas fa-exclamation-triangle"></i>
+        <h3>Zonă de pericol</h3>
+      </div>
+      <div class="section-body">
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Dezactivează contul</div>
+            <div class="setting-desc">Contul tău va fi dezactivat temporar. Te poți reactiva oricând prin autentificare.</div>
+          </div>
+          <button class="btn btn-danger btn-sm" onclick="deactivateAccount()">
+            <i class="fas fa-pause-circle"></i> Dezactivează
+          </button>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Șterge contul definitiv</div>
+            <div class="setting-desc">Toate datele tale vor fi șterse permanent. Această acțiune este ireversibilă.</div>
+          </div>
+          <button class="btn btn-danger btn-sm" onclick="deleteAccount()">
+            <i class="fas fa-trash-alt"></i> Șterge contul
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCRIPTS
+     ============================================================ -->
+<script>
+  (function() {
+    'use strict';
+
+    var customerId = '<%= customer._id || "" %>';
+    var tenantId = '<%= customer.tenantId || "" %>';
+    var saveTimeout = null;
+
+    // ============================================================
+    // Save setting (debounced)
+    // ============================================================
+    window.saveSetting = function(key, value) {
+      // Debounce: collect settings and save after a short delay
+      if (saveTimeout) clearTimeout(saveTimeout);
+
+      saveTimeout = setTimeout(async function() {
+        var settings = collectAllSettings();
+
+        try {
+          var data = await apiFetch('/api/customers/' + customerId + '/settings', {
+            method: 'PUT',
+            body: JSON.stringify({
+              tenantId: tenantId,
+              settings: settings,
+            })
+          });
+
+          if (data && data.success) {
+            showSettingsSaved();
+          }
+        } catch (err) {
+          // Silently fail for toggle changes
+          console.error('Eroare la salvarea setărilor:', err);
+        }
+      }, 600);
+    };
+
+    // ============================================================
+    // Collect all settings
+    // ============================================================
+    function collectAllSettings() {
+      return {
+        notifications: {
+          email: document.getElementById('notifEmail') ? document.getElementById('notifEmail').checked : true,
+          sms: document.getElementById('notifSms') ? document.getElementById('notifSms').checked : false,
+          push: document.getElementById('notifPush') ? document.getElementById('notifPush').checked : true,
+          marketing: document.getElementById('notifMarketing') ? document.getElementById('notifMarketing').checked : false,
+        },
+        preferences: {
+          language: document.getElementById('languageSelect') ? document.getElementById('languageSelect').value : 'ro',
+          currency: document.getElementById('currencySelect') ? document.getElementById('currencySelect').value : 'RON',
+          showTva: document.getElementById('prefTva') ? document.getElementById('prefTva').checked : true,
+        },
+        privacy: {
+          publicProfile: document.getElementById('privPublic') ? document.getElementById('privPublic').checked : false,
+          shareWithRestaurants: document.getElementById('privShareData') ? document.getElementById('privShareData').checked : true,
+          analyticsCookies: document.getElementById('privAnalytics') ? document.getElementById('privAnalytics').checked : true,
+        },
+      };
+    }
+
+    // ============================================================
+    // Load settings
+    // ============================================================
+    async function loadSettings() {
+      try {
+        var data = await apiFetch('/api/customers/' + customerId + '/settings?tenantId=' + tenantId);
+        if (data && data.success && data.data && data.data.settings) {
+          var s = data.data.settings;
+          applySettings(s);
+        }
+        // If no settings exist yet, use defaults (already set in HTML)
+      } catch (err) {
+        console.error('Eroare la încărcarea setărilor:', err);
+      }
+    }
+
+    function applySettings(s) {
+      if (s.notifications) {
+        if (document.getElementById('notifEmail') && s.notifications.email !== undefined)
+          document.getElementById('notifEmail').checked = s.notifications.email;
+        if (document.getElementById('notifSms') && s.notifications.sms !== undefined)
+          document.getElementById('notifSms').checked = s.notifications.sms;
+        if (document.getElementById('notifPush') && s.notifications.push !== undefined)
+          document.getElementById('notifPush').checked = s.notifications.push;
+        if (document.getElementById('notifMarketing') && s.notifications.marketing !== undefined)
+          document.getElementById('notifMarketing').checked = s.notifications.marketing;
+      }
+
+      if (s.preferences) {
+        if (document.getElementById('languageSelect') && s.preferences.language)
+          document.getElementById('languageSelect').value = s.preferences.language;
+        if (document.getElementById('currencySelect') && s.preferences.currency)
+          document.getElementById('currencySelect').value = s.preferences.currency;
+        if (document.getElementById('prefTva') && s.preferences.showTva !== undefined)
+          document.getElementById('prefTva').checked = s.preferences.showTva;
+      }
+
+      if (s.privacy) {
+        if (document.getElementById('privPublic') && s.privacy.publicProfile !== undefined)
+          document.getElementById('privPublic').checked = s.privacy.publicProfile;
+        if (document.getElementById('privShareData') && s.privacy.shareWithRestaurants !== undefined)
+          document.getElementById('privShareData').checked = s.privacy.shareWithRestaurants;
+        if (document.getElementById('privAnalytics') && s.privacy.analyticsCookies !== undefined)
+          document.getElementById('privAnalytics').checked = s.privacy.analyticsCookies;
+      }
+    }
+
+    // ============================================================
+    // Show saved indicator
+    // ============================================================
+    function showSettingsSaved() {
+      var el = document.getElementById('settingsSuccess');
+      if (el) {
+        el.style.display = 'flex';
+        setTimeout(function() { el.style.display = 'none'; }, 3000);
+      }
+    }
+
+    // ============================================================
+    // Danger zone actions
+    // ============================================================
+    window.deactivateAccount = async function() {
+      if (!confirm('Ești sigur că vrei să dezactivezi contul?\n\nTe vei putea reactiva prin autentificare.')) return;
+
+      var reason = prompt('Motivul dezactivării (opțional):');
+      try {
+        var data = await apiFetch('/api/customers/' + customerId + '/deactivate', {
+          method: 'POST',
+          body: JSON.stringify({
+            tenantId: tenantId,
+            reason: reason || undefined,
+          })
+        });
+
+        if (data && data.success) {
+          showToast('Contul a fost dezactivat. Vei fi redirecționat.', 'info');
+          setTimeout(function() {
+            window.location.href = '/api/customer/auth/logout';
+          }, 2000);
+        }
+      } catch (err) {
+        showToast('Eroare la dezactivarea contului.', 'error');
+      }
+    };
+
+    window.deleteAccount = async function() {
+      if (!confirm('⚠️ Ești sigur că vrei să ștergi definitiv contul?\n\nToate datele tale vor fi pierdute permanent. Această acțiune este IREVERSIBILĂ.')) return;
+      if (!confirm('Confirmă ștergerea definitivă a contului.\n\nAceasta este ultima avertizare.')) return;
+
+      var password = prompt('Introdu parola pentru confirmare:');
+      if (!password) return;
+
+      try {
+        var data = await apiFetch('/api/customers/' + customerId, {
+          method: 'DELETE',
+          body: JSON.stringify({
+            tenantId: tenantId,
+            password: password,
+          })
+        });
+
+        if (data && data.success) {
+          showToast('Contul a fost șters definitiv.', 'info');
+          setTimeout(function() {
+            window.location.href = '/api/customer/auth/logout';
+          }, 2000);
+        }
+      } catch (err) {
+        showToast('Eroare la ștergerea contului.', 'error');
+      }
+    };
+
+    // ============================================================
+    // Init
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', function() {
+      loadSettings();
+    });
+
+  })();
+</script>

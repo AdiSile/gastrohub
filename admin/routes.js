@@ -28,7 +28,8 @@ const bcrypt = require('bcryptjs');
 
 const { authenticate, optionalAuth, generateToken, setTokenCookie, clearTokenCookie } = require('../middleware/auth');
 const { authorize, authorizeMinLevel, isAdminRole } = require('../middleware/roles');
-const { users } = require('../config/db');
+const { getDb } = require('../config/db');
+const { findUserByEmail: modelFindUserByEmail, findUserById: modelFindUserById } = require('../models/userModel');
 const { AppError } = require('../middleware/errorHandler');
 
 // ---------------------------------------------------------------------------
@@ -59,32 +60,34 @@ const ADMIN_VIEWS = {
 
 /**
  * Caută un utilizator în baza de date după email.
+ * Delegă către modelul userModel care folosește SQLite.
  *
  * @param {string} email - Adresa de email
  * @returns {Promise<Object|null>}
  */
-function findUserByEmail(email) {
-  return new Promise((resolve, reject) => {
-    users.findOne({ email: email.toLowerCase().trim() }, (err, doc) => {
-      if (err) return reject(err);
-      resolve(doc || null);
-    });
-  });
+async function findUserByEmail(email) {
+  try {
+    return await modelFindUserByEmail(email);
+  } catch (err) {
+    console.error('[admin/routes] Eroare la findUserByEmail:', err);
+    return null;
+  }
 }
 
 /**
  * Caută un utilizator în baza de date după ID.
+ * Delegă către modelul userModel care folosește SQLite.
  *
  * @param {string} id - ID-ul utilizatorului
  * @returns {Promise<Object|null>}
  */
-function findUserById(id) {
-  return new Promise((resolve, reject) => {
-    users.findOne({ _id: id }, (err, doc) => {
-      if (err) return reject(err);
-      resolve(doc || null);
-    });
-  });
+async function findUserById(id) {
+  try {
+    return await modelFindUserById(id);
+  } catch (err) {
+    console.error('[admin/routes] Eroare la findUserById:', err);
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -93,17 +96,26 @@ function findUserById(id) {
 
 /**
  * Returnează numărul total de tenanți din baza de date.
+ * Interogare directă SQLite prin getDb().
  *
  * @returns {Promise<number>}
  */
-function countTenants() {
-  const { tenants } = require('../config/db');
-  return new Promise((resolve, reject) => {
-    tenants.count({}, (err, count) => {
-      if (err) return reject(err);
-      resolve(count || 0);
-    });
-  });
+async function countTenants() {
+  try {
+    const db = await getDb();
+    const stmt = db.prepare('SELECT COUNT(*) AS cnt FROM tenants');
+    let count = 0;
+    if (stmt.step()) {
+      const row = stmt.getAsObject();
+      count = row.cnt || 0;
+    }
+    stmt.free();
+    return count;
+  } catch (err) {
+    // Tabela tenants poate să nu existe încă
+    console.warn('[admin/routes] Nu s-a putut interoga tabela tenants:', err.message);
+    return 0;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -438,18 +450,30 @@ router.get('/tenants', authenticate, requireSuperAdmin, async (req, res) => {
   try {
     const tenantCount = await countTenants();
 
-    const { tenants } = require('../config/db');
-
-    // Încărcare listă tenanți pentru randare inițială pe server
-    const items = await new Promise((resolve, reject) => {
-      tenants.find({})
-        .sort({ createdAt: -1 })
-        .limit(50)
-        .exec((err, docs) => {
-          if (err) return reject(err);
-          resolve(docs || []);
+    // Încărcare listă tenanți prin interogare directă SQLite
+    let items = [];
+    try {
+      const db = await getDb();
+      const stmt = db.prepare('SELECT * FROM tenants ORDER BY created_at DESC LIMIT 50');
+      while (stmt.step()) {
+        const row = stmt.getAsObject();
+        // Normalizare: asigurăm _id ca string pentru compatibilitate cu view-urile EJS
+        items.push({
+          _id: String(row.id),
+          id: row.id,
+          name: row.name || '',
+          email: row.email || '',
+          phone: row.phone || '',
+          address: row.address || '',
+          created_at: row.created_at || '',
+          createdAt: row.created_at || '',
         });
-    });
+      }
+      stmt.free();
+    } catch (dbErr) {
+      console.warn('[admin/routes] Nu s-au putut încărca tenanții din SQLite:', dbErr.message);
+      items = [];
+    }
 
     const admin = req.user ? {
       _id: req.user._id,

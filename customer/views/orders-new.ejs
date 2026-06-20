@@ -1,0 +1,799 @@
+<%
+  // ============================================================
+  // customer/views/orders-new.ejs
+  // Formular plasare comandă nouă
+  // Folosește layout.ejs ca wrapper
+  // ============================================================
+
+  const user = locals.user || {};
+  const customer = locals.customer || user || {};
+%>
+
+<style>
+  /* ============================================================
+     ORDERS NEW — Formular comandă
+     ============================================================ */
+  .orders-new-page .page-intro {
+    margin-bottom: 24px;
+  }
+
+  .orders-new-page .page-intro h1 {
+    font-size: 24px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .orders-new-page .page-intro h1 i {
+    color: var(--color-primary);
+  }
+
+  .orders-new-page .page-intro p {
+    color: var(--color-text-muted);
+    margin-top: 4px;
+    font-size: 14px;
+  }
+
+  .order-form-layout {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 24px;
+    align-items: start;
+  }
+
+  .order-form-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .order-form-card .card-header {
+    background: rgba(13, 110, 253, 0.04);
+    border-bottom: 1px solid var(--color-border);
+    padding: 18px 24px;
+    font-weight: 600;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    margin: 0;
+  }
+
+  .order-form-card .card-header i {
+    color: var(--color-primary);
+  }
+
+  .order-form-card .card-body {
+    padding: 24px;
+  }
+
+  /* Cart sidebar */
+  .cart-sidebar {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    position: sticky;
+    top: calc(var(--header-height) + 20px);
+  }
+
+  .cart-sidebar .cart-header {
+    background: rgba(13, 110, 253, 0.04);
+    border-bottom: 1px solid var(--color-border);
+    padding: 18px 20px;
+    font-weight: 600;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    margin: 0;
+  }
+
+  .cart-sidebar .cart-header i {
+    color: var(--color-primary);
+  }
+
+  .cart-sidebar .cart-body {
+    padding: 16px 20px;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  .cart-sidebar .cart-footer {
+    border-top: 1px solid var(--color-border);
+    padding: 16px 20px;
+  }
+
+  .cart-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+  }
+
+  .cart-item:last-child {
+    border-bottom: none;
+  }
+
+  .cart-item .cart-item-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .cart-item .cart-item-name {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cart-item .cart-item-price {
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+
+  .cart-item .cart-item-qty {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .cart-item .cart-item-qty button {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text);
+    transition: all 0.2s ease;
+  }
+
+  .cart-item .cart-item-qty button:hover {
+    background: var(--color-bg);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .cart-item .cart-item-qty span {
+    font-weight: 600;
+    font-size: 14px;
+    min-width: 22px;
+    text-align: center;
+  }
+
+  .cart-item .cart-item-remove {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 13px;
+    padding: 2px;
+  }
+
+  .cart-item .cart-item-remove:hover {
+    color: var(--color-danger);
+  }
+
+  .cart-total-row {
+    display: flex;
+    justify-content: space-between;
+    font-weight: 600;
+    font-size: 15px;
+    margin-bottom: 12px;
+  }
+
+  .cart-empty {
+    text-align: center;
+    padding: 30px 16px;
+    color: var(--color-text-muted);
+    font-size: 13px;
+  }
+
+  .cart-empty i {
+    font-size: 36px;
+    opacity: 0.3;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  /* Menu items grid */
+  .menu-items-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 14px;
+  }
+
+  .menu-item-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .menu-item-card:hover {
+    border-color: var(--color-primary);
+    box-shadow: 0 2px 10px rgba(13, 110, 253, 0.1);
+  }
+
+  .menu-item-card .menu-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 6px;
+  }
+
+  .menu-item-card .menu-item-name {
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  .menu-item-card .menu-item-price {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--color-primary);
+    white-space: nowrap;
+  }
+
+  .menu-item-card .menu-item-desc {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin-bottom: 8px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .menu-item-card .menu-item-meta {
+    display: flex;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--color-text-muted);
+  }
+
+  .menu-item-card .btn-add {
+    margin-top: 10px;
+    width: 100%;
+    padding: 8px;
+    font-size: 13px;
+  }
+
+  /* Form sub-sections */
+  .order-section {
+    margin-bottom: 24px;
+  }
+
+  .order-section h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .form-row-duo {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  @media (max-width: 1024px) {
+    .order-form-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .cart-sidebar {
+      position: static;
+      order: -1;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .form-row-duo {
+      grid-template-columns: 1fr;
+    }
+
+    .menu-items-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .menu-items-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<!-- ============================================================
+     ORDERS NEW PAGE
+     ============================================================ -->
+<div class="orders-new-page" data-page="orders-new" data-customer-id="<%= customer._id || '' %>" data-tenant-id="<%= customer.tenantId || '' %>">
+
+  <!-- Page intro -->
+  <div class="page-intro">
+    <h1>
+      <i class="fas fa-plus-circle"></i>
+      Comandă nouă
+    </h1>
+    <p>Selectează restaurantul, alege preparatele și plasează comanda.</p>
+  </div>
+
+  <!-- Flash messages -->
+  <% if (locals.flash && flash.message) { %>
+    <div class="alert" style="margin-bottom:20px;padding:12px 16px;border-radius:8px;background:<%= flash.type === 'success' ? '#e8f5e9' : flash.type === 'error' ? '#fce4ec' : '#e3f2fd' %>;color:<%= flash.type === 'success' ? '#2e7d32' : flash.type === 'error' ? '#c62828' : '#1565c0' %>;">
+      <i class="fas fa-<%= flash.type === 'success' ? 'check-circle' : flash.type === 'error' ? 'exclamation-circle' : 'info-circle' %>"></i>
+      <%= flash.message %>
+    </div>
+  <% } %>
+
+  <div class="order-form-layout">
+    <!-- Main form -->
+    <div class="order-form-card">
+      <div class="card-header">
+        <i class="fas fa-clipboard-list"></i>
+        Detalii comandă
+      </div>
+      <div class="card-body">
+        <form id="orderNewForm" novalidate>
+          <!-- Restaurant & tip livrare -->
+          <div class="order-section">
+            <h3><i class="fas fa-store"></i> Restaurant</h3>
+            <div class="form-row-duo">
+              <div class="form-group">
+                <label for="restaurantId">Restaurant <span style="color:var(--color-danger);">*</span></label>
+                <select id="restaurantId" name="restaurantId" required>
+                  <option value="">— Selectează restaurantul —</option>
+                </select>
+                <div class="form-error" id="restaurantIdError"></div>
+              </div>
+              <div class="form-group">
+                <label for="deliveryType">Tip livrare <span style="color:var(--color-danger);">*</span></label>
+                <select id="deliveryType" name="deliveryType" required>
+                  <option value="ridicare">Ridicare din restaurant</option>
+                  <option value="curier">Livrare la domiciliu</option>
+                  <option value="la-masa">Servire la masă</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Adresă livrare (conditionată) -->
+          <div id="deliveryAddressSection" style="display:none;">
+            <div class="order-section">
+              <h3><i class="fas fa-map-marker-alt"></i> Adresă livrare</h3>
+              <div class="form-group">
+                <label for="deliveryAddress">Adresa completă <span style="color:var(--color-danger);">*</span></label>
+                <input type="text" id="deliveryAddress" name="deliveryAddress" placeholder="Strada, număr, bloc, apartament, oraș…" />
+                <div class="form-error" id="deliveryAddressError"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Masă (condiționat) -->
+          <div id="tableSection" style="display:none;">
+            <div class="order-section">
+              <h3><i class="fas fa-chair"></i> Masă</h3>
+              <div class="form-group">
+                <label for="tableNumber">Număr masă</label>
+                <input type="number" id="tableNumber" name="tableNumber" min="1" placeholder="Ex: 7" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Notițe -->
+          <div class="order-section">
+            <h3><i class="fas fa-sticky-note"></i> Notițe</h3>
+            <div class="form-group">
+              <label for="orderNotes">Notițe pentru restaurant <span style="font-weight:400;color:var(--color-text-muted);">(opțional)</span></label>
+              <textarea id="orderNotes" name="orderNotes" rows="2" placeholder="Ex: fără ceapă, extra sos, alergie la nuci…" maxlength="300"></textarea>
+              <div class="form-hint"><span id="orderNotesCount">0</span> / 300 caractere</div>
+            </div>
+          </div>
+        </form>
+
+        <!-- MENU ITEMS -->
+        <div class="order-section">
+          <h3><i class="fas fa-utensils"></i> Preparate disponibile</h3>
+          <div id="menuLoading" class="spinner" style="margin:20px auto;"></div>
+          <div id="menuEmpty" class="cart-empty" style="display:none;">
+            <i class="fas fa-utensils"></i>
+            Selectează un restaurant pentru a vedea preparatele disponibile.
+          </div>
+          <div class="menu-items-grid" id="menuItemsGrid" style="display:none;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cart sidebar -->
+    <div class="cart-sidebar" id="cartSidebar">
+      <div class="cart-header">
+        <i class="fas fa-shopping-cart"></i>
+        Coșul tău
+      </div>
+      <div class="cart-body" id="cartBody">
+        <div class="cart-empty" id="cartEmpty">
+          <i class="fas fa-shopping-cart"></i>
+          Coșul este gol.
+        </div>
+        <div id="cartItems" style="display:none;"></div>
+      </div>
+      <div class="cart-footer" id="cartFooter" style="display:none;">
+        <div class="cart-total-row">
+          <span>Total</span>
+          <span id="cartTotal">0.00 lei</span>
+        </div>
+        <button class="btn btn-primary w-full" id="placeOrderBtn" onclick="placeOrder()">
+          <i class="fas fa-check"></i> Plasează comanda
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCRIPTS
+     ============================================================ -->
+<script>
+  (function() {
+    'use strict';
+
+    var customerId = '<%= customer._id || "" %>';
+    var tenantId = '<%= customer.tenantId || "" %>';
+    var isSubmitting = false;
+    var restaurants = [];
+    var menuItems = [];
+    var cart = []; // { item: {}, quantity: number }
+
+    // ============================================================
+    // DOM references
+    // ============================================================
+    var restaurantSelect = document.getElementById('restaurantId');
+    var deliveryTypeSelect = document.getElementById('deliveryType');
+    var deliveryAddressSection = document.getElementById('deliveryAddressSection');
+    var tableSection = document.getElementById('tableSection');
+    var deliveryAddressInput = document.getElementById('deliveryAddress');
+    var tableNumberInput = document.getElementById('tableNumber');
+    var orderNotesTextarea = document.getElementById('orderNotes');
+    var orderNotesCount = document.getElementById('orderNotesCount');
+    var menuLoading = document.getElementById('menuLoading');
+    var menuEmpty = document.getElementById('menuEmpty');
+    var menuItemsGrid = document.getElementById('menuItemsGrid');
+    var cartBody = document.getElementById('cartBody');
+    var cartEmpty = document.getElementById('cartEmpty');
+    var cartItems = document.getElementById('cartItems');
+    var cartFooter = document.getElementById('cartFooter');
+    var cartTotal = document.getElementById('cartTotal');
+    var placeOrderBtn = document.getElementById('placeOrderBtn');
+
+    var restaurantError = document.getElementById('restaurantIdError');
+    var deliveryAddressError = document.getElementById('deliveryAddressError');
+
+    // ============================================================
+    // Init
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', function() {
+      loadRestaurants();
+
+      if (restaurantSelect) {
+        restaurantSelect.addEventListener('change', function() {
+          clearError(restaurantError);
+          loadMenuForRestaurant(this.value);
+          updateCartUI();
+        });
+      }
+
+      if (deliveryTypeSelect) {
+        deliveryTypeSelect.addEventListener('change', toggleDeliverySections);
+      }
+
+      if (orderNotesTextarea && orderNotesCount) {
+        orderNotesTextarea.addEventListener('input', function() {
+          orderNotesCount.textContent = this.value.length;
+        });
+      }
+
+      if (deliveryAddressInput) {
+        deliveryAddressInput.addEventListener('input', function() {
+          clearError(deliveryAddressError);
+        });
+      }
+    });
+
+    // ============================================================
+    // Toggle delivery sections
+    // ============================================================
+    function toggleDeliverySections() {
+      var val = deliveryTypeSelect ? deliveryTypeSelect.value : 'ridicare';
+      if (deliveryAddressSection) {
+        deliveryAddressSection.style.display = val === 'curier' ? 'block' : 'none';
+      }
+      if (tableSection) {
+        tableSection.style.display = val === 'la-masa' ? 'block' : 'none';
+      }
+    }
+
+    // ============================================================
+    // Load restaurants
+    // ============================================================
+    async function loadRestaurants() {
+      try {
+        var data = await apiFetch('/api/restaurants?tenantId=' + tenantId + '&limit=100');
+        if (data && data.success && data.data && data.data.restaurants) {
+          restaurants = data.data.restaurants;
+          if (restaurantSelect) {
+            restaurantSelect.innerHTML = '<option value="">— Selectează restaurantul —</option>';
+            restaurants.forEach(function(r) {
+              var opt = document.createElement('option');
+              opt.value = r._id;
+              opt.textContent = r.name || r.nume || 'Restaurant';
+              restaurantSelect.appendChild(opt);
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Eroare la încărcarea restaurantelor:', err);
+      }
+    }
+
+    // ============================================================
+    // Load menu for selected restaurant
+    // ============================================================
+    async function loadMenuForRestaurant(restaurantId) {
+      if (!restaurantId) {
+        menuItems = [];
+        renderMenuItems();
+        return;
+      }
+
+      if (menuLoading) menuLoading.style.display = 'block';
+      if (menuItemsGrid) menuItemsGrid.style.display = 'none';
+      if (menuEmpty) menuEmpty.style.display = 'none';
+
+      try {
+        var data = await apiFetch('/api/menu?restaurantId=' + restaurantId + '&tenantId=' + tenantId + '&limit=100');
+        if (data && data.success && data.data) {
+          menuItems = data.data.items || data.data.menu || [];
+        } else {
+          menuItems = [];
+        }
+      } catch (err) {
+        console.error('Eroare la încărcarea meniului:', err);
+        menuItems = [];
+      }
+
+      if (menuLoading) menuLoading.style.display = 'none';
+      renderMenuItems();
+    }
+
+    function renderMenuItems() {
+      if (!menuItemsGrid) return;
+      menuItemsGrid.style.display = 'grid';
+
+      if (!menuItems || menuItems.length === 0) {
+        menuItemsGrid.innerHTML = '';
+        if (menuEmpty) menuEmpty.style.display = 'block';
+        return;
+      }
+
+      if (menuEmpty) menuEmpty.style.display = 'none';
+
+      menuItemsGrid.innerHTML = '';
+      menuItems.forEach(function(item) {
+        var card = document.createElement('div');
+        card.className = 'menu-item-card';
+
+        var name = item.nume || item.name || 'Preparat';
+        var desc = item.descriere || item.description || '';
+        var price = item.pret || item.price || 0;
+        var categorie = item.categorie || item.category || '';
+
+        card.innerHTML =
+          '<div class="menu-item-header">' +
+            '<span class="menu-item-name">' + escapeHtml(name) + '</span>' +
+            '<span class="menu-item-price">' + formatCurrency(price) + '</span>' +
+          '</div>' +
+          (desc ? '<div class="menu-item-desc">' + escapeHtml(desc) + '</div>' : '') +
+          '<div class="menu-item-meta">' +
+            (categorie ? '<span><i class="fas fa-tag"></i> ' + escapeHtml(categorie) + '</span>' : '') +
+          '</div>' +
+          '<button class="btn btn-primary btn-add" onclick="addToCart(\'' + item._id + '\')">' +
+            '<i class="fas fa-plus"></i> Adaugă în coș' +
+          '</button>';
+
+        menuItemsGrid.appendChild(card);
+      });
+    }
+
+    // ============================================================
+    // Cart operations
+    // ============================================================
+    window.addToCart = function(itemId) {
+      var item = menuItems.find(function(m) { return m._id === itemId; });
+      if (!item) return;
+
+      var existing = cart.find(function(c) { return c.item._id === itemId; });
+      if (existing) {
+        existing.quantity++;
+      } else {
+        cart.push({ item: item, quantity: 1 });
+      }
+
+      updateCartUI();
+      showToast('Adăugat în coș: ' + (item.nume || item.name), 'success');
+    };
+
+    window.removeFromCart = function(itemId) {
+      cart = cart.filter(function(c) { return c.item._id !== itemId; });
+      updateCartUI();
+    };
+
+    window.updateCartQuantity = function(itemId, delta) {
+      var existing = cart.find(function(c) { return c.item._id === itemId; });
+      if (!existing) return;
+      existing.quantity += delta;
+      if (existing.quantity <= 0) {
+        cart = cart.filter(function(c) { return c.item._id !== itemId; });
+      }
+      updateCartUI();
+    };
+
+    function calculateTotal() {
+      return cart.reduce(function(sum, c) {
+        var price = c.item.pret || c.item.price || 0;
+        return sum + price * c.quantity;
+      }, 0);
+    }
+
+    function updateCartUI() {
+      if (!cartItems || !cartEmpty || !cartFooter || !cartTotal) return;
+
+      if (cart.length === 0) {
+        cartItems.style.display = 'none';
+        cartEmpty.style.display = 'block';
+        cartFooter.style.display = 'none';
+        return;
+      }
+
+      cartEmpty.style.display = 'none';
+      cartItems.style.display = 'block';
+      cartFooter.style.display = 'block';
+
+      cartItems.innerHTML = '';
+      cart.forEach(function(c) {
+        var div = document.createElement('div');
+        div.className = 'cart-item';
+        var name = c.item.nume || c.item.name || 'Preparat';
+        var price = c.item.pret || c.item.price || 0;
+        div.innerHTML =
+          '<div class="cart-item-info">' +
+            '<div class="cart-item-name">' + escapeHtml(name) + '</div>' +
+            '<div class="cart-item-price">' + formatCurrency(price) + ' / buc</div>' +
+          '</div>' +
+          '<div class="cart-item-qty">' +
+            '<button onclick="updateCartQuantity(\'' + c.item._id + '\', -1)">−</button>' +
+            '<span>' + c.quantity + '</span>' +
+            '<button onclick="updateCartQuantity(\'' + c.item._id + '\', 1)">+</button>' +
+          '</div>' +
+          '<button class="cart-item-remove" onclick="removeFromCart(\'' + c.item._id + '\')" title="Elimină">' +
+            '<i class="fas fa-trash-alt"></i>' +
+          '</button>';
+        cartItems.appendChild(div);
+      });
+
+      cartTotal.textContent = formatCurrency(calculateTotal());
+    }
+
+    // ============================================================
+    // Place order
+    // ============================================================
+    window.placeOrder = async function() {
+      if (isSubmitting) return;
+
+      // Validate
+      var errors = [];
+
+      if (!restaurantSelect || !restaurantSelect.value) {
+        errors.push('Selectează un restaurant.');
+        if (restaurantError) restaurantError.textContent = 'Câmp obligatoriu';
+      }
+
+      if (cart.length === 0) {
+        errors.push('Adaugă cel puțin un preparat în coș.');
+      }
+
+      var deliveryType = deliveryTypeSelect ? deliveryTypeSelect.value : 'ridicare';
+      if (deliveryType === 'curier' && (!deliveryAddressInput || !deliveryAddressInput.value.trim())) {
+        errors.push('Completează adresa de livrare.');
+        if (deliveryAddressError) deliveryAddressError.textContent = 'Câmp obligatoriu';
+      }
+
+      if (errors.length > 0) {
+        errors.forEach(function(err) { showToast(err, 'error'); });
+        return;
+      }
+
+      isSubmitting = true;
+      if (placeOrderBtn) {
+        placeOrderBtn.disabled = true;
+        placeOrderBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Se procesează…';
+      }
+
+      var articole = cart.map(function(c) {
+        return {
+          menuItemId: c.item._id,
+          nume: c.item.nume || c.item.name,
+          cantitate: c.quantity,
+          pret: c.item.pret || c.item.price || 0,
+        };
+      });
+
+      var payload = {
+        tenantId: tenantId,
+        customerId: customerId,
+        restaurantId: restaurantSelect.value,
+        deliveryType: deliveryType,
+        deliveryAddress: deliveryType === 'curier' ? (deliveryAddressInput ? deliveryAddressInput.value.trim() : '') : undefined,
+        tableNumber: deliveryType === 'la-masa' ? (tableNumberInput ? parseInt(tableNumberInput.value, 10) || undefined : undefined) : undefined,
+        notes: orderNotesTextarea ? orderNotesTextarea.value || undefined : undefined,
+        articole: articole,
+        total: calculateTotal(),
+      };
+
+      try {
+        var data = await apiFetch('/api/orders', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+
+        if (data && data.success) {
+          var orderId = data.data.order ? data.data.order._id : '';
+          showToast('Comanda a fost plasată cu succes!', 'success');
+          setTimeout(function() {
+            window.location.href = orderId ? '/customer/orders/' + orderId : '/customer/orders';
+          }, 1500);
+        }
+      } catch (err) {
+        showToast('Eroare la plasarea comenzii.', 'error');
+      } finally {
+        isSubmitting = false;
+        if (placeOrderBtn) {
+          placeOrderBtn.disabled = false;
+          placeOrderBtn.innerHTML = '<i class="fas fa-check"></i> Plasează comanda';
+        }
+      }
+    };
+
+    // ============================================================
+    // Helpers
+    // ============================================================
+    function clearError(el) {
+      if (el) el.textContent = '';
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      var div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+  })();
+</script>

@@ -29,6 +29,7 @@
 const jwt = require('jsonwebtoken');
 const { AppError } = require('./errorHandler');
 const { promisify } = require('util');
+const { authorize } = require('./roles');
 
 // ---------------------------------------------------------------------------
 // Constante
@@ -346,8 +347,17 @@ function refreshToken(req, res) {
 // ---------------------------------------------------------------------------
 
 module.exports = {
+  // Aliase principale (documentate)
+  auth: authenticate,
   authenticate,
   optionalAuth,
+  checkRole: authorize,  // re-export din roles pentru compatibilitate
+
+  // Aliase pentru compatibilitate cu rute care folosesc requireAuth / requireRole
+  requireAuth: authenticate,
+  requireRole: authorize,
+
+  // Generare și gestionare token
   generateToken,
   setTokenCookie,
   clearTokenCookie,

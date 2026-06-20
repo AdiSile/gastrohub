@@ -150,7 +150,7 @@ app.use(errorHandler);
  *  2. Încarcă modulul `config/db` și așteaptă `getDb()` async.
  *  3. Verifică disponibilitatea bazei de date SQLite.
  *  4. Înregistrează handler-e pentru SIGINT / SIGTERM care salvează baza
- *     de date SQLite în `data/gastrohub.db` folosind `saveToDisk()`.
+ *     de date SQLite în `data/gastrohub.db` folosind `saveDb()`.
  *  5. Loghează erorile fără a opri serverul – promisiunea se resolve întotdeauna.
  *
  * @returns {Promise<void>} Promisiune care se rezolvă după verificarea bazei de date.
@@ -205,8 +205,14 @@ async function initDb() {
   // 4. Verifică existența tabelei tenants (sanity check)
   // ------------------------------------------------------------------
   try {
-    const tenantCount = await dbModule.get('SELECT COUNT(*) AS cnt FROM tenants');
-    console.log(`[GastroHub] Tabela tenants conține ${tenantCount ? tenantCount.cnt : 0} înregistrări.`);
+    const tenantDb = await dbModule.getDb();
+    const stmt = tenantDb.prepare('SELECT COUNT(*) AS cnt FROM tenants');
+    let tenantCount = 0;
+    if (stmt.step()) {
+      tenantCount = stmt.getAsObject().cnt;
+    }
+    stmt.free();
+    console.log(`[GastroHub] Tabela tenants conține ${tenantCount} înregistrări.`);
   } catch (err) {
     console.warn('[GastroHub] Nu s-a putut verifica tabela tenants:', err.message);
   }
@@ -221,7 +227,7 @@ async function initDb() {
 /**
  * Salvează baza de date SQLite pe disc în `data/gastrohub.db`.
  *
- * Folosește funcția `saveToDisk()` exportată de `config/db`,
+ * Folosește funcția `saveDb()` exportată de `config/db`,
  * care scrie atomic conținutul bazei de date pe disc.
  */
 function shutdownSaveDb() {
@@ -230,13 +236,13 @@ function shutdownSaveDb() {
     return;
   }
 
-  if (typeof dbModule.saveToDisk !== 'function') {
-    console.log('[GastroHub] Funcția saveToDisk nu este disponibilă – shutdown fără salvare.');
+  if (typeof dbModule.saveDb !== 'function') {
+    console.log('[GastroHub] Funcția saveDb nu este disponibilă – shutdown fără salvare.');
     return;
   }
 
   try {
-    dbModule.saveToDisk();
+    dbModule.saveDb();
     console.log('[GastroHub] Baza de date salvată cu succes.');
   } catch (err) {
     console.error('[GastroHub] Eroare la salvarea bazei de date în shutdown:', err.message);

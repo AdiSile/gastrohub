@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 // Model User – GastroHub
 // Definirea structurii, validărilor și operațiilor comune pentru un utilizator.
-// Câmpuri suportate: email, password (hash), role, tenantId, restaurante asociate
+// Câmpuri suportate: email, password (hash), role, tenant_id, restaurante asociate
 //
 // Backend: exclusiv SQLite (prin getDb() din config/db, folosind db.run() / db.exec()).
 // ---------------------------------------------------------------------------
@@ -44,6 +44,7 @@ function _isSqlAvailable() {
 
 /**
  * Convertește un rând SQL (id INTEGER) într-un obiect cu _id string.
+ * Normalizează coloanele snake_case din SQL la camelCase în documentul returnat.
  * @param {Object} row
  * @returns {Object}
  */
@@ -52,7 +53,9 @@ function _sqlRowToDoc(row) {
   var doc = {};
   var keys = Object.keys(row);
   for (var i = 0; i < keys.length; i++) {
-    doc[keys[i]] = row[keys[i]];
+    var key = keys[i];
+    var camelKey = _snakeToCamel(key);
+    doc[camelKey] = row[key];
   }
   doc._id = String(row.id);
   // Parsează restaurante din JSON dacă există
@@ -67,6 +70,17 @@ function _sqlRowToDoc(row) {
     doc.restaurante = [];
   }
   return doc;
+}
+
+/**
+ * Convertește un nume de coloană din snake_case în camelCase.
+ * @param {string} str
+ * @returns {string}
+ */
+function _snakeToCamel(str) {
+  return str.replace(/_([a-z])/g, function (_, letter) {
+    return letter.toUpperCase();
+  });
 }
 
 /**
@@ -251,7 +265,7 @@ async function createUser(userData) {
 
     var restauranteJson = JSON.stringify(finalRestaurante);
     db.run(
-      'INSERT INTO users (email, password, role, tenantId, restaurante, createdAt, updatedAt) ' +
+      'INSERT INTO users (email, password, role, tenant_id, restaurante, created_at, updated_at) ' +
       'VALUES (?, ?, ?, ?, ?, ?, ?)',
       [normalizedEmail, hashedPassword, finalRole, finalTenantId, restauranteJson, now, now]
     );
@@ -368,7 +382,7 @@ async function findUsersByTenant(tenantId) {
 
   try {
     var db = await getDb();
-    var stmt = db.prepare('SELECT * FROM users WHERE tenantId = ?');
+    var stmt = db.prepare('SELECT * FROM users WHERE tenant_id = ?');
     stmt.bind([tenantId]);
     var rows = [];
     while (stmt.step()) {
@@ -479,12 +493,12 @@ async function updatePassword(userId, newPassword) {
 
     if (!isNaN(numericId)) {
       db.run(
-        'UPDATE users SET password = ?, updatedAt = ? WHERE id = ?',
+        'UPDATE users SET password = ?, updated_at = ? WHERE id = ?',
         [hashedPassword, now, numericId]
       );
     } else {
       db.run(
-        'UPDATE users SET password = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ?',
+        'UPDATE users SET password = ?, updated_at = ? WHERE CAST(id AS TEXT) = ?',
         [hashedPassword, now, String(userId)]
       );
     }
@@ -545,12 +559,12 @@ async function updateRole(userId, newRole) {
 
     if (!isNaN(numericId)) {
       db.run(
-        'UPDATE users SET role = ?, updatedAt = ? WHERE id = ?',
+        'UPDATE users SET role = ?, updated_at = ? WHERE id = ?',
         [newRole, now, numericId]
       );
     } else {
       db.run(
-        'UPDATE users SET role = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ?',
+        'UPDATE users SET role = ?, updated_at = ? WHERE CAST(id AS TEXT) = ?',
         [newRole, now, String(userId)]
       );
     }
@@ -655,12 +669,12 @@ async function addRestaurante(userId, restaurantIds) {
 
     if (!isNaN(numericId)) {
       db.run(
-        'UPDATE users SET restaurante = ?, updatedAt = ? WHERE id = ?',
+        'UPDATE users SET restaurante = ?, updated_at = ? WHERE id = ?',
         [restauranteJson, now, numericId]
       );
     } else {
       db.run(
-        'UPDATE users SET restaurante = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ?',
+        'UPDATE users SET restaurante = ?, updated_at = ? WHERE CAST(id AS TEXT) = ?',
         [restauranteJson, now, String(userId)]
       );
     }
@@ -749,7 +763,7 @@ async function countUsersByTenant(tenantId) {
 
   try {
     var db = await getDb();
-    var stmt = db.prepare('SELECT COUNT(*) AS cnt FROM users WHERE tenantId = ?');
+    var stmt = db.prepare('SELECT COUNT(*) AS cnt FROM users WHERE tenant_id = ?');
     stmt.bind([tenantId]);
     var row;
     if (stmt.step()) {

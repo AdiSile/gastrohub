@@ -19,7 +19,7 @@
 
   <style>
     /* ============================================================
-       RESET & BASE — Login Super Admin
+       RESET & BASE — Login Super Admin (Purple Glassmorphism)
        ============================================================ */
     *, *::before, *::after {
       box-sizing: border-box;
@@ -28,16 +28,19 @@
     }
 
     :root {
-      --color-primary: #6f42c1;
-      --color-primary-dark: #5a32a3;
-      --color-primary-light: #8b5cf6;
+      --color-primary: #8b5cf6;
+      --color-primary-dark: #6d28d9;
+      --color-primary-light: #a78bfa;
+      --color-primary-glow: rgba(139, 92, 246, 0.5);
       --color-secondary: #0d1117;
-      --color-accent: #161b22;
+      --color-accent: #1a1025;
       --color-bg: #f0f2f5;
-      --color-surface: #ffffff;
+      --color-surface: rgba(255, 255, 255, 0.92);
+      --color-surface-glass: rgba(255, 255, 255, 0.75);
       --color-text: #1f2937;
       --color-text-muted: #6b7280;
-      --color-border: #e5e7eb;
+      --color-border: rgba(255, 255, 255, 0.3);
+      --color-border-solid: #e5e7eb;
       --color-success: #10b981;
       --color-warning: #f59e0b;
       --color-danger: #ef4444;
@@ -48,7 +51,8 @@
       --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
       --shadow-md: 0 4px 12px rgba(0,0,0,0.1);
       --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
-      --transition: 0.2s ease;
+      --shadow-glow: 0 0 40px rgba(139, 92, 246, 0.25);
+      --transition: 0.25s ease;
       --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
 
@@ -60,7 +64,9 @@
 
     body {
       font-family: var(--font-family);
-      background: linear-gradient(135deg, var(--color-secondary) 0%, var(--color-accent) 50%, #1a1a2e 100%);
+      background: linear-gradient(135deg, #0d0a1a 0%, #1a0e2e 25%, #1a1025 50%, #0f0b1e 75%, #0d0a1a 100%);
+      background-size: 400% 400%;
+      animation: gradientShift 18s ease infinite;
       color: var(--color-text);
       line-height: 1.6;
       min-height: 100vh;
@@ -69,6 +75,57 @@
       align-items: center;
       justify-content: center;
       padding: 24px;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    /* Animated gradient background */
+    @keyframes gradientShift {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    /* Floating purple orbs / particles */
+    body::before,
+    body::after {
+      content: '';
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.3;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    body::before {
+      width: 450px;
+      height: 450px;
+      background: radial-gradient(circle, rgba(139, 92, 246, 0.45) 0%, transparent 70%);
+      top: -150px;
+      left: -100px;
+      animation: floatOrb1 12s ease-in-out infinite;
+    }
+
+    body::after {
+      width: 380px;
+      height: 380px;
+      background: radial-gradient(circle, rgba(167, 139, 250, 0.35) 0%, transparent 70%);
+      bottom: -120px;
+      right: -80px;
+      animation: floatOrb2 15s ease-in-out infinite;
+    }
+
+    @keyframes floatOrb1 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33%      { transform: translate(60px, 40px) scale(1.1); }
+      66%      { transform: translate(-30px, -20px) scale(0.9); }
+    }
+
+    @keyframes floatOrb2 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33%      { transform: translate(-50px, -30px) scale(1.15); }
+      66%      { transform: translate(40px, 20px) scale(0.85); }
     }
 
     a {
@@ -78,7 +135,7 @@
     }
 
     a:hover {
-      color: #a78bfa;
+      color: #c4b5fd;
     }
 
     /* ============================================================
@@ -87,17 +144,28 @@
     .login-wrapper {
       width: 100%;
       max-width: 440px;
+      position: relative;
+      z-index: 1;
     }
 
     /* ============================================================
-       LOGIN CARD
+       LOGIN CARD — Glassmorphism
        ============================================================ */
     .login-card {
-      background: var(--color-surface);
+      background: var(--color-surface-glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
       border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255,255,255,0.05);
+      border: 1px solid var(--color-border);
+      box-shadow: var(--shadow-lg), var(--shadow-glow), inset 0 1px 0 rgba(255,255,255,0.3);
       padding: 40px 36px;
       width: 100%;
+      transition: box-shadow var(--transition), border-color var(--transition);
+    }
+
+    .login-card:hover {
+      border-color: rgba(139, 92, 246, 0.4);
+      box-shadow: var(--shadow-lg), 0 0 60px rgba(139, 92, 246, 0.3), inset 0 1px 0 rgba(255,255,255,0.35);
     }
 
     /* Brand / Logo */
@@ -107,17 +175,25 @@
     }
 
     .login-brand .brand-icon {
-      width: 56px;
-      height: 56px;
-      background: var(--color-primary);
+      width: 60px;
+      height: 60px;
+      background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
       border-radius: var(--radius-md);
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
+      font-size: 26px;
       font-weight: 700;
       color: #fff;
-      margin-bottom: 12px;
+      margin-bottom: 14px;
+      box-shadow: 0 4px 20px rgba(139, 92, 246, 0.45), 0 0 40px rgba(139, 92, 246, 0.2);
+      position: relative;
+      animation: iconGlow 3s ease-in-out infinite;
+    }
+
+    @keyframes iconGlow {
+      0%, 100% { box-shadow: 0 4px 20px rgba(139, 92, 246, 0.45), 0 0 40px rgba(139, 92, 246, 0.2); }
+      50%      { box-shadow: 0 4px 28px rgba(139, 92, 246, 0.6), 0 0 55px rgba(139, 92, 246, 0.35); }
     }
 
     .login-brand h1 {
@@ -151,24 +227,26 @@
       align-items: center;
       gap: 10px;
       animation: slideDown 0.3s ease;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
     }
 
     .login-alert-error {
-      background: #fee2e2;
+      background: rgba(254, 226, 226, 0.9);
       color: #991b1b;
-      border: 1px solid #fecaca;
+      border: 1px solid rgba(254, 202, 202, 0.8);
     }
 
     .login-alert-success {
-      background: #d1fae5;
+      background: rgba(209, 250, 229, 0.9);
       color: #065f46;
-      border: 1px solid #a7f3d0;
+      border: 1px solid rgba(167, 243, 208, 0.8);
     }
 
     .login-alert-warning {
-      background: #fef3c7;
+      background: rgba(254, 243, 199, 0.9);
       color: #92400e;
-      border: 1px solid #fde68a;
+      border: 1px solid rgba(253, 230, 138, 0.8);
     }
 
     .login-alert i {
@@ -239,9 +317,11 @@
       padding: 12px 14px 12px 42px;
       font-size: 14px;
       font-family: var(--font-family);
-      border: 1.5px solid var(--color-border);
+      border: 1.5px solid var(--color-border-solid);
       border-radius: var(--radius-sm);
-      background: var(--color-bg);
+      background: rgba(240, 242, 245, 0.7);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
       color: var(--color-text);
       transition: all var(--transition);
       outline: none;
@@ -249,12 +329,12 @@
 
     .login-form .input-wrapper input:focus {
       border-color: var(--color-primary);
-      background: var(--color-surface);
-      box-shadow: 0 0 0 3px rgba(111, 66, 193, 0.12);
+      background: rgba(255, 255, 255, 0.85);
+      box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15), 0 0 12px rgba(139, 92, 246, 0.1);
     }
 
-    .login-form .input-wrapper input:focus + i,
-    .login-form .input-wrapper input:focus ~ i {
+    .login-form .input-wrapper input:focus ~ i,
+    .login-form .input-wrapper input:focus + i {
       color: var(--color-primary);
     }
 
@@ -265,7 +345,7 @@
 
     .login-form .input-wrapper.has-error input {
       border-color: var(--color-danger);
-      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
     }
 
     .login-form .form-error {
@@ -273,10 +353,16 @@
       color: var(--color-danger);
       margin-top: 4px;
       display: none;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .login-form .form-error i {
+      font-size: 11px;
     }
 
     .login-form .has-error .form-error {
-      display: block;
+      display: flex;
     }
 
     /* ============================================================
@@ -335,7 +421,7 @@
       font-family: var(--font-family);
       border: none;
       border-radius: var(--radius-sm);
-      background: var(--color-primary);
+      background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
       color: #fff;
       cursor: pointer;
       transition: all var(--transition);
@@ -344,17 +430,36 @@
       justify-content: center;
       gap: 10px;
       letter-spacing: 0.3px;
+      box-shadow: 0 4px 16px rgba(139, 92, 246, 0.35);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Shimmer effect on button */
+    .login-form .btn-login::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+      transition: left 0.5s ease;
+    }
+
+    .login-form .btn-login:hover::after {
+      left: 100%;
     }
 
     .login-form .btn-login:hover {
-      background: var(--color-primary-dark);
-      box-shadow: 0 4px 14px rgba(111, 66, 193, 0.35);
-      transform: translateY(-1px);
+      background: linear-gradient(135deg, var(--color-primary-dark) 0%, #5b21b6 100%);
+      box-shadow: 0 6px 22px rgba(139, 92, 246, 0.5), 0 0 30px rgba(139, 92, 246, 0.2);
+      transform: translateY(-2px);
     }
 
     .login-form .btn-login:active {
       transform: translateY(0);
-      box-shadow: none;
+      box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
     }
 
     .login-form .btn-login:disabled {
@@ -406,7 +511,7 @@
       content: '';
       flex: 1;
       height: 1px;
-      background: var(--color-border);
+      background: var(--color-border-solid);
     }
 
     /* ============================================================
@@ -423,9 +528,11 @@
       font-size: 13px;
       font-weight: 500;
       font-family: var(--font-family);
-      border: 1.5px solid var(--color-border);
+      border: 1.5px solid var(--color-border-solid);
       border-radius: var(--radius-sm);
-      background: var(--color-surface);
+      background: rgba(255, 255, 255, 0.55);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
       color: var(--color-text);
       cursor: pointer;
       transition: all var(--transition);
@@ -436,8 +543,9 @@
     }
 
     .login-social .social-btn:hover {
-      background: var(--color-bg);
+      background: rgba(255, 255, 255, 0.85);
       border-color: var(--color-primary-light);
+      box-shadow: 0 2px 10px rgba(139, 92, 246, 0.15);
     }
 
     .login-social .social-btn i {
@@ -473,7 +581,7 @@
       text-align: center;
       margin-top: 20px;
       font-size: 12px;
-      color: rgba(255,255,255,0.4);
+      color: rgba(255,255,255,0.5);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -482,6 +590,7 @@
 
     .login-security i {
       font-size: 14px;
+      color: var(--color-primary-light);
     }
 
     /* ============================================================
@@ -490,12 +599,20 @@
     @media (max-width: 480px) {
       body {
         padding: 16px;
-        background: var(--color-bg);
+        background: linear-gradient(135deg, #0d0a1a 0%, #1a1025 100%);
+      }
+
+      body::before,
+      body::after {
+        opacity: 0.15;
       }
 
       .login-card {
         padding: 28px 20px;
         box-shadow: var(--shadow-md);
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
       }
 
       .login-brand h1 {
@@ -544,56 +661,60 @@
       </div>
 
       <!-- Flash Messages -->
-      <% if (locals.success && success) { %>
+      <% if (locals.success) { %>
         <div class="login-alert login-alert-success">
           <i class="fas fa-check-circle"></i>
-          <span><%= success %></span>
+          <span><%= locals.success %></span>
         </div>
       <% } %>
 
-      <% if (locals.error && error) { %>
+      <% if (locals.error) { %>
         <div class="login-alert login-alert-error">
           <i class="fas fa-exclamation-circle"></i>
-          <span><%= error %></span>
+          <span><%= locals.error %></span>
         </div>
       <% } %>
 
-      <% if (locals.warning && warning) { %>
+      <% if (locals.warning) { %>
         <div class="login-alert login-alert-warning">
           <i class="fas fa-exclamation-triangle"></i>
-          <span><%= warning %></span>
+          <span><%= locals.warning %></span>
         </div>
       <% } %>
 
       <!-- Login Form -->
       <form class="login-form" action="<%= locals.action ? action : '/admin/login' %>" method="POST" novalidate>
         <!-- Email / Username -->
-        <div class="form-group">
+        <div class="form-group<%= (locals.errors && locals.errors.email) ? ' has-error' : '' %>">
           <label for="email">
             Adresă Email <span class="required">*</span>
           </label>
-          <div class="input-wrapper">
+          <div class="input-wrapper<%= (locals.errors && locals.errors.email) ? ' has-error' : '' %>">
             <input
               type="email"
               id="email"
               name="email"
               placeholder="admin@gastrohub.ro"
-              value="<%= locals.formData ? formData.email : '' %>"
+              value="<%= locals.formData && locals.formData.email ? locals.formData.email : '' %>"
               required
               autocomplete="email"
               autofocus
             />
             <i class="fas fa-envelope"></i>
           </div>
-          <div class="form-error"></div>
+          <div class="form-error">
+            <% if (locals.errors && locals.errors.email) { %>
+              <i class="fas fa-exclamation-circle"></i> <%= locals.errors.email %>
+            <% } %>
+          </div>
         </div>
 
         <!-- Password -->
-        <div class="form-group">
+        <div class="form-group<%= (locals.errors && locals.errors.password) ? ' has-error' : '' %>">
           <label for="password">
             Parolă <span class="required">*</span>
           </label>
-          <div class="input-wrapper">
+          <div class="input-wrapper<%= (locals.errors && locals.errors.password) ? ' has-error' : '' %>">
             <input
               type="password"
               id="password"
@@ -607,7 +728,11 @@
               <i class="fas fa-eye"></i>
             </button>
           </div>
-          <div class="form-error"></div>
+          <div class="form-error">
+            <% if (locals.errors && locals.errors.password) { %>
+              <i class="fas fa-exclamation-circle"></i> <%= locals.errors.password %>
+            <% } %>
+          </div>
         </div>
 
         <!-- Options: Remember me + Forgot -->
@@ -701,19 +826,30 @@
           document.querySelectorAll('.form-group').forEach(function(group) {
             group.classList.remove('has-error');
           });
+          document.querySelectorAll('.input-wrapper').forEach(function(wrapper) {
+            wrapper.classList.remove('has-error');
+          });
+          // Also clear error text
+          document.querySelectorAll('.form-error').forEach(function(el) {
+            el.textContent = '';
+          });
 
           // Validate email
           if (emailInput) {
             const emailValue = emailInput.value.trim();
-            const emailError = emailInput.closest('.form-group').querySelector('.form-error');
+            const emailGroup = emailInput.closest('.form-group');
+            const emailWrapper = emailInput.closest('.input-wrapper');
+            const emailError = emailGroup ? emailGroup.querySelector('.form-error') : null;
             if (!emailValue) {
               isValid = false;
-              emailInput.closest('.form-group').classList.add('has-error');
-              if (emailError) emailError.textContent = 'Adresa de email este obligatorie.';
+              if (emailGroup) emailGroup.classList.add('has-error');
+              if (emailWrapper) emailWrapper.classList.add('has-error');
+              if (emailError) emailError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Adresa de email este obligatorie.';
             } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) {
               isValid = false;
-              emailInput.closest('.form-group').classList.add('has-error');
-              if (emailError) emailError.textContent = 'Adresa de email nu este validă.';
+              if (emailGroup) emailGroup.classList.add('has-error');
+              if (emailWrapper) emailWrapper.classList.add('has-error');
+              if (emailError) emailError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Adresa de email nu este validă.';
             } else {
               if (emailError) emailError.textContent = '';
             }
@@ -722,15 +858,19 @@
           // Validate password
           if (passInput) {
             const passValue = passInput.value.trim();
-            const passError = passInput.closest('.form-group').querySelector('.form-error');
+            const passGroup = passInput.closest('.form-group');
+            const passWrapper = passInput.closest('.input-wrapper');
+            const passError = passGroup ? passGroup.querySelector('.form-error') : null;
             if (!passValue) {
               isValid = false;
-              passInput.closest('.form-group').classList.add('has-error');
-              if (passError) passError.textContent = 'Parola este obligatorie.';
+              if (passGroup) passGroup.classList.add('has-error');
+              if (passWrapper) passWrapper.classList.add('has-error');
+              if (passError) passError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Parola este obligatorie.';
             } else if (passValue.length < 6) {
               isValid = false;
-              passInput.closest('.form-group').classList.add('has-error');
-              if (passError) passError.textContent = 'Parola trebuie să aibă cel puțin 6 caractere.';
+              if (passGroup) passGroup.classList.add('has-error');
+              if (passWrapper) passWrapper.classList.add('has-error');
+              if (passError) passError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Parola trebuie să aibă cel puțin 6 caractere.';
             } else {
               if (passError) passError.textContent = '';
             }
@@ -754,25 +894,30 @@
       if (emailInput) {
         emailInput.addEventListener('blur', function() {
           const group = this.closest('.form-group');
-          const errorEl = group.querySelector('.form-error');
+          const wrapper = this.closest('.input-wrapper');
+          const errorEl = group ? group.querySelector('.form-error') : null;
           const val = this.value.trim();
 
           if (val && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
-            group.classList.add('has-error');
-            if (errorEl) errorEl.textContent = 'Adresa de email nu este validă.';
+            if (group) group.classList.add('has-error');
+            if (wrapper) wrapper.classList.add('has-error');
+            if (errorEl) errorEl.innerHTML = '<i class="fas fa-exclamation-circle"></i> Adresa de email nu este validă.';
           } else if (val) {
-            group.classList.remove('has-error');
+            if (group) group.classList.remove('has-error');
+            if (wrapper) wrapper.classList.remove('has-error');
             if (errorEl) errorEl.textContent = '';
           }
         });
 
         emailInput.addEventListener('input', function() {
           const group = this.closest('.form-group');
-          if (group.classList.contains('has-error')) {
+          const wrapper = this.closest('.input-wrapper');
+          if (group && group.classList.contains('has-error')) {
             const errorEl = group.querySelector('.form-error');
             const val = this.value.trim();
             if (val && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
               group.classList.remove('has-error');
+              if (wrapper) wrapper.classList.remove('has-error');
               if (errorEl) errorEl.textContent = '';
             }
           }
@@ -782,25 +927,30 @@
       if (passInput) {
         passInput.addEventListener('blur', function() {
           const group = this.closest('.form-group');
-          const errorEl = group.querySelector('.form-error');
+          const wrapper = this.closest('.input-wrapper');
+          const errorEl = group ? group.querySelector('.form-error') : null;
           const val = this.value.trim();
 
           if (val && val.length < 6) {
-            group.classList.add('has-error');
-            if (errorEl) errorEl.textContent = 'Parola trebuie să aibă cel puțin 6 caractere.';
+            if (group) group.classList.add('has-error');
+            if (wrapper) wrapper.classList.add('has-error');
+            if (errorEl) errorEl.innerHTML = '<i class="fas fa-exclamation-circle"></i> Parola trebuie să aibă cel puțin 6 caractere.';
           } else if (val) {
-            group.classList.remove('has-error');
+            if (group) group.classList.remove('has-error');
+            if (wrapper) wrapper.classList.remove('has-error');
             if (errorEl) errorEl.textContent = '';
           }
         });
 
         passInput.addEventListener('input', function() {
           const group = this.closest('.form-group');
-          if (group.classList.contains('has-error')) {
+          const wrapper = this.closest('.input-wrapper');
+          if (group && group.classList.contains('has-error')) {
             const errorEl = group.querySelector('.form-error');
             const val = this.value.trim();
             if (val.length >= 6) {
               group.classList.remove('has-error');
+              if (wrapper) wrapper.classList.remove('has-error');
               if (errorEl) errorEl.textContent = '';
             }
           }

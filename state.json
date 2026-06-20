@@ -454,6 +454,21 @@
       "role": "assistant",
       "content": "✅ Pas 1 (tdd-guide): 1 fișiere salvate.",
       "timestamp": 1781921919.7901554
+    },
+    {
+      "role": "user",
+      "content": "Scanează absolut fiecare fișier din proiectul GastroHub (JavaScript, EJS, HTML) și rezolvă toate problemele care afectează funcționarea corectă, inclusiv:  1. **Autentificare și middleware:**    - În `middleware/auth.js`, asigură-te că funcția de verificare JWT citește token-ul atât din cookie (`req.cookies.token`), cât și din header (`Authorization: Bearer <token>`). Dacă token-ul lipsește, răspunde cu `{success:false, error:{message:\"Autentificare necesară.\",code:\"TOKEN_MISSING\"}}` și status 401.    - Exporturile trebuie să fie: `module.exports = { auth, checkRole, optionalAuth }` (verifică și corectează toate rutele care importă altfel).  2. **Validare input:**    - În rutele de autentificare (`routes/auth.js` sau similar), relaxează validarea parolei la minimum 6 caractere (nu 8 sau 12) și acceptă orice format de email valid. Mesajele de eroare trebuie să fie prietenoase, în limba română.    - În toate celelalte rute care folosesc `express-validator`, verifică regulile de validare să nu fie prea restrictive și să returneze mesaje clare.  3. **Rute și view-uri:**    - Repară orice import care folosește nume greșite de funcții middleware (ex: `requireAuth` → `auth`, `requireRole` → `checkRole`).    - Creează view-urile lipsă pentru `customer/views/login.html` și `customer/views/dashboard.html`, folosind același design mov/glassmorphism.    - Asigură-te că toate rutele care servesc pagini EJS (.ejs) sau HTML (.html) au fișierele de vedere corespunzătoare.    - Verifică `admin/views/login.html` și `admin/views/dashboard.html` să existe.  4. **Modele și baza de date:**    - În `config/db.js`, rezolvă eroarea `dbModule.get is not a function` – asigură-te că `getDb()` exportată este apelabilă corect din modele.    - Verifică toate modelele să folosească `const db = await getDb();` și interogări compatibile `sql.js`.  5. **Erori de sintaxă rămase:**    - Scanează fiecare fișier `.js` și `.ejs` pentru linii incomplete, paranteze lipsă, marcaje `###` sau orice text care nu este cod valid. Repară-le.  6. **Mesaje de eroare și feedback:**    - Toate răspunsurile API trebuie să fie în format JSON consistent: `{success: false, error: {message: \"...\", code: \"ERROR_CODE\"}}`.    - Pagina de login pentru admin și client trebuie să afișeze mesaje de eroare clare atunci când autentificarea eșuează.  7. **Funcționalitate completă:**    - Testează mintal fluxurile: login, creare hotel, creare cameră, creare rezervare, creare restaurant, meniu, comandă. Repară orice blocaj.  După ce ai terminat, returnează toate fișierele modificate în formatul ### cale/relativă/la/fișier.ext ... ### END.",
+      "timestamp": 1781922212.957684
+    },
+    {
+      "role": "system",
+      "content": "🚀 Proiect pornit: Proiect: gastrohub-core",
+      "timestamp": 1781922212.98768
+    },
+    {
+      "role": "assistant",
+      "content": "✅ Pas 1 (tdd-guide): 0 fișiere salvate.\n✅ Pas 2 (tdd-guide): 1 fișiere salvate.\n✅ Pas 3 (tdd-guide): 1 fișiere salvate.\n✅ Pas 4 (tdd-guide): 1 fișiere salvate.\n✅ Pas 5 (tdd-guide): 1 fișiere salvate.\n✅ Pas 6 (tdd-guide): 1 fișiere salvate.\n✅ Pas 7 (tdd-guide): 0 fișiere salvate.\n✅ Pas 8 (tdd-guide): 1 fișiere salvate.\n✅ Pas 9 (tdd-guide): 1 fișiere salvate.\n✅ Pas 10 (tdd-guide): 1 fișiere salvate.\n✅ Pas 11 (tdd-guide): 1 fișiere salvate.\n✅ Pas 12 (tdd-guide): 0 fișiere salvate.\n✅ Pas 13 (tdd-guide): 1 fișiere salvate.\n✅ Pas 14 (tdd-guide): 1 fișiere salvate.\n✅ Pas 15 (tdd-guide): 1 fișiere salvate.\n✅ Pas 16 (tdd-guide): 1 fișiere salvate.\n✅ Pas 17 (tdd-guide): 1 fișiere salvate.\n✅ Pas 18 (tdd-guide): 1 fișiere salvate.\n⏭️ Pas 19 (code-reviewer) sărit – revizia se face la final.\n✅ Pas 20 (tdd-guide): 1 fișiere salvate.",
+      "timestamp": 1781924317.0255287
     }
   ],
   "cerinta": "Rescrie complet fișierul models/reservationModel.js din proiectul GastroHub. Fișierul trebuie să fie un model Node.js care folosește SQLite (better-sqlite3) și exportă funcțiile necesare pentru gestionarea rezervărilor hoteliere.  **Structură obligatorie:** - Folosește `const db = require('../config/db');` pentru a accesa baza de date. - Exportă funcțiile: createReservation, getReservationById, getReservationsByHotel, getReservationsByGuest, updateReservationStatus, cancelReservation. - Fiecare funcție trebuie să fie completă, fără linii tăiate sau erori de sintaxă. - Nu folosi `better-sqlite3` direct aici; folosește metodele expuse de `db.js` (presupunem că există `db.run(sql, params)`, `db.get(sql, params)`, `db.all(sql, params)`).  **Nu adăuga alt fișier.** Returnează DOAR `models/reservationModel.js` complet, în formatul ### models/reservationModel.js ... ### END.",
@@ -2209,12 +2224,126 @@
       "desc": "Fișier: hotel/routes.js\nRepară importurile: înlocuiește `{ requireAuth, requireRole }` din `../middleware/auth` cu `{ authenticate }` din `../middleware/auth` și `{ authorize }` din `../middleware/roles`; înlocuiește `requireAuth` cu `authenticate` și `requireRole(...)` cu `authorize(...)` în toate rutele; repară `req.user.tenant_id` → `req.user.tenantId`\n\nSkill-uri relevante:\nSkill: codebase-onboarding\n# Codebase Onboarding\n\nSystematically analyze an unfamiliar codebase and produce a structured onboarding guide. Designed for developers joining a new project or setting up Claude Code in an existing repo for the first time.\n\n## When to Use\n\n- First time opening a project with Claude Code\n- Joining a\n\nSkill: coding-standards\n# Coding Standards & Best Practices\n\nBaseline coding conventions applicable across projects.\n\nThis skill is the shared floor, not the detailed framework playbook.\n\n- Use `frontend-patterns` for React, state, forms, rendering, and UI architecture.\n- Use `backend-patterns` or `api-design` for reposito\n\nSkill: cpp-coding-standards\n# C++ Coding Standards (C++ Core Guidelines)\n\nComprehensive coding standards for modern C++ (C++17/20/23) derived from the [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines). Enforces type safety, resource safety, immutability, and clarity.\n\n## When to Use\n\n- Writing\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
       "agent": "tdd-guide",
       "status": "pending"
+    },
+    {
+      "id": "6e972737",
+      "desc": "Fișier: config/db.js\nAdaugă helperi async `run()`, `get()`, `all()` și exportă-i alături de `getDb`, `saveDb`; repară `dbModule.get is not a function`\n\nSkill-uri relevante:\nSkill: accessibility\n# Accessibility (WCAG 2.2)\n\nThis skill ensures that digital interfaces are Perceivable, Operable, Understandable, and Robust (POUR) for all users, including those using screen readers, switch controls, or keyboard navigation. It focuses on the technical implementation of WCAG 2.2 success criteria.\n\n\n\nSkill: agent-architecture-audit\n# Agent Architecture Audit\n\nA diagnostic workflow for agent systems that hide failures behind wrapper layers, stale memory, retry loops, or transport/rendering mutations.\n\n## When to Activate\n\n**MANDATORY for:**\n- Releasing any agent or LLM-powered application to production\n- Shipping features with \n\nSkill: agent-eval\n# Agent Eval Skill\n\nA lightweight CLI tool for comparing coding agents head-to-head on reproducible tasks. Every \"which coding agent is best?\" comparison runs on vibes — this tool systematizes it.\n\n## When to Activate\n\n- Comparing coding agents (Claude Code, Aider, Codex, etc.) on your own codebase\n\n\nReguli:\n---\npaths:\n  - \"**/*.component.ts\"\n  - \"**/*.component.html\"\n  - \"**/*.service.ts\"\n  - \"**/*.directive.ts\"\n  - \"**/*.pipe.ts\"\n  - \"**/*.guard.ts\"\n  - \"**/*.resolver.ts\"\n  - \"**/*.module.ts\"\n---\n# Angular Coding Style\n> This file extends [common/coding-style.md](../common/coding-style.md) with Angular specific content.\nAlways check the project's Angular version before writing code — features differ significantly between versions. Run `ng version` or inspect `package.json`. When creating a new project, do not pin a version unless the user specifies one.\n---\npaths:\n  - \"**/*.ets\"\n  - \"**/*.ts\"\n  - \"**/module.json5\"\n  - \"**/oh-package.json5\"\n  - \"**/build-profile.json5\"\n---\n# HarmonyOS / ArkTS Coding Style\n> This file extends [common/coding-style.md](../common/coding-style.md) with HarmonyOS and ArkTS-specific content.\n## ArkTS Language Constraints\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "18b2d672",
+      "desc": "Fișier: config/tenant.js\nTransformă `getTenantConfig()` din Promise manual în `async function` pentru a folosi `await get()`\n\nSkill-uri relevante:\nSkill: accessibility\n# Accessibility (WCAG 2.2)\n\nThis skill ensures that digital interfaces are Perceivable, Operable, Understandable, and Robust (POUR) for all users, including those using screen readers, switch controls, or keyboard navigation. It focuses on the technical implementation of WCAG 2.2 success criteria.\n\n\n\nSkill: agent-architecture-audit\n# Agent Architecture Audit\n\nA diagnostic workflow for agent systems that hide failures behind wrapper layers, stale memory, retry loops, or transport/rendering mutations.\n\n## When to Activate\n\n**MANDATORY for:**\n- Releasing any agent or LLM-powered application to production\n- Shipping features with \n\nSkill: agent-eval\n# Agent Eval Skill\n\nA lightweight CLI tool for comparing coding agents head-to-head on reproducible tasks. Every \"which coding agent is best?\" comparison runs on vibes — this tool systematizes it.\n\n## When to Activate\n\n- Comparing coding agents (Claude Code, Aider, Codex, etc.) on your own codebase\n\n\nReguli:\n---\npaths:\n  - \"**/*.component.ts\"\n  - \"**/*.component.html\"\n  - \"**/*.service.ts\"\n  - \"**/*.directive.ts\"\n  - \"**/*.pipe.ts\"\n  - \"**/*.guard.ts\"\n  - \"**/*.resolver.ts\"\n  - \"**/*.module.ts\"\n---\n# Angular Coding Style\n> This file extends [common/coding-style.md](../common/coding-style.md) with Angular specific content.\nAlways check the project's Angular version before writing code — features differ significantly between versions. Run `ng version` or inspect `package.json`. When creating a new project, do not pin a version unless the user specifies one.\n---\npaths:\n  - \"**/*.ets\"\n  - \"**/*.ts\"\n  - \"**/module.json5\"\n  - \"**/oh-package.json5\"\n  - \"**/build-profile.json5\"\n---\n# HarmonyOS / ArkTS Coding Style\n> This file extends [common/coding-style.md](../common/coding-style.md) with HarmonyOS and ArkTS-specific content.\n## ArkTS Language Constraints\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "1f576c39",
+      "desc": "Fișier: middleware/auth.js\nAdaugă importul `{ authorize }` din `./roles` sus în fișier; exportă aliasurile `auth` (→ authenticate), `checkRole` (→ authorize) pentru compatibilitate cu rutele care folosesc `requireAuth`/`requireRole`\n\nSkill-uri relevante:\nSkill: codebase-onboarding\n# Codebase Onboarding\n\nSystematically analyze an unfamiliar codebase and produce a structured onboarding guide. Designed for developers joining a new project or setting up Claude Code in an existing repo for the first time.\n\n## When to Use\n\n- First time opening a project with Claude Code\n- Joining a\n\nSkill: coding-standards\n# Coding Standards & Best Practices\n\nBaseline coding conventions applicable across projects.\n\nThis skill is the shared floor, not the detailed framework playbook.\n\n- Use `frontend-patterns` for React, state, forms, rendering, and UI architecture.\n- Use `backend-patterns` or `api-design` for reposito\n\nSkill: cpp-coding-standards\n# C++ Coding Standards (C++ Core Guidelines)\n\nComprehensive coding standards for modern C++ (C++17/20/23) derived from the [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines). Enforces type safety, resource safety, immutability, and clarity.\n\n## When to Use\n\n- Writing\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "3dc78b82",
+      "desc": "Fișier: server.js\nRepară `dbModule.get()` → folosește `await dbModule.getDb()` + prepared statement; repară `dbModule.saveToDisk()` → `dbModule.saveDb()`\n\nSkill-uri relevante:\nSkill: context-budget\n# Context Budget\n\nAnalyze token overhead across every loaded component in a Claude Code session and surface actionable optimizations to reclaim context space.\n\n## When to Use\n\n- Session performance feels sluggish or output quality is degrading\n- You've recently added many skills, agents, or MCP serv\n\nSkill: mcp-server-patterns\n# MCP Server Patterns\n\nThe Model Context Protocol (MCP) lets AI assistants call tools, read resources, and use prompts from your server. Use this skill when building or maintaining MCP servers. The SDK API evolves; check Context7 (query-docs for \"MCP\") or the official MCP documentation for current m\n\nSkill: nestjs-patterns\n# NestJS Development Patterns\n\nProduction-grade NestJS patterns for modular TypeScript backends.\n\n## When to Activate\n\n- Building NestJS APIs or services\n- Structuring modules, controllers, and providers\n- Adding DTO validation, guards, interceptors, or exception filters\n- Configuring environment-aw\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "9c868dfe",
+      "desc": "Fișier: admin/routes.js\nRescrie complet: înlocuiește `const { users } = require('../config/db')` și API-ul NeDB cu interogări SQLite prin `getDb()`; repară `findUserByEmail`, `findUserById`, `countTenants` și ruta `GET /admin/tenants`\n\nSkill-uri relevante:\nSkill: agent-harness-construction\n# Agent Harness Construction\n\nUse this skill when you are improving how an agent plans, calls tools, recovers from errors, and converges on completion.\n\n## Core Model\n\nAgent output quality is constrained by:\n1. Action space quality\n2. Observation quality\n3. Recovery quality\n4. Context budget quality\n\nSkill: angular-developer\n# Angular Developer Guidelines\n\n## When to Activate\n\n- Working in any Angular project or codebase\n- Creating or scaffolding a new Angular project, application, or library\n- Generating components, services, directives, pipes, guards, or resolvers\n- Implementing reactivity with Angular Signals, `linke\n\nSkill: api-connector-builder\n# API Connector Builder\n\nUse this when the job is to add a repo-native integration surface, not just a generic HTTP client.\n\nThe point is to match the host repository's pattern:\n\n- connector layout\n- config schema\n- auth model\n- error handling\n- test style\n- registration/discovery wiring\n\n## When to\n\nReguli:\n---\npaths:\n  - \"**/*.component.ts\"\n  - \"**/*.component.html\"\n  - \"**/*.service.ts\"\n  - \"**/*.directive.ts\"\n  - \"**/*.pipe.ts\"\n  - \"**/*.guard.ts\"\n  - \"**/*.resolver.ts\"\n  - \"**/*.module.ts\"\n---\n# Angular Coding Style\n> This file extends [common/coding-style.md](../common/coding-style.md) with Angular specific content.\nAlways check the project's Angular version before writing code — features differ significantly between versions. Run `ng version` or inspect `package.json`. When creating a new project, do not pin a version unless the user specifies one.\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "da8b929e",
+      "desc": "Fișier: models/reservationModel.js\nRepară importul: `const { getDb, run, get, all } = require('../config/db')` → acum funcționează cu exporturile noi\n\nSkill-uri relevante:\nSkill: agent-harness-construction\n# Agent Harness Construction\n\nUse this skill when you are improving how an agent plans, calls tools, recovers from errors, and converges on completion.\n\n## Core Model\n\nAgent output quality is constrained by:\n1. Action space quality\n2. Observation quality\n3. Recovery quality\n4. Context budget quality\n\nSkill: bun-runtime\n# Bun Runtime\n\nBun is a fast all-in-one JavaScript runtime and toolkit: runtime, package manager, bundler, and test runner.\n\n## When to Use\n\n- **Prefer Bun** for: new JS/TS projects, scripts where install/run speed matters, Vercel deployments with Bun runtime, and when you want a single toolchain (r\n\nSkill: configure-ecc\n# Configure Everything Claude Code (ECC)\n\nAn interactive, step-by-step installation wizard for the Everything Claude Code project. Uses `AskUserQuestion` to guide users through selective installation of skills and rules, then verifies correctness and offers optimization.\n\n## When to Activate\n\n- User\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "18a9269f",
+      "desc": "Fișier: routes/auth.js\nRelaxează validarea parolei: `isLength({ min: 6, max: 128 })` păstrat (deja e 6); verifică mesaje prietenoase în română\n\nSkill-uri relevante:\nSkill: accessibility\n# Accessibility (WCAG 2.2)\n\nThis skill ensures that digital interfaces are Perceivable, Operable, Understandable, and Robust (POUR) for all users, including those using screen readers, switch controls, or keyboard navigation. It focuses on the technical implementation of WCAG 2.2 success criteria.\n\n\n\nSkill: agent-architecture-audit\n# Agent Architecture Audit\n\nA diagnostic workflow for agent systems that hide failures behind wrapper layers, stale memory, retry loops, or transport/rendering mutations.\n\n## When to Activate\n\n**MANDATORY for:**\n- Releasing any agent or LLM-powered application to production\n- Shipping features with \n\nSkill: agent-eval\n# Agent Eval Skill\n\nA lightweight CLI tool for comparing coding agents head-to-head on reproducible tasks. Every \"which coding agent is best?\" comparison runs on vibes — this tool systematizes it.\n\n## When to Activate\n\n- Comparing coding agents (Claude Code, Aider, Codex, etc.) on your own codebase\n\n\nReguli:\n---\npaths:\n  - \"**/*.pl\"\n  - \"**/*.pm\"\n  - \"**/*.t\"\n  - \"**/*.psgi\"\n  - \"**/*.cgi\"\n---\n# Perl Coding Style\n> This file extends [common/coding-style.md](../common/coding-style.md) with Perl-specific content.\n- Always `use v5.36` (enables `strict`, `warnings`, `say`, subroutine signatures)\n- Use subroutine signatures — never unpack `@_` manually\n- Prefer `say` over `print` with explicit newlines\n---\npaths:\n  - \"**/*.tsx\"\n  - \"**/*.jsx\"\n  - \"**/components/**/*.ts\"\n  - \"**/components/**/*.js\"\n  - \"**/hooks/**/*.ts\"\n  - \"**/hooks/**/*.js\"\n---\n# React Coding Style\n> This file extends [typescript/coding-style.md](../typescript/coding-style.md) and [common/coding-style.md](../common/coding-style.md) with React specific content.\n- `.tsx` for any file containing JSX, even one-liner snippets\n- `.ts` for pure logic, custom hooks without JSX, type definitions, utilities\n- `.test.tsx` / `.test.ts` mirroring the source file\n- Use `.jsx` only when the project intentionally avoids TypeScript — flag every new untyped React file in review\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "0924eacb",
+      "desc": "Fișier: routes/reservations.js\nRepară `authorize('admin')` de pe ruta DELETE → `authorize('super_admin', 'owner')`\n\nSkill-uri relevante:\nSkill: agent-introspection-debugging\n# Agent Introspection Debugging\n\nUse this skill when an agent run is failing repeatedly, consuming tokens without progress, looping on the same tools, or drifting away from the intended task.\n\nThis is a workflow skill, not a hidden runtime. It teaches the agent to debug itself systematically before \n\nSkill: angular-developer\n# Angular Developer Guidelines\n\n## When to Activate\n\n- Working in any Angular project or codebase\n- Creating or scaffolding a new Angular project, application, or library\n- Generating components, services, directives, pipes, guards, or resolvers\n- Implementing reactivity with Angular Signals, `linke\n\nSkill: api-connector-builder\n# API Connector Builder\n\nUse this when the job is to add a repo-native integration surface, not just a generic HTTP client.\n\nThe point is to match the host repository's pattern:\n\n- connector layout\n- config schema\n- auth model\n- error handling\n- test style\n- registration/discovery wiring\n\n## When to\n\nReguli:\n---\npaths:\n  - \"**/*.pl\"\n  - \"**/*.pm\"\n  - \"**/*.t\"\n  - \"**/*.psgi\"\n  - \"**/*.cgi\"\n---\n# Perl Coding Style\n> This file extends [common/coding-style.md](../common/coding-style.md) with Perl-specific content.\n- Always `use v5.36` (enables `strict`, `warnings`, `say`, subroutine signatures)\n- Use subroutine signatures — never unpack `@_` manually\n- Prefer `say` over `print` with explicit newlines\n---\npaths:\n  - \"**/*.ts\"\n  - \"**/*.tsx\"\n  - \"**/*.js\"\n  - \"**/*.jsx\"\n---\n# TypeScript/JavaScript Coding Style\n> This file extends [common/coding-style.md](../common/coding-style.md) with TypeScript/JavaScript specific content.\n## Types and Interfaces\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "28541cd8",
+      "desc": "Fișier: routes/orders.js\nRepară importurile: `findOrdersByWaiter` → elimină (nu există), `updateOrderPaymentMethod` → `updateOrderPayment`, `addOrderItem` → adaugă funcția în model sau adaptează ruta\n\nSkill-uri relevante:\nSkill: continuous-agent-loop\n# Continuous Agent Loop\n\nThis is the v1.8+ canonical loop skill name. It supersedes `autonomous-loops` while keeping compatibility for one release.\n\n## Loop Selection Flow\n\n```text\nStart\n  |\n  +-- Need strict CI/PR control? -- yes --> continuous-pr\n  |\n  +-- Need RFC decomposition? -- yes --> rfc-da\n\nSkill: continuous-learning\n# Continuous Learning Skill - DEPRECATED\n\n> **DEPRECATED 2026-04-28.** Use `continuous-learning-v2` instead. v2 is a strict superset: stop-hook observation becomes PreToolUse/PostToolUse observation, full skills become atomic instincts with confidence scoring, and global-only storage becomes project\n\nSkill: continuous-learning-v2\n# Continuous Learning v2.1 - Instinct\n-Based Architecture\n\nAn advanced learning system that turns your Claude Code sessions into reusable knowledge through atomic \"instincts\" - small learned behaviors with confidence scoring.\n\n**v2.1** adds **project-scoped instincts** — React patterns stay in your \n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "0feb4002",
+      "desc": "Fișier: routes/loyalty.js\nUniformizează toate răspunsurile la formatul `{success: false, error: {message: \"...\", code: \"...\"}}`\n\nSkill-uri relevante:\nSkill: angular-developer\n# Angular Developer Guidelines\n\n## When to Activate\n\n- Working in any Angular project or codebase\n- Creating or scaffolding a new Angular project, application, or library\n- Generating components, services, directives, pipes, guards, or resolvers\n- Implementing reactivity with Angular Signals, `linke\n\nSkill: carrier-relationship-management\n# Carrier Relationship Management\n\n## Role and Context\n\nYou are a senior transportation manager with 15+ years managing carrier portfolios ranging from 40 to 200+ active carriers across truckload, LTL, intermodal, and brokerage. You own the full lifecycle: sourcing new carriers, negotiating rates, r\n\nSkill: claude-devfleet\n# Claude DevFleet Multi-Agent Orchestration\n\n## When to Use\n\nUse this skill when you need to dispatch multiple Claude Code agents to work on coding tasks in parallel. Each agent runs in an isolated git worktree with full tooling.\n\nRequires a running Claude DevFleet instance connected via MCP:\n```bas\n\nReguli:\n---\npaths:\n  - \"**/*.component.ts\"\n  - \"**/*.component.html\"\n  - \"**/*.service.ts\"\n  - \"**/*.directive.ts\"\n  - \"**/*.pipe.ts\"\n  - \"**/*.guard.ts\"\n  - \"**/*.resolver.ts\"\n  - \"**/*.module.ts\"\n---\n# Angular Coding Style\n> This file extends [common/coding-style.md](../common/coding-style.md) with Angular specific content.\nAlways check the project's Angular version before writing code — features differ significantly between versions. Run `ng version` or inspect `package.json`. When creating a new project, do not pin a version unless the user specifies one.\n---\npaths:\n  - \"**/*.go\"\n  - \"**/go.mod\"\n  - \"**/go.sum\"\n---\n# Go Coding Style\n> This file extends [common/coding-style.md](../common/coding-style.md) with Go specific content.\n- **gofmt** and **goimports** are mandatory — no style debates\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "f78c78fa",
+      "desc": "Fișier: hotel/routes.js\nRepară `authorize('super_admin', 'owner', 'manager_hotel')` → elimină `'manager_hotel'` (rol inexistent)\n\nSkill-uri relevante:\nSkill: nestjs-patterns\n# NestJS Development Patterns\n\nProduction-grade NestJS patterns for modular TypeScript backends.\n\n## When to Activate\n\n- Building NestJS APIs or services\n- Structuring modules, controllers, and providers\n- Adding DTO validation, guards, interceptors, or exception filters\n- Configuring environment-aw\n\nSkill: nextjs-turbopack\n# Next.js and Turbopack\n\nNext.js 16+ uses Turbopack by default for local development: an incremental bundler written in Rust that significantly speeds up dev startup and hot updates.\n\n## When to Use\n\n- **Turbopack (default dev)**: Use for day-to-day development. Faster cold start and HMR, especially\n\nSkill: nodejs-keccak256\n# Node.js Keccak-256\n\nEthereum uses Keccak-256, not the NIST-standardized SHA3 variant exposed by Node's `crypto.createHash('sha3-256')`.\n\n## When to Use\n\n- Computing Ethereum function selectors or event topics\n- Building EIP-712, signature, Merkle, or storage-slot helpers in JS/TS\n- Reviewing any c\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "90540a98",
+      "desc": "Fișier: customer/views/login.ejs\nVerifică și repară design mov/glassmorphism, asigură afișare mesaje de eroare în română\n\nSkill-uri relevante:\nSkill: agent-introspection-debugging\n# Agent Introspection Debugging\n\nUse this skill when an agent run is failing repeatedly, consuming tokens without progress, looping on the same tools, or drifting away from the intended task.\n\nThis is a workflow skill, not a hidden runtime. It teaches the agent to debug itself systematically before \n\nSkill: angular-developer\n# Angular Developer Guidelines\n\n## When to Activate\n\n- Working in any Angular project or codebase\n- Creating or scaffolding a new Angular project, application, or library\n- Generating components, services, directives, pipes, guards, or resolvers\n- Implementing reactivity with Angular Signals, `linke\n\nSkill: api-connector-builder\n# API Connector Builder\n\nUse this when the job is to add a repo-native integration surface, not just a generic HTTP client.\n\nThe point is to match the host repository's pattern:\n\n- connector layout\n- config schema\n- auth model\n- error handling\n- test style\n- registration/discovery wiring\n\n## When to\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "3656da84",
+      "desc": "Fișier: customer/views/dashboard.ejs\nVerifică și repară design mov/glassmorphism, integrare date utilizator\n\nSkill-uri relevante:\nSkill: api-design\n# API Design Patterns\n\nConventions and best practices for designing consistent, developer-friendly REST APIs.\n\n## When to Activate\n\n- Designing new API endpoints\n- Reviewing existing API contracts\n- Adding pagination, filtering, or sorting\n- Implementing error handling for APIs\n- Planning API versio\n\nSkill: customer-billing-ops\n# Customer Billing Ops\n\nUse this skill for real customer operations, not generic payment API design.\n\nThe goal is to help the operator answer: who is this customer, what happened, what is the safest fix, and what follow-up should we send?\n\n## When to Use\n\n- Customer says billing is broken, they want\n\nSkill: dashboard-builder\n# Dashboard Builder\n\nUse this when the task is to build a dashboard people can operate from.\n\nThe goal is not \"show every metric.\" The goal is to answer:\n\n- is it healthy?\n- where is the bottleneck?\n- what changed?\n- what action should someone take?\n\n## When to Use\n\n- \"Build a Kafka monitoring dashb\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "52f3ce9c",
+      "desc": "Fișier: admin/views/login.ejs\nVerifică existență, repară design mov/glassmorphism, asigură afișare mesaje de eroare\n\nSkill-uri relevante:\nSkill: agent-introspection-debugging\n# Agent Introspection Debugging\n\nUse this skill when an agent run is failing repeatedly, consuming tokens without progress, looping on the same tools, or drifting away from the intended task.\n\nThis is a workflow skill, not a hidden runtime. It teaches the agent to debug itself systematically before \n\nSkill: angular-developer\n# Angular Developer Guidelines\n\n## When to Activate\n\n- Working in any Angular project or codebase\n- Creating or scaffolding a new Angular project, application, or library\n- Generating components, services, directives, pipes, guards, or resolvers\n- Implementing reactivity with Angular Signals, `linke\n\nSkill: api-connector-builder\n# API Connector Builder\n\nUse this when the job is to add a repo-native integration surface, not just a generic HTTP client.\n\nThe point is to match the host repository's pattern:\n\n- connector layout\n- config schema\n- auth model\n- error handling\n- test style\n- registration/discovery wiring\n\n## When to\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "d0172a85",
+      "desc": "Fișier: admin/views/dashboard.ejs\nVerifică existență, repară design mov/glassmorphism\n\nSkill-uri relevante:\nSkill: api-design\n# API Design Patterns\n\nConventions and best practices for designing consistent, developer-friendly REST APIs.\n\n## When to Activate\n\n- Designing new API endpoints\n- Reviewing existing API contracts\n- Adding pagination, filtering, or sorting\n- Implementing error handling for APIs\n- Planning API versio\n\nSkill: dashboard-builder\n# Dashboard Builder\n\nUse this when the task is to build a dashboard people can operate from.\n\nThe goal is not \"show every metric.\" The goal is to answer:\n\n- is it healthy?\n- where is the bottleneck?\n- what changed?\n- what action should someone take?\n\n## When to Use\n\n- \"Build a Kafka monitoring dashb\n\nSkill: design-system\n# Design System — Generate & Audit Visual Systems\n\n## When to Use\n\n- Starting a new project that needs a design system\n- Auditing an existing codebase for visual consistency\n- Before a redesign — understand what you have\n- When the UI looks \"off\" but you can't pinpoint why\n- Reviewing PRs that touch\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "95d8c426",
+      "desc": "Fișier: models/orderModel.js\nAdaugă funcțiile lipsă: `addOrderItem()`, `findOrdersByWaiter()`, redenumește `updateOrderPayment` în `updateOrderPaymentMethod` (alias)\n\nSkill-uri relevante:\nSkill: foundation-models-on-device\n# FoundationModels: On-Device LLM (iOS 26)\n\nPatterns for integrating Apple's on-device language model into apps using the FoundationModels framework. Covers text generation, structured output with `@Generable`, custom tool calling, and snapshot streaming — all running on-device for privacy and offli\n\nSkill: nestjs-patterns\n# NestJS Development Patterns\n\nProduction-grade NestJS patterns for modular TypeScript backends.\n\n## When to Activate\n\n- Building NestJS APIs or services\n- Structuring modules, controllers, and providers\n- Adding DTO validation, guards, interceptors, or exception filters\n- Configuring environment-aw\n\nSkill: nextjs-turbopack\n# Next.js and Turbopack\n\nNext.js 16+ uses Turbopack by default for local development: an incremental bundler written in Rust that significantly speeds up dev startup and hot updates.\n\n## When to Use\n\n- **Turbopack (default dev)**: Use for day-to-day development. Faster cold start and HMR, especially\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "b3a0ea94",
+      "desc": "Fișier: customer/routes.js\nCreează view-urile EJS lipsă: `reservation-new.ejs`, `reservations-detail.ejs`, `orders-new.ejs`, `orders-detail.ejs`, `loyalty-coupons.ejs`, `favorites.ejs`, `restaurants.ejs`, `profile.ejs`, `addresses.ejs`, `settings.ejs`\n\nSkill-uri relevante:\nSkill: customer-billing-ops\n# Customer Billing Ops\n\nUse this skill for real customer operations, not generic payment API design.\n\nThe goal is to help the operator answer: who is this customer, what happened, what is the safest fix, and what follow-up should we send?\n\n## When to Use\n\n- Customer says billing is broken, they want\n\nSkill: flutter-dart-code-review\n# Flutter/Dart Code Review Best Practices\n\nComprehensive, library-agnostic checklist for reviewing Flutter/Dart applications. These principles apply regardless of which state management solution, routing library, or DI framework is used.\n\n---\n\n## 1. General Project Health\n\n- [ ] Project follows cons\n\nSkill: nestjs-patterns\n# NestJS Development Patterns\n\nProduction-grade NestJS patterns for modular TypeScript backends.\n\n## When to Activate\n\n- Building NestJS APIs or services\n- Structuring modules, controllers, and providers\n- Adding DTO validation, guards, interceptors, or exception filters\n- Configuring environment-aw\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "c986b178",
+      "desc": "Fișier: public/index.html\nVerifică redirecționarea corectă către portal client\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
+    },
+    {
+      "id": "876e41bb",
+      "desc": "Fișier: models/userModel.js\nVerifică coloanele SQL (tabela users are `tenant_id` dar modelul folosește `tenantId`) – repară consistența\n\nSkill-uri relevante:\nSkill: coding-standards\n# Coding Standards & Best Practices\n\nBaseline coding conventions applicable across projects.\n\nThis skill is the shared floor, not the detailed framework playbook.\n\n- Use `frontend-patterns` for React, state, forms, rendering, and UI architecture.\n- Use `backend-patterns` or `api-design` for reposito\n\nSkill: cost-aware-llm-pipeline\n# Cost-Aware LLM Pipeline\n\nPatterns for controlling LLM API costs while maintaining quality. Combines model routing, budget tracking, retry logic, and prompt caching into a composable pipeline.\n\n## When to Activate\n\n- Building applications that call LLM APIs (Claude, GPT, etc.)\n- Processing batches \n\nSkill: cpp-coding-standards\n# C++ Coding Standards (C++ Core Guidelines)\n\nComprehensive coding standards for modern C++ (C++17/20/23) derived from the [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines). Enforces type safety, resource safety, immutability, and clarity.\n\n## When to Use\n\n- Writing\n\nReguli:\n---\npaths:\n  - \"**/*.dart\"\n  - \"**/pubspec.yaml\"\n  - \"**/analysis_options.yaml\"\n---\n# Dart/Flutter Coding Style\n> This file extends [common/coding-style.md](../common/coding-style.md) with Dart and Flutter-specific content.\n- **dart format** for all `.dart` files — enforced in CI (`dart format --set-exit-if-changed .`)\n- Line length: 80 characters (dart format default)\n- Trailing commas on multi-line argument/parameter lists to improve diffs and formatting\n\nIMPORTANT: Returnează fiecare fișier generat/modificat în formatul strict:\n### cale/relativă/la/fișier.ext\nconținutul complet al fișierului\n### END\nNu include explicații în afara blocurilor ###.\nFolosește DOAR căi relative la proiect, nu absolute.\n",
+      "agent": "tdd-guide",
+      "status": "pending"
     }
   ],
   "plan": [],
   "status": "completed",
   "checkpoint": {
-    "step": 1,
+    "step": 20,
     "files": {
       "$null": "e7c64c8cf028788701062c071f1a0ebd",
       ".env.example": "f60215253048f074b62bba0b4e631c66",
@@ -2226,8 +2355,8 @@
       "package.json": "0ccf71cadf4e8e47a40e7fdb82dc2fd7",
       "plan.md": "ba296c8c45624b41148cc0d569688fc4",
       "README.md": "b48b43402c6b77d7d1d06c12d91d6520",
-      "server.js": "b82032f41f6d634fed936e624c63e631",
-      "state.json": "40fb7b4f0cbe8753492a526942320b77",
+      "server.js": "00a74b55ed7d1e8fc8cb37b976002cab",
+      "state.json": "689afe86824871336279100b93749568",
       "temp_db_original.js": "2545a12b610beba5cb320f60d8a1e962",
       "temp_hr_prefix.txt": "a6e792e9e879f0c1f85a475f1b7e099c",
       "temp_part1.txt": "e575aced791ae4886290f6ccd8309512",
@@ -2235,25 +2364,35 @@
       "temp_part2_new.txt": "f2773c030fbfc443c239ea3bf0e7e764",
       "test_inventory.ejs": "514c0f9513982b3483fd94ac1ed65f15",
       "_temp_server_check.txt": "1323af87a4f096f2b26e27d51a526b4a",
-      "admin\\routes.js": "159dcf90ca45cfef0202b44463315b21",
+      "admin\\routes.js": "76379b2f5c5ac309f053e103c42aff95",
       "admin\\public\\js\\admin.js": "e85880ddd6b5013fc7b08a187036c004",
-      "admin\\views\\dashboard.ejs": "b5ae0683fc93a465d7bdcfe5381acc74",
+      "admin\\views\\dashboard.ejs": "7224262b504ffd7f8538a7d725cd123f",
       "admin\\views\\layout.ejs": "84bdef158eb3442e8afc25d57e967954",
-      "admin\\views\\login.ejs": "626e98b0604faa14b559e7156ed55819",
+      "admin\\views\\login.ejs": "e908d51d8f5e9b74f5864daccac274d4",
       "admin\\views\\settings.ejs": "458854d9343f7d4b0e5871ab83b7cb70",
       "admin\\views\\tenants.ejs": "2841dfb71852cc7d416a06abbdb7fde4",
-      "config\\db.js": "f562244774d3089514df326d639764cc",
-      "config\\tenant.js": "d3ffd875963960d84fa11ad4caae0516",
+      "config\\db.js": "516ece8d4451a3a81fc017c6916d359b",
+      "config\\tenant.js": "f3b0468390f0ffd628c5246d5e4696af",
       "customer\\routes.js": "e3ab216ff69c7f7295433cf5974c12ca",
       "customer\\public\\css\\customer.css": "c574c5a60f1aec7b710a2de78c23c190",
       "customer\\public\\js\\customer.js": "0181a35ac1ec41213de2cf541b5ab47e",
-      "customer\\views\\dashboard.ejs": "4dfb5fa8e0ae90b21c178d761b999d4b",
+      "customer\\views\\addresses.ejs": "b08746628f6c9e26a1825c852879d13a",
+      "customer\\views\\dashboard.ejs": "64123c64dd92fea08594ebbf172b6068",
+      "customer\\views\\favorites.ejs": "e9670cebb12963abf518ee296b49e7f1",
       "customer\\views\\layout.ejs": "8f9c03d3bb8e1526d225eb671e97d8de",
       "customer\\views\\login.ejs": "182271b200b2f7f6100d0e6897ad2bae",
+      "customer\\views\\loyalty-coupons.ejs": "0ee554027b9adbac9ae898cf9689f955",
       "customer\\views\\loyalty.ejs": "c9a1b24f9376f8251d87f89defd60938",
+      "customer\\views\\orders-detail.ejs": "08fb61844b15de59142513f61de02b81",
+      "customer\\views\\orders-new.ejs": "c6ab48df0e79cc9284cca0f57edf9f23",
       "customer\\views\\orders.ejs": "6ab47a75e92a0e3a21233d7b250d6af0",
+      "customer\\views\\profile.ejs": "9078e76f3547399e7010e62e6ddf1bee",
       "customer\\views\\register.ejs": "cd2c50685103f5a6ace9c349dd6a3219",
+      "customer\\views\\reservation-new.ejs": "a99710d4d3d288138c4ba0358db306fc",
+      "customer\\views\\reservations-detail.ejs": "8dd3d4ee19af0859d3b63dd4917b5f0b",
       "customer\\views\\reserve.ejs": "f86ecff86922f5dee1218df07f44d1ba",
+      "customer\\views\\restaurants.ejs": "953fd9dd0c91b4cd58f1a932da737a71",
+      "customer\\views\\settings.ejs": "95442a7186826f3ce952e371c49e66aa",
       "data\\.gitkeep": "d41d8cd98f00b204e9800998ecf8427e",
       "data\\attendance.db": "384eaa0bac46be38bc90d9bb9d3f0849",
       "data\\deliveries.db": "c039a17d60f8733d8ae0e5954fd10653",
@@ -2269,8 +2408,7 @@
       "data\\tenants.db": "4c546875137c000080894ef428eab4e8",
       "data\\test.db": "d41d8cd98f00b204e9800998ecf8427e",
       "data\\users.db": "5b5933d25c0b9190421e23b795cd9b83",
-      "hotel\\Document text nou.txt": "d41d8cd98f00b204e9800998ecf8427e",
-      "hotel\\routes.js": "e34ba463c6925127f98cebc1b8c2932f",
+      "hotel\\routes.js": "415c92c22f43d8c03cdbab66491c7c30",
       "hotel\\public\\css\\hotel.css": "65692cd81a368a1ae244b69b9a2ea152",
       "hotel\\public\\js\\hotel.js": "0aa1e2a23b6b144bef7f37f81fbaf4ef",
       "hotel\\views\\dashboard.ejs": "b2d6d841c928408a3b321c5cf42f88bc",
@@ -2282,7 +2420,7 @@
       "hotel\\views\\rooms.ejs": "87146bed9ef7e29261eb903447d66f9a",
       "hotel\\views\\settings.ejs": "d99823c06b4cda14d34d4bc2956c6717",
       "hotel\\views\\suppliers.ejs": "dda80ba11a53d2cada7aa4c8e75dbe5b",
-      "middleware\\auth.js": "2356359799b1245405df0f605a385a76",
+      "middleware\\auth.js": "f143885f6ced313670e94970dab07b31",
       "middleware\\errorHandler.js": "7d0e82785975d76bde7bedd74aa3442b",
       "middleware\\roles.js": "c6ef341b89ff2203d115240cf10816e7",
       "middleware\\tenant.js": "0f2f5c9457f46a94655d9eb40ef09e43",
@@ -2295,13 +2433,13 @@
       "models\\inventoryTransactionModel.js": "3dac927f842977b7041199416d9e2139",
       "models\\loyaltyModel.js": "59d47c0521a3313322907d68c0894bd3",
       "models\\menuItemModel.js": "e9003d06964fcfd996e71ad87f02e55e",
-      "models\\orderModel.js": "d01389b4a2f31c568cada755441efc24",
+      "models\\orderModel.js": "e6bc86089a6f18e41ef69d7a3fe84755",
       "models\\reservationModel.js": "5b31d840ca1ce7b1fdddf79be48a0945",
       "models\\restaurantModel.js": "5c776b07bc8608aec7b03049c98037ce",
       "models\\roomModel.js": "c662414b515bbdab89751d3b897090c5",
       "models\\supplierModel.js": "c708eeee3c480bcf80426d76782d90ff",
-      "models\\userModel.js": "cbade8362dc5b37b815b0a4e4a358909",
-      "public\\index.html": "35bb4cb11eaeb52b7df715b82f7094df",
+      "models\\userModel.js": "51e60ec4f6a9fdc6faa12001d604477d",
+      "public\\index.html": "9aa99a7eb1662042989ae09b709e06d8",
       "pwa\\manifest.json": "6078117229858ded7ebc67ba180230f0",
       "pwa\\sw.js": "660bbe7cdc2369fd1006b9e34db77a06",
       "restaurant\\lines.txt": "f5a1a80964b17f6f001b154fe90a8ce8",
@@ -2320,9 +2458,9 @@
       "routes\\hotels.js": "456b1c26efc3fd1f8abac6ec44e8ac9a",
       "routes\\hr.js": "819a27f5ab62908f2d30567edd573f19",
       "routes\\inventory.js": "2ba7fb3e91a17a19b9822dcb823b88c8",
-      "routes\\loyalty.js": "d251faeb1ff5ae0b1087039d8de33f36",
-      "routes\\orders.js": "e72b47be23ff60f4127067fac483d7d3",
-      "routes\\reservations.js": "b5bef16c9ac4b2120a6a24893a039502",
+      "routes\\loyalty.js": "5d1fadeb39c01ce06a074c6204102c63",
+      "routes\\orders.js": "5a7e833cc6b91d40d8474d266caa555f",
+      "routes\\reservations.js": "5138bcc903fd89f5ff1736de13364ebb",
       "routes\\restaurants.js": "c7934562522ac23100753e5dd7f47e1a",
       "routes\\suppliers.js": "6863cb404d697d8f9fca5409ea2e9253",
       "tests\\middleware\\auth.test.js": "f8428bfaaaceec08a1837210a0582479",
@@ -2334,5 +2472,5 @@
     }
   },
   "modified_files": {},
-  "updated": 1781921919.7631552
+  "updated": 1781924316.9995027
 }

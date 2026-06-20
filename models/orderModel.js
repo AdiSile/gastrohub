@@ -1027,12 +1027,12 @@ async function updateOrderItems(id, items, subtotal, tax, total) {
 }
 
 /**
- * Actualizează metoda de plată a unei comenzi.
+ * Actualizează metoda de plată a unei comenzi (funcție principală).
  * @param {string} id - ID-ul comenzii
  * @param {string} paymentMethod - Noua metodă de plată
  * @returns {Promise<Object>} Documentul actualizat
  */
-async function updateOrderPayment(id, paymentMethod) {
+async function updateOrderPaymentMethod(id, paymentMethod) {
   if (!id) {
     throw new AppError('ID-ul comenzii este invalid.', 400, 'INVALID_ORDER_ID');
   }
@@ -1082,6 +1082,223 @@ async function updateOrderPayment(id, paymentMethod) {
       'Eroare la actualizarea metodei de plată (SQL): ' + sqlErr.message,
       500,
       'DB_UPDATE_ERROR'
+    );
+  }
+}
+
+/**
+ * Alias pentru `updateOrderPaymentMethod` – păstrat pentru compatibilitate.
+ * @param {string} id - ID-ul comenzii
+ * @param {string} paymentMethod - Noua metodă de plată
+ * @returns {Promise<Object>} Documentul actualizat
+ * @deprecated Folosiți `updateOrderPaymentMethod` în loc.
+ */
+async function updateOrderPayment(id, paymentMethod) {
+  return updateOrderPaymentMethod(id, paymentMethod);
+}
+
+/**
+ * Adaugă un item într-o comandă existentă.
+ * Recalculează subtotal, tax și total pe baza item-urilor existente + noul item,
+ * sau folosește valorile explicite dacă sunt furnizate.
+ *
+ * @param {string} orderId - ID-ul comenzii
+ * @param {Object} item - Item-ul de adăugat
+ * @param {string} item.menuItemId - ID-ul produsului din meniu
+ * @param {string} item.name - Numele produsului
+ * @param {number} item.quantity - Cantitatea
+ * @param {number} item.price - Prețul unitar
+ * @param {number} [newSubtotal] - Opțional, noul subtotal (dacă nu, se recalculează)
+ * @param {number} [newTax] - Opțional, noua taxă (dacă nu, se recalculează)
+ * @param {number} [newTotal] - Opțional, noul total (dacă nu, se recalculează)
+ * @returns {Promise<Object>} Documentul actualizat al comenzii
+ */
+async function addOrderItem(orderId, item, newSubtotal, newTax, newTotal) {
+  if (!orderId) {
+    throw new AppError('ID-ul comenzii este invalid.', 400, 'INVALID_ORDER_ID');
+  }
+
+  // Validare item
+  if (!item || typeof item !== 'object') {
+    throw new AppError(
+      'Item-ul trebuie să fie un obiect valid cu câmpurile menuItemId, name, quantity, price.',
+      400,
+      'INVALID_ITEM'
+    );
+  }
+
+  if (!item.menuItemId || typeof item.menuItemId !== 'string') {
+    throw new AppError('Item-ul trebuie să conțină un menuItemId valid.', 400, 'INVALID_MENU_ITEM_ID');
+  }
+
+  if (!item.name || typeof item.name !== 'string' || item.name.trim().length === 0) {
+    throw new AppError('Item-ul trebuie să conțină un nume valid.', 400, 'INVALID_ITEM_NAME');
+  }
+
+  if (!Number.isFinite(item.quantity) || item.quantity <= 0) {
+    throw new AppError('Cantitatea item-ului trebuie să fie un număr pozitiv.', 400, 'INVALID_ITEM_QUANTITY');
+  }
+
+  if (!Number.isFinite(item.price) || item.price < 0) {
+    throw new AppError('Prețul item-ului trebuie să fie un număr pozitiv sau zero.', 400, 'INVALID_ITEM_PRICE');
+  }
+
+  const db = await getDb();
+
+  try {
+    // Obține comanda existentă
+    const numericId = parseInt(orderId, 10);
+    let existingRow;
+    if (!isNaN(numericId)) {
+      existingRow = _dbGet(db, 'SELECT * FROM orders WHERE id = ?', [numericId]);
+    } else {
+      existingRow = _dbGet(db, 'SELECT * FROM orders WHERE CAST(id AS TEXT) = ?', [String(orderId)]);
+    }
+
+    if (!existingRow) {
+      throw new AppError('Comanda nu a fost găsită.', 404, 'ORDER_NOT_FOUND');
+    }
+
+    const doc = _sqlRowToDoc(existingRow);
+    const currentItems = Array.isArray(doc.items) ? doc.items : [];
+
+    // Adaugă noul item
+    const newItem = {
+      menuItemId: item.menuItemId,
+      name: item.name.trim(),
+      quantity: item.quantity,
+      price: item.price,
+    };
+    currentItems.push(newItem);
+
+    // Calculează noile totaluri
+    const computedSubtotal = currentItems.reduce(
+      (sum, it) => sum + it.price * it.quantity,
+      0
+    );
+
+    const finalSubtotal = newSubtotal !== undefined && isValidPositiveNumber(newSubtotal)
+      ? newSubtotal
+      : computedSubtotal;
+
+    const finalTax = newTax !== undefined && isValidPositiveNumber(newTax)
+      ? newTax
+      : 0;
+
+    const finalTotal = newTotal !== undefined && isValidPositiveNumber(newTotal)
+      ? newTotal
+      : finalSubtotal + finalTax;
+
+    const now = new Date().toISOString();
+    const itemsJson = JSON.stringify(currentItems);
+
+    let result;
+    if (!isNaN(numericId)) {
+      result = _dbRun(
+        db,
+        'UPDATE orders SET items = ?, subtotal = ?, tax = ?, total = ?, updatedAt = ? WHERE id = ?',
+        [itemsJson, finalSubtotal, finalTax, finalTotal, now, numericId]
+      );
+    } else {
+      result = _dbRun(
+        db,
+        'UPDATE orders SET items = ?, subtotal = ?, tax = ?, total = ?, updatedAt = ? WHERE CAST(id AS TEXT) = ?',
+        [itemsJson, finalSubtotal, finalTax, finalTotal, now, String(orderId)]
+      );
+    }
+
+    if (result.changes === 0) {
+      throw new AppError('Comanda nu a fost găsită.', 404, 'ORDER_NOT_FOUND');
+    }
+
+    let updatedRow;
+    if (!isNaN(numericId)) {
+      updatedRow = _dbGet(db, 'SELECT * FROM orders WHERE id = ?', [numericId]);
+    } else {
+      updatedRow = _dbGet(db, 'SELECT * FROM orders WHERE CAST(id AS TEXT) = ?', [String(orderId)]);
+    }
+
+    return _sqlRowToDoc(updatedRow);
+  } catch (sqlErr) {
+    if (sqlErr instanceof AppError) throw sqlErr;
+    throw new AppError(
+      'Eroare la adăugarea item-ului în comandă (SQL): ' + sqlErr.message,
+      500,
+      'DB_UPDATE_ERROR'
+    );
+  }
+}
+
+/**
+ * Găsește toate comenzile asociate unui ospătar (waiter).
+ * @param {string} waiterId - ID-ul ospătarului
+ * @param {Object} [options={}] - Opțiuni de căutare (sort, limit, skip, status, tenantId)
+ * @returns {Promise<Array>} Lista de comenzi
+ */
+async function findOrdersByWaiter(waiterId, options = {}) {
+  if (!waiterId) {
+    throw new AppError('ID-ul ospătarului este invalid.', 400, 'INVALID_WAITER_ID');
+  }
+
+  // Filtrare opțională după status
+  if (options.status) {
+    if (!isValidOrderStatus(options.status)) {
+      throw new AppError(
+        `Statusul "${options.status}" nu este valid. Statusuri permise: ${VALID_ORDER_STATUSES.join(', ')}.`,
+        400,
+        'INVALID_ORDER_STATUS'
+      );
+    }
+  }
+
+  const db = await getDb();
+
+  try {
+    let sql = 'SELECT * FROM orders WHERE waiterId = ?';
+    const params = [waiterId];
+
+    if (options.status) {
+      sql += ' AND status = ?';
+      params.push(options.status);
+    }
+
+    if (options.tenantId) {
+      sql += ' AND tenantId = ?';
+      params.push(options.tenantId);
+    }
+
+    // Sortare
+    if (options.sort && typeof options.sort === 'object') {
+      const sortKeys = Object.keys(options.sort);
+      if (sortKeys.length > 0) {
+        const sortClauses = sortKeys.map((k) => `${k} ${options.sort[k] === -1 ? 'DESC' : 'ASC'}`);
+        sql += ' ORDER BY ' + sortClauses.join(', ');
+      } else {
+        sql += ' ORDER BY createdAt DESC';
+      }
+    } else {
+      sql += ' ORDER BY createdAt DESC';
+    }
+
+    // Limit
+    if (options.limit && Number.isInteger(options.limit) && options.limit > 0) {
+      sql += ' LIMIT ?';
+      params.push(options.limit);
+    }
+
+    // Offset (skip)
+    if (options.skip && Number.isInteger(options.skip) && options.skip > 0) {
+      sql += ' OFFSET ?';
+      params.push(options.skip);
+    }
+
+    const rows = _dbAll(db, sql, params);
+    return rows.map((r) => _sqlRowToDoc(r));
+  } catch (sqlErr) {
+    throw new AppError(
+      'Eroare la căutarea comenzilor după ospătar (SQL): ' + sqlErr.message,
+      500,
+      'DB_QUERY_ERROR'
     );
   }
 }
@@ -1277,13 +1494,16 @@ module.exports = {
   findOrdersByTable,
   findOrdersByPaymentMethod,
   findOrdersByDateRange,
+  findOrdersByWaiter,
   updateOrder,
   deleteOrder,
 
   // Operații specifice
   updateOrderStatus,
   updateOrderItems,
-  updateOrderPayment,
+  updateOrderPaymentMethod,
+  updateOrderPayment, // alias (deprecated) pentru updateOrderPaymentMethod
+  addOrderItem,
   countOrdersByTenant,
   countOrdersByRestaurant,
   countOrdersByStatus,

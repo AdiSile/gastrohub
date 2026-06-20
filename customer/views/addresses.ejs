@@ -1,0 +1,605 @@
+<%
+  // ============================================================
+  // customer/views/addresses.ejs
+  // Pagină gestiune adrese client
+  // Folosește layout.ejs ca wrapper
+  // ============================================================
+
+  const user = locals.user || {};
+  const customer = locals.customer || user || {};
+%>
+
+<style>
+  /* ============================================================
+     ADDRESSES PAGE STYLES
+     ============================================================ */
+  .addresses-page .page-intro {
+    margin-bottom: 24px;
+  }
+
+  .addresses-page .page-intro h1 {
+    font-size: 24px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .addresses-page .page-intro h1 i {
+    color: var(--color-primary);
+  }
+
+  .addresses-page .page-intro p {
+    color: var(--color-text-muted);
+    margin-top: 4px;
+    font-size: 14px;
+  }
+
+  .addresses-actions-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .addresses-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+  }
+
+  .address-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    position: relative;
+    transition: all 0.2s ease;
+  }
+
+  .address-card.default {
+    border-color: var(--color-primary);
+    background: rgba(13, 110, 253, 0.02);
+  }
+
+  .address-card:hover {
+    box-shadow: var(--shadow-sm);
+  }
+
+  .address-card .address-type-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    margin-bottom: 12px;
+  }
+
+  .address-card .address-type-icon.home {
+    background: rgba(13, 110, 253, 0.1);
+    color: var(--color-primary);
+  }
+
+  .address-card .address-type-icon.work {
+    background: rgba(16, 185, 129, 0.1);
+    color: #059669;
+  }
+
+  .address-card .address-type-icon.other {
+    background: rgba(245, 158, 11, 0.1);
+    color: #d97706;
+  }
+
+  .address-card .address-label-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+
+  .address-card .address-label {
+    font-weight: 600;
+    font-size: 15px;
+  }
+
+  .address-card .default-badge {
+    font-size: 11px;
+    background: var(--color-primary);
+    color: #fff;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-weight: 600;
+  }
+
+  .address-card .address-text {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    line-height: 1.5;
+    margin-bottom: 12px;
+  }
+
+  .address-card .address-phone {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 4px;
+  }
+
+  .address-card .address-actions {
+    display: flex;
+    gap: 6px;
+    padding-top: 14px;
+    border-top: 1px solid var(--color-border);
+    flex-wrap: wrap;
+  }
+
+  /* Modal form */
+  .address-modal .modal {
+    max-width: 520px;
+  }
+
+  .empty-state-a {
+    text-align: center;
+    padding: 60px 20px;
+  }
+
+  .empty-state-a i {
+    font-size: 56px;
+    opacity: 0.2;
+    color: var(--color-text-muted);
+    margin-bottom: 16px;
+  }
+
+  .empty-state-a h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .empty-state-a p {
+    color: var(--color-text-muted);
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+
+  @media (max-width: 768px) {
+    .addresses-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .addresses-page .page-intro h1 {
+      font-size: 20px;
+    }
+  }
+</style>
+
+<!-- ============================================================
+     ADDRESSES PAGE
+     ============================================================ -->
+<div class="addresses-page" data-page="addresses" data-customer-id="<%= customer._id || '' %>" data-tenant-id="<%= customer.tenantId || '' %>">
+
+  <!-- Page intro -->
+  <div class="page-intro">
+    <h1>
+      <i class="fas fa-map-marker-alt"></i>
+      Adresele mele
+    </h1>
+    <p>Gestionează adresele de livrare și facturare.</p>
+  </div>
+
+  <!-- Actions bar -->
+  <div class="addresses-actions-bar">
+    <span style="font-size:14px;color:var(--color-text-muted);">
+      <span id="addressCount">0</span> adrese salvate
+    </span>
+    <button class="btn btn-primary" onclick="openAddressModal()">
+      <i class="fas fa-plus"></i> Adaugă adresă
+    </button>
+  </div>
+
+  <!-- Loading -->
+  <div id="addrLoading" class="spinner"></div>
+
+  <!-- Error -->
+  <div id="addrError" class="empty-state-a" style="display:none;">
+    <i class="fas fa-exclamation-triangle" style="color:var(--color-danger);opacity:0.3;"></i>
+    <h3>Eroare la încărcarea adreselor</h3>
+    <p id="addrErrorMsg"></p>
+    <button class="btn btn-primary" onclick="loadAddresses()">
+      <i class="fas fa-sync-alt"></i> Reîncearcă
+    </button>
+  </div>
+
+  <!-- Grid -->
+  <div class="addresses-grid" id="addrGrid" style="display:none;"></div>
+
+  <!-- Empty -->
+  <div id="addrEmpty" class="empty-state-a" style="display:none;">
+    <i class="fas fa-map-marker-alt"></i>
+    <h3>Nicio adresă salvată</h3>
+    <p>Adaugă o adresă de livrare pentru a plasa comenzi mai rapid.</p>
+    <button class="btn btn-primary" onclick="openAddressModal()">
+      <i class="fas fa-plus"></i> Adaugă prima adresă
+    </button>
+  </div>
+</div>
+
+<!-- ============================================================
+     ADDRESS MODAL
+     ============================================================ -->
+<div class="modal-overlay address-modal" id="addressModal" style="display:none;">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="addressModalTitle">
+        <i class="fas fa-map-marker-alt"></i> Adresă nouă
+      </h2>
+      <button class="modal-close" onclick="closeAddressModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="addressForm" novalidate>
+        <input type="hidden" id="addressId" value="" />
+
+        <div class="form-group">
+          <label for="addressLabel">Etichetă <span style="color:var(--color-danger);">*</span></label>
+          <input type="text" id="addressLabel" name="addressLabel" placeholder="Ex: Acasă, Birou, Părinți…" required maxlength="50" />
+          <div class="form-hint">Un nume scurt pentru această adresă</div>
+          <div class="form-error" id="addressLabelError"></div>
+        </div>
+
+        <div class="form-row-duo" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+          <div class="form-group">
+            <label for="addressType">Tip adresă</label>
+            <select id="addressType" name="addressType">
+              <option value="home">🏠 Acasă</option>
+              <option value="work">🏢 Birou</option>
+              <option value="other">📍 Alta</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="addressPhone">Telefon contact</label>
+            <input type="tel" id="addressPhone" name="addressPhone" placeholder="07xx xxx xxx" />
+            <div class="form-error" id="addressPhoneError"></div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="addressStreet">Stradă și număr <span style="color:var(--color-danger);">*</span></label>
+          <input type="text" id="addressStreet" name="addressStreet" placeholder="Strada, numărul, blocul…" required />
+          <div class="form-error" id="addressStreetError"></div>
+        </div>
+
+        <div class="form-row-duo" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+          <div class="form-group">
+            <label for="addressCity">Oraș <span style="color:var(--color-danger);">*</span></label>
+            <input type="text" id="addressCity" name="addressCity" placeholder="Orașul" required />
+            <div class="form-error" id="addressCityError"></div>
+          </div>
+          <div class="form-group">
+            <label for="addressZip">Cod poștal</label>
+            <input type="text" id="addressZip" name="addressZip" placeholder="Ex: 010011" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="addressNotes">Notițe <span style="font-weight:400;color:var(--color-text-muted);">(opțional)</span></label>
+          <textarea id="addressNotes" name="addressNotes" rows="2" placeholder="Ex: interfon 7, etaj 3, lângă parc…" maxlength="200"></textarea>
+          <div class="form-hint"><span id="addressNotesCount">0</span> / 200</div>
+        </div>
+
+        <div class="form-group">
+          <label class="terms-check" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--color-text);">
+            <input type="checkbox" id="addressIsDefault" name="addressIsDefault" style="width:auto;" />
+            Setează ca adresă implicită
+          </label>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer" style="padding-top:16px;border-top:1px solid var(--color-border);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-secondary" onclick="closeAddressModal()">Anulează</button>
+      <button class="btn btn-primary" id="saveAddressBtn" onclick="saveAddress()">
+        <i class="fas fa-save"></i> Salvează adresa
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCRIPTS
+     ============================================================ -->
+<script>
+  (function() {
+    'use strict';
+
+    var customerId = '<%= customer._id || "" %>';
+    var tenantId = '<%= customer.tenantId || "" %>';
+    var addresses = [];
+    var editingId = null;
+    var isSaving = false;
+
+    // ============================================================
+    // Load addresses
+    // ============================================================
+    async function loadAddresses() {
+      var loadingEl = document.getElementById('addrLoading');
+      var errorEl = document.getElementById('addrError');
+      var gridEl = document.getElementById('addrGrid');
+      var emptyEl = document.getElementById('addrEmpty');
+
+      if (loadingEl) loadingEl.style.display = 'block';
+      if (errorEl) errorEl.style.display = 'none';
+      if (gridEl) gridEl.style.display = 'none';
+      if (emptyEl) emptyEl.style.display = 'none';
+
+      try {
+        var data = await apiFetch('/api/customers/' + customerId + '/addresses?tenantId=' + tenantId);
+        if (data && data.success && data.data) {
+          addresses = data.data.addresses || data.data || [];
+        } else {
+          addresses = [];
+        }
+      } catch (err) {
+        addresses = [];
+      }
+
+      if (loadingEl) loadingEl.style.display = 'none';
+
+      document.getElementById('addressCount').textContent = addresses.length;
+
+      if (!addresses || addresses.length === 0) {
+        if (emptyEl) emptyEl.style.display = 'block';
+        return;
+      }
+
+      renderAddresses();
+    }
+
+    // ============================================================
+    // Render
+    // ============================================================
+    function renderAddresses() {
+      var gridEl = document.getElementById('addrGrid');
+      var emptyEl = document.getElementById('addrEmpty');
+      if (!gridEl) return;
+
+      emptyEl.style.display = 'none';
+      gridEl.style.display = 'grid';
+      gridEl.innerHTML = '';
+
+      addresses.forEach(function(addr) {
+        var card = document.createElement('div');
+        card.className = 'address-card' + (addr.isDefault ? ' default' : '');
+
+        var type = addr.type || 'home';
+        var typeIcons = { 'home': 'fa-home', 'work': 'fa-briefcase', 'other': 'fa-map-pin' };
+        var typeLabels = { 'home': 'Acasă', 'work': 'Birou', 'other': 'Altă adresă' };
+
+        var street = addr.street || addr.strada || '';
+        var city = addr.city || addr.oras || '';
+        var zip = addr.zip || addr.codPostal || '';
+        var phone = addr.phone || addr.telefon || '';
+        var notes = addr.notes || addr.notite || '';
+        var label = addr.label || addr.eticheta || typeLabels[type] || 'Adresă';
+
+        var fullAddress = [street, city, zip].filter(Boolean).join(', ');
+
+        card.innerHTML =
+          '<div class="address-type-icon ' + type + '">' +
+            '<i class="fas ' + (typeIcons[type] || 'fa-map-marker-alt') + '"></i>' +
+          '</div>' +
+          '<div class="address-label-row">' +
+            '<span class="address-label">' + escapeHtml(label) + '</span>' +
+            (addr.isDefault ? '<span class="default-badge">Implicită</span>' : '') +
+          '</div>' +
+          '<div class="address-text">' + escapeHtml(fullAddress || 'Adresă incompletă') + '</div>' +
+          (notes ? '<div style="font-size:12px;color:var(--color-text-muted);margin-bottom:4px;"><i class="fas fa-info-circle"></i> ' + escapeHtml(notes) + '</div>' : '') +
+          (phone ? '<div class="address-phone"><i class="fas fa-phone"></i> ' + escapeHtml(phone) + '</div>' : '') +
+          '<div class="address-actions">' +
+            '<button class="btn btn-sm btn-secondary" onclick="editAddress(\'' + addr._id + '\')">' +
+              '<i class="fas fa-edit"></i> Editează' +
+            '</button>' +
+            (!addr.isDefault ?
+              '<button class="btn btn-sm btn-secondary" onclick="setDefaultAddress(\'' + addr._id + '\')">' +
+                '<i class="fas fa-check"></i> Implicită' +
+              '</button>' : '') +
+            '<button class="btn btn-sm btn-danger" onclick="deleteAddress(\'' + addr._id + '\')">' +
+              '<i class="fas fa-trash-alt"></i>' +
+            '</button>' +
+          '</div>';
+
+        gridEl.appendChild(card);
+      });
+    }
+
+    // ============================================================
+    // Modal
+    // ============================================================
+    window.openAddressModal = function() {
+      editingId = null;
+      document.getElementById('addressModalTitle').innerHTML = '<i class="fas fa-map-marker-alt"></i> Adresă nouă';
+      document.getElementById('addressForm').reset();
+      document.getElementById('addressId').value = '';
+      document.getElementById('addressModal').style.display = 'flex';
+      clearModalErrors();
+    };
+
+    window.closeAddressModal = function() {
+      document.getElementById('addressModal').style.display = 'none';
+      editingId = null;
+      clearModalErrors();
+    };
+
+    window.editAddress = function(id) {
+      var addr = addresses.find(function(a) { return a._id === id; });
+      if (!addr) return;
+
+      editingId = id;
+      document.getElementById('addressModalTitle').innerHTML = '<i class="fas fa-edit"></i> Editează adresa';
+      document.getElementById('addressId').value = addr._id || '';
+      document.getElementById('addressLabel').value = addr.label || addr.eticheta || '';
+      document.getElementById('addressType').value = addr.type || 'home';
+      document.getElementById('addressPhone').value = addr.phone || addr.telefon || '';
+      document.getElementById('addressStreet').value = addr.street || addr.strada || '';
+      document.getElementById('addressCity').value = addr.city || addr.oras || '';
+      document.getElementById('addressZip').value = addr.zip || addr.codPostal || '';
+      document.getElementById('addressNotes').value = addr.notes || addr.notite || '';
+      document.getElementById('addressIsDefault').checked = !!addr.isDefault;
+      document.getElementById('addressModal').style.display = 'flex';
+      clearModalErrors();
+    };
+
+    // Close modal on overlay click
+    document.getElementById('addressModal').addEventListener('click', function(e) {
+      if (e.target === this) closeAddressModal();
+    });
+
+    // Notes counter
+    document.getElementById('addressNotes').addEventListener('input', function() {
+      document.getElementById('addressNotesCount').textContent = this.value.length;
+    });
+
+    // ============================================================
+    // Save
+    // ============================================================
+    window.saveAddress = async function() {
+      if (isSaving) return;
+
+      var errors = [];
+      var label = document.getElementById('addressLabel').value.trim();
+      var street = document.getElementById('addressStreet').value.trim();
+      var city = document.getElementById('addressCity').value.trim();
+
+      clearModalErrors();
+
+      if (!label) { errors.push('Eticheta este obligatorie.'); document.getElementById('addressLabelError').textContent = 'Câmp obligatoriu'; }
+      if (!street) { errors.push('Strada este obligatorie.'); document.getElementById('addressStreetError').textContent = 'Câmp obligatoriu'; }
+      if (!city) { errors.push('Orașul este obligatoriu.'); document.getElementById('addressCityError').textContent = 'Câmp obligatoriu'; }
+
+      var phone = document.getElementById('addressPhone').value.trim();
+      if (phone && !/^(\+4|004)?0?7\d{8}$/.test(phone.replace(/\s/g, ''))) {
+        errors.push('Telefon invalid.'); document.getElementById('addressPhoneError').textContent = 'Format invalid';
+      }
+
+      if (errors.length > 0) {
+        errors.forEach(function(err) { showToast(err, 'error'); });
+        return;
+      }
+
+      isSaving = true;
+      var btn = document.getElementById('saveAddressBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Se salvează…';
+
+      var payload = {
+        tenantId: tenantId,
+        label: label,
+        type: document.getElementById('addressType').value,
+        phone: phone || undefined,
+        street: street,
+        city: city,
+        zip: document.getElementById('addressZip').value.trim() || undefined,
+        notes: document.getElementById('addressNotes').value.trim() || undefined,
+        isDefault: document.getElementById('addressIsDefault').checked,
+      };
+
+      var url = editingId
+        ? '/api/customers/' + customerId + '/addresses/' + editingId
+        : '/api/customers/' + customerId + '/addresses';
+      var method = editingId ? 'PUT' : 'POST';
+
+      try {
+        var data = await apiFetch(url, {
+          method: method,
+          body: JSON.stringify(payload)
+        });
+
+        if (data && data.success) {
+          showToast(editingId ? 'Adresa a fost actualizată.' : 'Adresa a fost adăugată.', 'success');
+          closeAddressModal();
+          loadAddresses();
+        }
+      } catch (err) {
+        showToast('Eroare la salvarea adresei.', 'error');
+      } finally {
+        isSaving = false;
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save"></i> Salvează adresa';
+      }
+    };
+
+    // ============================================================
+    // Set default
+    // ============================================================
+    window.setDefaultAddress = async function(id) {
+      try {
+        var data = await apiFetch('/api/customers/' + customerId + '/addresses/' + id + '/default', {
+          method: 'PUT',
+          body: JSON.stringify({ tenantId: tenantId })
+        });
+
+        if (data && data.success) {
+          showToast('Adresa implicită a fost setată.', 'success');
+          loadAddresses();
+        }
+      } catch (err) {
+        showToast('Eroare la setarea adresei implicite.', 'error');
+      }
+    };
+
+    // ============================================================
+    // Delete
+    // ============================================================
+    window.deleteAddress = async function(id) {
+      if (!confirm('Ești sigur că vrei să ștergi această adresă?')) return;
+
+      try {
+        var data = await apiFetch('/api/customers/' + customerId + '/addresses/' + id, {
+          method: 'DELETE',
+          body: JSON.stringify({ tenantId: tenantId })
+        });
+
+        if (data && data.success) {
+          showToast('Adresa a fost ștearsă.', 'success');
+          loadAddresses();
+        }
+      } catch (err) {
+        showToast('Eroare la ștergerea adresei.', 'error');
+      }
+    };
+
+    // ============================================================
+    // Helpers
+    // ============================================================
+    function clearModalErrors() {
+      ['addressLabelError', 'addressStreetError', 'addressCityError', 'addressPhoneError'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = '';
+      });
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      var div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // ============================================================
+    // Init
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', function() {
+      loadAddresses();
+    });
+
+    window.loadAddresses = loadAddresses;
+
+  })();
+</script>

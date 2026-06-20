@@ -1,0 +1,455 @@
+<%
+  // ============================================================
+  // customer/views/favorites.ejs
+  // Pagină favorite — preparate și restaurante salvate
+  // Folosește layout.ejs ca wrapper
+  // ============================================================
+
+  const user = locals.user || {};
+  const customer = locals.customer || user || {};
+%>
+
+<style>
+  /* ============================================================
+     FAVORITES PAGE STYLES
+     ============================================================ */
+  .favorites-page .page-intro {
+    margin-bottom: 24px;
+  }
+
+  .favorites-page .page-intro h1 {
+    font-size: 24px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .favorites-page .page-intro h1 i {
+    color: var(--color-danger);
+  }
+
+  .favorites-page .page-intro p {
+    color: var(--color-text-muted);
+    margin-top: 4px;
+    font-size: 14px;
+  }
+
+  .favorites-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 24px;
+    border-bottom: 2px solid var(--color-border);
+  }
+
+  .favorites-tab {
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: var(--color-text-muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s ease;
+    font-family: var(--font-family);
+  }
+
+  .favorites-tab:hover {
+    color: var(--color-text);
+  }
+
+  .favorites-tab.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+  }
+
+  .favorites-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+  }
+
+  .favorite-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    transition: all 0.2s ease;
+    position: relative;
+  }
+
+  .favorite-card:hover {
+    box-shadow: var(--shadow-sm);
+    border-color: var(--color-primary-light);
+  }
+
+  .favorite-card .fav-image {
+    height: 140px;
+    background: linear-gradient(135deg, var(--color-primary-light), var(--color-bg));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    color: rgba(255,255,255,0.6);
+    position: relative;
+  }
+
+  .favorite-card .fav-image.restaurant {
+    background: linear-gradient(135deg, #10b981, #059669);
+  }
+
+  .favorite-card .fav-image i {
+    opacity: 0.6;
+  }
+
+  .favorite-card .fav-heart {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.9);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-danger);
+    font-size: 16px;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    z-index: 2;
+  }
+
+  .favorite-card .fav-heart:hover {
+    transform: scale(1.1);
+    background: #fff;
+  }
+
+  .favorite-card .fav-info {
+    padding: 14px 16px;
+  }
+
+  .favorite-card .fav-name {
+    font-weight: 600;
+    font-size: 15px;
+    margin-bottom: 4px;
+  }
+
+  .favorite-card .fav-meta {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .favorite-card .fav-meta .fav-price {
+    font-weight: 700;
+    color: var(--color-primary);
+    font-size: 14px;
+  }
+
+  .favorite-card .fav-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .empty-state-fav {
+    text-align: center;
+    padding: 60px 20px;
+  }
+
+  .empty-state-fav i {
+    font-size: 56px;
+    opacity: 0.2;
+    color: var(--color-text-muted);
+    margin-bottom: 16px;
+  }
+
+  .empty-state-fav h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .empty-state-fav p {
+    color: var(--color-text-muted);
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+
+  @media (max-width: 768px) {
+    .favorites-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .favorites-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .favorites-page .page-intro h1 {
+      font-size: 20px;
+    }
+
+    .favorites-tab {
+      padding: 8px 16px;
+      font-size: 13px;
+    }
+  }
+</style>
+
+<!-- ============================================================
+     FAVORITES PAGE
+     ============================================================ -->
+<div class="favorites-page" data-page="favorites" data-customer-id="<%= customer._id || '' %>" data-tenant-id="<%= customer.tenantId || '' %>">
+
+  <!-- Page intro -->
+  <div class="page-intro">
+    <h1>
+      <i class="fas fa-heart"></i>
+      Favorite
+    </h1>
+    <p>Preparatele și restaurantele tale preferate, într-un singur loc.</p>
+  </div>
+
+  <!-- Tabs -->
+  <div class="favorites-tabs">
+    <button class="favorites-tab active" data-tab="items" onclick="switchTab('items', this)">
+      <i class="fas fa-utensils"></i> Preparate
+    </button>
+    <button class="favorites-tab" data-tab="restaurants" onclick="switchTab('restaurants', this)">
+      <i class="fas fa-store"></i> Restaurante
+    </button>
+  </div>
+
+  <!-- Loading -->
+  <div id="favLoading" class="spinner"></div>
+
+  <!-- Error -->
+  <div id="favError" class="empty-state-fav" style="display:none;">
+    <i class="fas fa-exclamation-triangle" style="color:var(--color-danger);opacity:0.3;"></i>
+    <h3>Eroare la încărcarea favoritelor</h3>
+    <p id="favErrorMsg"></p>
+    <button class="btn btn-primary" onclick="loadFavorites()">
+      <i class="fas fa-sync-alt"></i> Reîncearcă
+    </button>
+  </div>
+
+  <!-- Favorites grid -->
+  <div class="favorites-grid" id="favGrid" style="display:none;"></div>
+
+  <!-- Empty -->
+  <div id="favEmpty" class="empty-state-fav" style="display:none;">
+    <i class="fas fa-heart"></i>
+    <h3>Niciun favorit</h3>
+    <p id="favEmptyMsg">Nu ai adăugat încă niciun favorit.</p>
+    <a href="/customer/restaurants" class="btn btn-primary">
+      <i class="fas fa-store"></i> Descoperă restaurante
+    </a>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCRIPTS
+     ============================================================ -->
+<script>
+  (function() {
+    'use strict';
+
+    var customerId = '<%= customer._id || "" %>';
+    var tenantId = '<%= customer.tenantId || "" %>';
+    var currentTab = 'items';
+    var allFavorites = { items: [], restaurants: [] };
+
+    // ============================================================
+    // Load favorites
+    // ============================================================
+    async function loadFavorites() {
+      var loadingEl = document.getElementById('favLoading');
+      var errorEl = document.getElementById('favError');
+      var gridEl = document.getElementById('favGrid');
+      var emptyEl = document.getElementById('favEmpty');
+
+      if (loadingEl) loadingEl.style.display = 'block';
+      if (errorEl) errorEl.style.display = 'none';
+      if (gridEl) gridEl.style.display = 'none';
+      if (emptyEl) emptyEl.style.display = 'none';
+
+      try {
+        var data = await apiFetch('/api/customers/' + customerId + '/favorites?tenantId=' + tenantId);
+        if (data && data.success && data.data) {
+          allFavorites.items = data.data.items || data.data.favoriteItems || [];
+          allFavorites.restaurants = data.data.restaurants || data.data.favoriteRestaurants || [];
+        } else {
+          allFavorites = { items: [], restaurants: [] };
+        }
+      } catch (err) {
+        allFavorites = { items: [], restaurants: [] };
+      }
+
+      if (loadingEl) loadingEl.style.display = 'none';
+      renderCurrentTab();
+    }
+
+    // ============================================================
+    // Switch tab
+    // ============================================================
+    window.switchTab = function(tab, btn) {
+      currentTab = tab;
+      document.querySelectorAll('.favorites-tab').forEach(function(t) { t.classList.remove('active'); });
+      if (btn) btn.classList.add('active');
+      renderCurrentTab();
+    };
+
+    // ============================================================
+    // Render
+    // ============================================================
+    function renderCurrentTab() {
+      var gridEl = document.getElementById('favGrid');
+      var emptyEl = document.getElementById('favEmpty');
+
+      var list = currentTab === 'items' ? allFavorites.items : allFavorites.restaurants;
+
+      if (!list || list.length === 0) {
+        if (gridEl) gridEl.style.display = 'none';
+        if (emptyEl) {
+          emptyEl.style.display = 'block';
+          document.getElementById('favEmptyMsg').textContent = currentTab === 'items'
+            ? 'Nu ai preparate favorite. Explorează meniurile și salvează preparatele preferate.'
+            : 'Nu ai restaurante favorite. Descoperă restaurantele și adaugă-le la favorite.';
+        }
+        return;
+      }
+
+      if (emptyEl) emptyEl.style.display = 'none';
+      if (gridEl) {
+        gridEl.style.display = 'grid';
+        gridEl.innerHTML = '';
+
+        list.forEach(function(item) {
+          var card = document.createElement('div');
+          card.className = 'favorite-card';
+
+          if (currentTab === 'items') {
+            var name = item.nume || item.name || 'Preparat';
+            var desc = item.descriere || item.description || '';
+            var price = item.pret || item.price || 0;
+            var restaurantName = (item.restaurantId && item.restaurantId.name) ? item.restaurantId.name : (item.restaurantName || '');
+            var itemId = item._id || item.menuItemId || '';
+
+            card.innerHTML =
+              '<div class="fav-image">' +
+                '<i class="fas fa-utensils"></i>' +
+                '<button class="fav-heart" onclick="event.stopPropagation(); removeFavorite(\'' + itemId + '\', \'item\')" title="Elimină de la favorite">' +
+                  '<i class="fas fa-heart"></i>' +
+                '</button>' +
+              '</div>' +
+              '<div class="fav-info">' +
+                '<div class="fav-name">' + escapeHtml(name) + '</div>' +
+                '<div class="fav-meta">' +
+                  '<span class="fav-price">' + formatCurrency(price) + '</span>' +
+                  (restaurantName ? '<span><i class="fas fa-store"></i> ' + escapeHtml(restaurantName) + '</span>' : '') +
+                '</div>' +
+                (desc ? '<div style="font-size:12px;color:var(--color-text-muted);margin-top:6px;">' + escapeHtml(desc.substring(0, 80)) + (desc.length > 80 ? '…' : '') + '</div>' : '') +
+                '<div class="fav-actions">' +
+                  '<button class="btn btn-sm btn-primary" onclick="orderItem(\'' + itemId + '\')">' +
+                    '<i class="fas fa-plus"></i> Comandă' +
+                  '</button>' +
+                '</div>' +
+              '</div>';
+          } else {
+            var rName = item.name || item.nume || 'Restaurant';
+            var rDesc = item.description || item.descriere || '';
+            var rId = item._id || item.restaurantId || '';
+            var rAddress = item.address || item.adresa || '';
+
+            card.innerHTML =
+              '<div class="fav-image restaurant">' +
+                '<i class="fas fa-store"></i>' +
+                '<button class="fav-heart" onclick="event.stopPropagation(); removeFavorite(\'' + rId + '\', \'restaurant\')" title="Elimină de la favorite">' +
+                  '<i class="fas fa-heart"></i>' +
+                '</button>' +
+              '</div>' +
+              '<div class="fav-info">' +
+                '<div class="fav-name">' + escapeHtml(rName) + '</div>' +
+                '<div class="fav-meta">' +
+                  (rAddress ? '<span><i class="fas fa-map-marker-alt"></i> ' + escapeHtml(rAddress) + '</span>' : '') +
+                '</div>' +
+                (rDesc ? '<div style="font-size:12px;color:var(--color-text-muted);margin-top:6px;">' + escapeHtml(rDesc.substring(0, 80)) + (rDesc.length > 80 ? '…' : '') + '</div>' : '') +
+                '<div class="fav-actions">' +
+                  '<a href="/customer/orders/new" class="btn btn-sm btn-primary">' +
+                    '<i class="fas fa-plus"></i> Comandă' +
+                  '</a>' +
+                  '<a href="/customer/reservations/new" class="btn btn-sm btn-secondary">' +
+                    '<i class="fas fa-calendar-plus"></i> Rezervă' +
+                  '</a>' +
+                '</div>' +
+              '</div>';
+          }
+
+          gridEl.appendChild(card);
+        });
+      }
+    }
+
+    // ============================================================
+    // Remove favorite
+    // ============================================================
+    window.removeFavorite = async function(id, type) {
+      try {
+        var data = await apiFetch('/api/customers/' + customerId + '/favorites/remove', {
+          method: 'POST',
+          body: JSON.stringify({
+            tenantId: tenantId,
+            itemId: type === 'item' ? id : undefined,
+            restaurantId: type === 'restaurant' ? id : undefined,
+          })
+        });
+
+        if (data && data.success) {
+          showToast('Eliminat de la favorite.', 'success');
+          loadFavorites();
+        }
+      } catch (err) {
+        showToast('Eroare la eliminarea din favorite.', 'error');
+      }
+    };
+
+    // ============================================================
+    // Order item
+    // ============================================================
+    window.orderItem = function(itemId) {
+      window.location.href = '/customer/orders/new?item=' + itemId;
+    };
+
+    // ============================================================
+    // Helpers
+    // ============================================================
+    function escapeHtml(text) {
+      if (!text) return '';
+      var div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // ============================================================
+    // Init
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', function() {
+      loadFavorites();
+    });
+
+    window.loadFavorites = loadFavorites;
+
+  })();
+</script>

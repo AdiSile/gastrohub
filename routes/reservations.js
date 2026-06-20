@@ -844,7 +844,7 @@ router.patch(
 /**
  * @route   DELETE /api/reservations/:id
  * @desc    Ștergere rezervare
- * @access  Privat (autentificare necesară, admin)
+ * @access  Privat (autentificare necesară, super_admin, owner)
  *
  * Răspuns (200):
  *   { success: true, message: 'Rezervarea a fost ștearsă.' }
@@ -852,7 +852,7 @@ router.patch(
 router.delete(
   '/:id',
   authenticate,
-  authorize('admin'),
+  authorize('super_admin', 'owner'),
   [
     param('id')
       .isString()

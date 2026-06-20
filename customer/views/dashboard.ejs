@@ -1,7 +1,7 @@
 <%
   // ============================================================
   // customer/views/dashboard.ejs
-  // Dashboard minimalist client
+  // Dashboard client — Purple Glassmorphism
   // Folosește layout.ejs ca wrapper
   // ============================================================
 
@@ -10,16 +10,93 @@
   const activeReservations = locals.activeReservations || [];
   const loyaltyPoints = locals.loyaltyPoints || 0;
   const pendingOrdersCount = locals.pendingOrdersCount || 0;
+  const fetchErrors = locals.fetchErrors || [];
+
+  // Normalizează date utilizator pentru integrare robustă
+  const displayName = customer.nume || customer.name || customer.displayName || '';
+  const displayEmail = customer.email || customer.contactEmail || '';
+  const displayPhone = customer.telefon || customer.phone || customer.contactPhone || '';
+  const avatarInitial = displayName ? displayName.charAt(0).toUpperCase() : '👤';
+  const customerSince = customer.createdAt || customer.joinedAt || customer.dataInregistrare || '';
+  const loyaltyTier = customer.loyaltyTier || customer.nivelLoialitate || '';
+  const tierLabels = {
+    'bronze': '🥉 Bronze',
+    'silver': '🥈 Silver',
+    'gold': '🥇 Gold',
+    'platinum': '💎 Platinum',
+    'diamond': '👑 Diamond',
+    'bronz': '🥉 Bronz',
+    'argint': '🥈 Argint',
+    'aur': '🥇 Aur',
+    'platina': '💎 Platină',
+    'diamant': '👑 Diamant',
+  };
+  const loyaltyTierLabel = tierLabels[loyaltyTier] || loyaltyTier || '';
 %>
 
 <style>
   /* ============================================================
-     DASHBOARD CLIENT — Minimalist
+     DASHBOARD CLIENT — Purple Glassmorphism
+     Variabile custom pentru glassmorphism mov
      ============================================================ */
+  :root {
+    --dash-purple-50: #f5f3ff;
+    --dash-purple-100: #ede9fe;
+    --dash-purple-200: #ddd6fe;
+    --dash-purple-300: #c4b5fd;
+    --dash-purple-400: #a78bfa;
+    --dash-purple-500: #8b5cf6;
+    --dash-purple-600: #7c3aed;
+    --dash-purple-700: #6d28d9;
+    --dash-purple-800: #5b21b6;
+    --dash-purple-900: #4c1d95;
+    --glass-bg: rgba(255, 255, 255, 0.55);
+    --glass-border: rgba(255, 255, 255, 0.65);
+    --glass-shadow: 0 8px 32px rgba(124, 58, 237, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+    --glass-shadow-hover: 0 16px 40px rgba(124, 58, 237, 0.14), 0 4px 12px rgba(0, 0, 0, 0.06);
+    --glass-blur: 14px;
+  }
 
-  /* Welcome banner */
+  /* Container principal cu fundal mov subtil */
+  .customer-dashboard-page {
+    position: relative;
+  }
+
+  /* Fundal decorativ — cercuri mov difuze */
+  .customer-dashboard-page::before {
+    content: '';
+    position: fixed;
+    top: -180px;
+    right: -120px;
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.10) 0%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .customer-dashboard-page::after {
+    content: '';
+    position: fixed;
+    bottom: -140px;
+    left: -100px;
+    width: 440px;
+    height: 440px;
+    background: radial-gradient(circle, rgba(124, 58, 237, 0.08) 0%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ============================================================
+     WELCOME BANNER — Glassmorphism mov
+     ============================================================ */
   .welcome-banner {
-    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+    background: linear-gradient(135deg, var(--dash-purple-700), var(--dash-purple-500));
+    background: linear-gradient(135deg, rgba(109, 40, 217, 0.92), rgba(139, 92, 246, 0.88));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     color: #fff;
     border-radius: var(--radius-lg);
     padding: 28px 32px;
@@ -29,16 +106,31 @@
     gap: 20px;
     position: relative;
     overflow: hidden;
+    z-index: 1;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 8px 32px rgba(109, 40, 217, 0.25), 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+
+  .welcome-banner::before {
+    content: '';
+    position: absolute;
+    top: -30%;
+    right: -8%;
+    width: 260px;
+    height: 260px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.16) 0%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
   }
 
   .welcome-banner::after {
     content: '';
     position: absolute;
-    top: -60px;
-    right: -40px;
-    width: 200px;
-    height: 200px;
-    background: rgba(255,255,255,0.06);
+    bottom: -40%;
+    left: 15%;
+    width: 180px;
+    height: 180px;
+    background: radial-gradient(circle, rgba(196, 181, 253, 0.22) 0%, transparent 70%);
     border-radius: 50%;
     pointer-events: none;
   }
@@ -47,7 +139,8 @@
     width: 56px;
     height: 56px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.2);
+    background: rgba(255, 255, 255, 0.22);
+    border: 2px solid rgba(255, 255, 255, 0.35);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -55,6 +148,9 @@
     font-weight: 700;
     flex-shrink: 0;
     z-index: 1;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   }
 
   .welcome-banner .welcome-text {
@@ -72,11 +168,12 @@
 
   .welcome-banner .welcome-text h1 i {
     font-size: 20px;
+    opacity: 0.9;
   }
 
   .welcome-banner .welcome-text .welcome-sub {
     font-size: 14px;
-    opacity: 0.85;
+    opacity: 0.88;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -88,30 +185,92 @@
     align-items: center;
     gap: 4px;
     font-size: 13px;
-    opacity: 0.75;
+    opacity: 0.78;
   }
 
-  /* Stat cards */
+  /* Badge loialitate în banner */
+  .welcome-tier-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    padding: 3px 10px;
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  /* Fetch errors banner */
+  .dash-errors-banner {
+    background: rgba(255, 193, 7, 0.08);
+    background: rgba(255, 255, 255, 0.48);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 193, 7, 0.28);
+    border-radius: var(--radius-md);
+    padding: 10px 16px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: #856404;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 1;
+    position: relative;
+  }
+
+  .dash-errors-banner i {
+    color: #d97706;
+    flex-shrink: 0;
+  }
+
+  /* ============================================================
+     STAT CARDS — Glassmorphism
+     ============================================================ */
   .dash-stats-row {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 16px;
     margin-bottom: 24px;
+    z-index: 1;
+    position: relative;
   }
 
   .dash-stat {
-    background: var(--color-surface);
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
     border-radius: var(--radius-md);
-    padding: 20px;
-    box-shadow: var(--shadow-sm);
-    border: 1px solid var(--color-border);
-    transition: all var(--transition);
+    padding: 22px 20px;
+    box-shadow: var(--glass-shadow);
+    border: 1px solid var(--glass-border);
+    transition: all 0.3s ease;
     text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Efect de lumină pe fiecare stat card */
+  .dash-stat::after {
+    content: '';
+    position: absolute;
+    top: -30px;
+    right: -30px;
+    width: 90px;
+    height: 90px;
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.07) 0%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
   }
 
   .dash-stat:hover {
-    box-shadow: var(--shadow-md);
-    transform: translateY(-2px);
+    box-shadow: var(--glass-shadow-hover);
+    transform: translateY(-3px);
+    border-color: rgba(139, 92, 246, 0.35);
   }
 
   .dash-stat .stat-icon-circle {
@@ -123,18 +282,38 @@
     justify-content: center;
     margin: 0 auto 12px;
     font-size: 20px;
+    position: relative;
+    z-index: 1;
   }
 
-  .dash-stat .stat-icon-circle.orders   { background: #e8f0fe; color: var(--color-primary); }
-  .dash-stat .stat-icon-circle.reserve  { background: #e6f4ea; color: var(--color-success); }
-  .dash-stat .stat-icon-circle.points   { background: #fff3cd; color: #664d03; }
-  .dash-stat .stat-icon-circle.active   { background: #cff4fc; color: #055160; }
+  .dash-stat .stat-icon-circle.orders   {
+    background: rgba(139, 92, 246, 0.12);
+    color: var(--dash-purple-600);
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
+  }
+  .dash-stat .stat-icon-circle.reserve  {
+    background: rgba(16, 185, 129, 0.12);
+    color: #059669;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.12);
+  }
+  .dash-stat .stat-icon-circle.points   {
+    background: rgba(245, 158, 11, 0.12);
+    color: #d97706;
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.14);
+  }
+  .dash-stat .stat-icon-circle.active   {
+    background: rgba(6, 182, 212, 0.12);
+    color: #0891b2;
+    box-shadow: 0 4px 12px rgba(6, 182, 212, 0.12);
+  }
 
   .dash-stat .stat-value {
-    font-size: 26px;
+    font-size: 28px;
     font-weight: 700;
     color: var(--color-text);
     line-height: 1.2;
+    position: relative;
+    z-index: 1;
   }
 
   .dash-stat .stat-label {
@@ -144,23 +323,31 @@
     text-transform: uppercase;
     letter-spacing: 0.4px;
     margin-top: 2px;
+    position: relative;
+    z-index: 1;
   }
 
   .dash-stat .stat-hint {
     font-size: 11px;
     color: var(--color-text-muted);
     margin-top: 4px;
+    position: relative;
+    z-index: 1;
   }
 
-  /* Quick links */
+  /* ============================================================
+     QUICK LINKS — Glassmorphism
+     ============================================================ */
   .quick-links-section {
     margin-bottom: 24px;
+    z-index: 1;
+    position: relative;
   }
 
   .quick-links-section h2 {
     font-size: 16px;
     font-weight: 600;
-    margin-bottom: 12px;
+    margin-bottom: 14px;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -168,7 +355,7 @@
   }
 
   .quick-links-section h2 i {
-    color: var(--color-primary);
+    color: var(--dash-purple-600);
   }
 
   .quick-links-grid {
@@ -183,41 +370,45 @@
     align-items: center;
     justify-content: center;
     gap: 10px;
-    padding: 20px 16px;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    padding: 22px 16px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
     text-decoration: none;
     color: var(--color-text);
-    transition: all var(--transition);
+    transition: all 0.3s ease;
     cursor: pointer;
+    box-shadow: var(--glass-shadow);
   }
 
   .quick-link-card:hover {
-    border-color: var(--color-primary);
-    background: rgba(13, 110, 253, 0.03);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-sm);
+    border-color: rgba(139, 92, 246, 0.4);
+    background: rgba(245, 243, 255, 0.65);
+    transform: translateY(-3px);
+    box-shadow: var(--glass-shadow-hover);
     text-decoration: none;
     color: var(--color-text);
   }
 
   .quick-link-card .ql-icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 12px;
-    background: var(--color-bg);
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    background: rgba(139, 92, 246, 0.08);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
-    color: var(--color-primary);
-    transition: all var(--transition);
+    font-size: 19px;
+    color: var(--dash-purple-600);
+    transition: all 0.3s ease;
   }
 
   .quick-link-card:hover .ql-icon {
-    background: var(--color-primary);
+    background: var(--dash-purple-600);
     color: #fff;
+    box-shadow: 0 4px 16px rgba(124, 58, 237, 0.3);
   }
 
   .quick-link-card .ql-label {
@@ -232,15 +423,65 @@
     text-align: center;
   }
 
-  /* Two-column layout for lists */
+  /* ============================================================
+     TWO-COLUMN LAYOUT — Glassmorphism
+     ============================================================ */
   .dash-columns {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 20px;
     margin-bottom: 24px;
+    z-index: 1;
+    position: relative;
   }
 
-  /* Mini list */
+  /* Override card style for glassmorphism in dashboard */
+  .dash-columns .card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  .dash-columns .card-header {
+    background: rgba(139, 92, 246, 0.04);
+    border-bottom: 1px solid rgba(139, 92, 246, 0.1);
+    margin: 0;
+    padding: 16px 24px;
+    font-weight: 600;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+  }
+
+  .dash-columns .card-body {
+    padding: 8px 20px 16px;
+  }
+
+  /* Link "Vezi toate" */
+  .dash-columns .card-header .btn-sm {
+    padding: 5px 12px;
+    font-size: 11px;
+    border-radius: 20px;
+    background: rgba(139, 92, 246, 0.06);
+    border: 1px solid rgba(139, 92, 246, 0.18);
+    color: var(--dash-purple-600);
+    transition: all 0.3s ease;
+  }
+
+  .dash-columns .card-header .btn-sm:hover {
+    background: var(--dash-purple-600);
+    color: #fff;
+    border-color: var(--dash-purple-600);
+    box-shadow: 0 4px 14px rgba(124, 58, 237, 0.25);
+  }
+
+  /* ============================================================
+     MINI LIST — Glassmorphism
+     ============================================================ */
   .dash-mini-list {
     list-style: none;
     margin: 0;
@@ -251,9 +492,13 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--color-border);
-    transition: background var(--transition);
+    padding: 13px 4px;
+    border-bottom: 1px solid rgba(139, 92, 246, 0.07);
+    transition: all 0.2s ease;
+    border-radius: 8px;
+    margin: 0 -4px;
+    padding-left: 8px;
+    padding-right: 8px;
   }
 
   .dash-mini-list .dash-item:last-child {
@@ -261,7 +506,7 @@
   }
 
   .dash-mini-list .dash-item:hover {
-    background: rgba(0,0,0,0.015);
+    background: rgba(139, 92, 246, 0.04);
   }
 
   .dash-mini-list .dash-item .item-dot {
@@ -269,14 +514,33 @@
     height: 10px;
     border-radius: 50%;
     flex-shrink: 0;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.10);
   }
 
-  .dash-mini-list .dash-item .item-dot.active   { background: var(--color-primary); }
-  .dash-mini-list .dash-item .item-dot.success  { background: var(--color-success); }
-  .dash-mini-list .dash-item .item-dot.warning  { background: var(--color-warning); }
-  .dash-mini-list .dash-item .item-dot.pending  { background: #f5a623; }
-  .dash-mini-list .dash-item .item-dot.info     { background: var(--color-info); }
-  .dash-mini-list .dash-item .item-dot.muted    { background: var(--color-text-muted); }
+  .dash-mini-list .dash-item .item-dot.active   {
+    background: var(--dash-purple-600);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.20);
+  }
+  .dash-mini-list .dash-item .item-dot.success  {
+    background: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+  }
+  .dash-mini-list .dash-item .item-dot.warning  {
+    background: #f59e0b;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+  }
+  .dash-mini-list .dash-item .item-dot.pending  {
+    background: #f5a623;
+    box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.15);
+  }
+  .dash-mini-list .dash-item .item-dot.info     {
+    background: #06b6d4;
+    box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.15);
+  }
+  .dash-mini-list .dash-item .item-dot.muted    {
+    background: #9ca3af;
+    box-shadow: 0 0 0 3px rgba(156, 163, 175, 0.10);
+  }
 
   .dash-mini-list .dash-item .item-info {
     flex: 1;
@@ -304,22 +568,78 @@
     white-space: nowrap;
   }
 
-  /* Empty state inline */
+  /* ============================================================
+     EMPTY STATE INLINE — Glassmorphism
+     ============================================================ */
   .dash-empty-inline {
     text-align: center;
-    padding: 32px 16px;
+    padding: 36px 16px;
     color: var(--color-text-muted);
   }
 
   .dash-empty-inline i {
-    font-size: 32px;
-    opacity: 0.25;
-    margin-bottom: 8px;
+    font-size: 36px;
+    opacity: 0.20;
+    margin-bottom: 10px;
+    color: var(--dash-purple-400);
   }
 
   .dash-empty-inline p {
     font-size: 13px;
-    margin: 0;
+    margin: 0 0 4px;
+  }
+
+  .dash-empty-inline .btn-primary {
+    background: var(--dash-purple-600);
+    border: none;
+    box-shadow: 0 4px 14px rgba(124, 58, 237, 0.25);
+  }
+
+  .dash-empty-inline .btn-primary:hover {
+    background: var(--dash-purple-700);
+    box-shadow: 0 6px 20px rgba(124, 58, 237, 0.35);
+  }
+
+  /* ============================================================
+     USER DATA SUMMARY CARD (sub stats)
+     ============================================================ */
+  .dash-user-summary {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--glass-shadow);
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    z-index: 1;
+    position: relative;
+    font-size: 13px;
+    color: var(--color-text-muted);
+  }
+
+  .dash-user-summary .summary-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .dash-user-summary .summary-item i {
+    color: var(--dash-purple-500);
+    font-size: 14px;
+    width: 18px;
+    text-align: center;
+  }
+
+  .dash-user-summary .summary-divider {
+    width: 1px;
+    height: 18px;
+    background: rgba(139, 92, 246, 0.15);
+    margin: 0 4px;
   }
 
   /* ============================================================
@@ -349,6 +669,14 @@
     .welcome-banner .welcome-text .welcome-sub {
       justify-content: center;
     }
+
+    .dash-user-summary {
+      justify-content: center;
+    }
+
+    .dash-user-summary .summary-divider {
+      display: none;
+    }
   }
 
   @media (max-width: 480px) {
@@ -363,28 +691,35 @@
     .welcome-banner .welcome-text h1 {
       font-size: 18px;
     }
+
+    .dash-user-summary {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+    }
   }
 </style>
 
 <!-- ============================================================
-     CUSTOMER DASHBOARD
+     CUSTOMER DASHBOARD — PURPLE GLASSMORPHISM
      ============================================================ -->
 <div class="customer-dashboard-page" data-page="customer-dashboard">
 
   <!-- ============================================================
-       WELCOME BANNER
+       WELCOME BANNER — Glassmorphism Purple
        ============================================================ -->
   <div class="welcome-banner">
-    <div class="welcome-avatar">
-      <%= customer.nume ? customer.nume.charAt(0).toUpperCase() : (customer.name ? customer.name.charAt(0).toUpperCase() : '👤') %>
-    </div>
+    <div class="welcome-avatar"><%= avatarInitial %></div>
     <div class="welcome-text">
       <h1>
         <i class="fas fa-hand-sparkles"></i>
-        Bun venit în contul tău<%= customer.nume ? ', ' + customer.nume : (customer.name ? ', ' + customer.name : '') %>!
+        Bun venit<%= displayName ? ', ' + displayName : '' %>!
       </h1>
       <div class="welcome-sub">
         <span>Explorează comenzile, rezervările și ofertele tale.</span>
+        <% if (loyaltyTierLabel) { %>
+          <span class="welcome-tier-badge"><%= loyaltyTierLabel %></span>
+        <% } %>
         <span class="welcome-date">
           <i class="far fa-calendar-alt"></i>
           <%= new Date().toLocaleDateString('ro-RO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) %>
@@ -394,10 +729,54 @@
   </div>
 
   <!-- ============================================================
+       FETCH ERRORS BANNER (dacă există)
+       ============================================================ -->
+  <% if (fetchErrors.length > 0) { %>
+    <div class="dash-errors-banner">
+      <i class="fas fa-exclamation-triangle"></i>
+      <span>
+        <% fetchErrors.forEach(function(err, idx) { %>
+          <%= err %><%= idx < fetchErrors.length - 1 ? ' ' : '' %>
+        <% }); %>
+      </span>
+    </div>
+  <% } %>
+
+  <!-- ============================================================
+       USER DATA SUMMARY — Integrare robustă
+       ============================================================ -->
+  <% if (displayEmail || displayPhone || customerSince) { %>
+  <div class="dash-user-summary">
+    <% if (displayEmail) { %>
+      <span class="summary-item">
+        <i class="fas fa-envelope"></i> <%= displayEmail %>
+      </span>
+    <% } %>
+    <% if (displayEmail && displayPhone) { %>
+      <span class="summary-divider"></span>
+    <% } %>
+    <% if (displayPhone) { %>
+      <span class="summary-item">
+        <i class="fas fa-phone-alt"></i> <%= displayPhone %>
+      </span>
+    <% } %>
+    <% if ((displayEmail || displayPhone) && customerSince) { %>
+      <span class="summary-divider"></span>
+    <% } %>
+    <% if (customerSince) { %>
+      <span class="summary-item">
+        <i class="fas fa-user-clock"></i>
+        Client din <%= new Date(customerSince).toLocaleDateString('ro-RO', { year: 'numeric', month: 'long' }) %>
+      </span>
+    <% } %>
+  </div>
+  <% } %>
+
+  <!-- ============================================================
        STATISTICS ROW
        ============================================================ -->
   <div class="dash-stats-row">
-    <!-- Total comenzi -->
+    <!-- Total comenzi recente -->
     <div class="dash-stat">
       <div class="stat-icon-circle orders">
         <i class="fas fa-receipt"></i>
@@ -406,7 +785,7 @@
       <div class="stat-label">Comenzi recente</div>
       <div class="stat-hint">
         <% if (pendingOrdersCount > 0) { %>
-          <span style="color:var(--color-primary);"><%= pendingOrdersCount %> în curs</span>
+          <span style="color:var(--dash-purple-600);font-weight:600;"><%= pendingOrdersCount %> în curs</span>
         <% } else { %>
           <span>Nicio comandă activă</span>
         <% } %>
@@ -422,7 +801,7 @@
       <div class="stat-label">Rezervări active</div>
       <div class="stat-hint">
         <% if (activeReservations.length > 0) { %>
-          <span style="color:var(--color-success);">Confirmate</span>
+          <span style="color:#059669;font-weight:600;">Confirmate</span>
         <% } else { %>
           <span>Nicio rezervare</span>
         <% } %>
@@ -438,10 +817,13 @@
       <div class="stat-label">Puncte loialitate</div>
       <div class="stat-hint">
         <span>Disponibile</span>
+        <% if (loyaltyTierLabel) { %>
+          · <span style="color:var(--dash-purple-600);font-weight:600;"><%= loyaltyTierLabel %></span>
+        <% } %>
       </div>
     </div>
 
-    <!-- Comenzi active (placeholder calculat) -->
+    <!-- Comenzi active (în desfășurare) -->
     <div class="dash-stat">
       <div class="stat-icon-circle active">
         <i class="fas fa-spinner"></i>
@@ -520,7 +902,7 @@
     <!-- Comenzi recente -->
     <div class="card">
       <div class="card-header">
-        <i class="fas fa-receipt" style="color:var(--color-primary);margin-right:8px;"></i>
+        <i class="fas fa-receipt" style="color:var(--dash-purple-600);margin-right:8px;"></i>
         Comenzi recente
         <a href="/customer/orders" class="btn btn-sm btn-secondary" style="margin-left:auto;">
           Vezi toate <i class="fas fa-chevron-right" style="font-size:10px;"></i>
@@ -587,7 +969,7 @@
     <!-- Rezervări active -->
     <div class="card">
       <div class="card-header">
-        <i class="fas fa-calendar-check" style="color:var(--color-success);margin-right:8px;"></i>
+        <i class="fas fa-calendar-check" style="color:#059669;margin-right:8px;"></i>
         Rezervări active
         <a href="/customer/reservations" class="btn btn-sm btn-secondary" style="margin-left:auto;">
           Vezi toate <i class="fas fa-chevron-right" style="font-size:10px;"></i>

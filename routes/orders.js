@@ -35,11 +35,9 @@ const {
   findOrdersByRestaurant,
   findOrdersByStatus,
   findOrdersByTable,
-  findOrdersByWaiter,
   updateOrder,
   updateOrderStatus,
-  updateOrderPaymentMethod,
-  addOrderItem,
+  updateOrderPayment,
 } = require('../models/orderModel');
 
 const { authenticate } = require('../middleware/auth');
@@ -757,7 +755,7 @@ router.patch(
         ));
       }
 
-      const updatedOrder = await updateOrderPaymentMethod(id, metodaPlata, tenantId);
+      const updatedOrder = await updateOrderPayment(id, metodaPlata, tenantId);
 
       res.status(200).json({
         success: true,
@@ -855,7 +853,10 @@ router.post(
         note: note || '',
       };
 
-      const updatedOrder = await addOrderItem(id, articol, tenantId);
+      // Adăugăm noul articol la lista existentă de item-uri
+      const existingItems = existingOrder.items || [];
+      const updatedItems = [...existingItems, articol];
+      const updatedOrder = await updateOrder(id, { items: updatedItems });
 
       res.status(200).json({
         success: true,
@@ -949,7 +950,7 @@ router.post(
       }
 
       // Actualizăm metoda de plată
-      await updateOrderPaymentMethod(id, metodaPlata, tenantId);
+      await updateOrderPayment(id, metodaPlata, tenantId);
 
       // Actualizăm totalul dacă a fost furnizat
       const updateData = { status: 'achitată' };

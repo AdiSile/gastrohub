@@ -72,7 +72,7 @@ router.get('/:hotelId/rooms', authenticate, async (req, res) => {
   }
 });
 
-router.post('/:hotelId/rooms', authenticate, authorize('super_admin', 'owner', 'manager_hotel'), async (req, res) => {
+router.post('/:hotelId/rooms', authenticate, authorize('super_admin', 'owner'), async (req, res) => {
   try {
     const room = await createRoom({ ...req.body, hotel_id: req.params.hotelId, tenant_id: req.user.tenantId });
     res.status(201).json(room);
@@ -91,7 +91,7 @@ router.get('/rooms/:id', authenticate, async (req, res) => {
   }
 });
 
-router.put('/rooms/:id', authenticate, authorize('super_admin', 'owner', 'manager_hotel'), async (req, res) => {
+router.put('/rooms/:id', authenticate, authorize('super_admin', 'owner'), async (req, res) => {
   try {
     const updated = await updateRoom(req.params.id, req.body);
     res.json(updated);

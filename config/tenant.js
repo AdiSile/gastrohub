@@ -63,50 +63,46 @@ const DEFAULT_TENANT_CONFIG = Object.freeze({
  * @param {string} tenantSlug - Slug-ul tenant-ului.
  * @returns {Promise<Object>} Obiectul de configurare al tenant-ului.
  */
-function getTenantConfig(tenantSlug) {
-  return new Promise((resolve, reject) => {
-    if (!tenantSlug || typeof tenantSlug !== 'string') {
-      return reject(new Error('[tenant] getTenantConfig: tenantSlug trebuie să fie un string nevid.'));
+async function getTenantConfig(tenantSlug) {
+  if (!tenantSlug || typeof tenantSlug !== 'string') {
+    throw new Error('[tenant] getTenantConfig: tenantSlug trebuie să fie un string nevid.');
+  }
+
+  try {
+    // Interogare SQLite – settings este coloana cu config-ul (JSON)
+    const doc = await get(
+      'SELECT name, slug, settings FROM tenants WHERE slug = ?',
+      [tenantSlug]
+    );
+
+    if (!doc) {
+      throw new Error(`[tenant] Tenant-ul "${tenantSlug}" nu a fost găsit.`);
     }
 
-    try {
-      // Interogare SQLite – settings este coloana cu config-ul (JSON)
-      const doc = get(
-        'SELECT name, slug, settings FROM tenants WHERE slug = ?',
-        [tenantSlug]
-      );
-
-      if (!doc) {
-        return reject(new Error(`[tenant] Tenant-ul "${tenantSlug}" nu a fost găsit.`));
+    // Parsează settings (JSON) din coloană; fallback la obiect gol
+    let tenantConfig = {};
+    if (doc.settings) {
+      try {
+        tenantConfig = typeof doc.settings === 'string'
+          ? JSON.parse(doc.settings)
+          : doc.settings;
+      } catch (_parseErr) {
+        tenantConfig = {};
       }
-
-      // Parsează settings (JSON) din coloană; fallback la obiect gol
-      let tenantConfig = {};
-      if (doc.settings) {
-        try {
-          tenantConfig = typeof doc.settings === 'string'
-            ? JSON.parse(doc.settings)
-            : doc.settings;
-        } catch (_parseErr) {
-          // Dacă JSON-ul e corupt, folosim obiect gol
-          tenantConfig = {};
-        }
-      }
-
-      // Îmbinăm configuraţia din document cu valorile implicite
-      const config = {
-        ...DEFAULT_TENANT_CONFIG,
-        ...tenantConfig,
-        // Păstrăm slug-ul şi numele din document
-        slug: doc.slug,
-        name: doc.name,
-      };
-
-      resolve(config);
-    } catch (err) {
-      reject(new Error(`[tenant] Eroare la căutarea tenant-ului "${tenantSlug}": ${err.message}`));
     }
-  });
+
+    // Îmbinăm configuraţia din document cu valorile implicite
+    const config = {
+      ...DEFAULT_TENANT_CONFIG,
+      ...tenantConfig,
+      slug: doc.slug,
+      name: doc.name,
+    };
+
+    return config;
+  } catch (err) {
+    throw new Error(`[tenant] Eroare la căutarea tenant-ului "${tenantSlug}": ${err.message}`);
+  }
 }
 
 // ---------------------------------------------------------------------------

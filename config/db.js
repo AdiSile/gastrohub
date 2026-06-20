@@ -167,4 +167,63 @@ function saveDb() {
   }
 }
 
-module.exports = { getDb, saveDb };
+// ---------------------------------------------------------------------------
+// Helperi SQLite – wrapper-e peste db.run / db.prepare pentru utilizare directă
+// (auto-inițializează dacă db nu e încă pornit – pentru compatibilitate)
+// ---------------------------------------------------------------------------
+
+async function _ensureDb() {
+  if (!db) await getDb();
+  return db;
+}
+
+/**
+ * Execută o interogare INSERT/UPDATE/DELETE și returnează { changes, lastInsertRowid }.
+ * @param {string} sql
+ * @param {Array} [params=[]]
+ * @returns {Promise<{ changes: number, lastInsertRowid: number }>}
+ */
+async function run(sql, params = []) {
+  const d = await _ensureDb();
+  d.run(sql, params);
+  const changesRes = d.exec('SELECT changes() AS cnt');
+  const lastIdRes = d.exec('SELECT last_insert_rowid() AS id');
+  return {
+    changes: (changesRes.length > 0 && changesRes[0].values.length > 0) ? changesRes[0].values[0][0] : 0,
+    lastInsertRowid: (lastIdRes.length > 0 && lastIdRes[0].values.length > 0) ? lastIdRes[0].values[0][0] : 0,
+  };
+}
+
+/**
+ * Execută o interogare SELECT și returnează primul rând (obiect) sau undefined.
+ * @param {string} sql
+ * @param {Array} [params=[]]
+ * @returns {Promise<Object|undefined>}
+ */
+async function get(sql, params = []) {
+  const d = await _ensureDb();
+  const stmt = d.prepare(sql);
+  if (params.length > 0) stmt.bind(params);
+  let row;
+  if (stmt.step()) row = stmt.getAsObject();
+  stmt.free();
+  return row;
+}
+
+/**
+ * Execută o interogare SELECT și returnează toate rândurile ca array.
+ * @param {string} sql
+ * @param {Array} [params=[]]
+ * @returns {Promise<Array<Object>>}
+ */
+async function all(sql, params = []) {
+  const d = await _ensureDb();
+  const stmt = d.prepare(sql);
+  if (params.length > 0) stmt.bind(params);
+  const rows = [];
+  while (stmt.step()) rows.push(stmt.getAsObject());
+  stmt.free();
+  return rows;
+}
+
+module.exports = { getDb, saveDb, run, get, all };

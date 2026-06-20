@@ -67,11 +67,14 @@ const handleValidationErrors = (req, res, next) => {
   if (!errors.isEmpty()) {
     return res.status(400).json({
       success: false,
-      message: 'Erori de validare.',
-      errors: errors.array().map(e => ({
-        field: e.path,
-        message: e.msg,
-      })),
+      error: {
+        message: 'Erori de validare.',
+        code: 'VALIDATION_ERROR',
+        details: errors.array().map(e => ({
+          field: e.path,
+          message: e.msg,
+        })),
+      },
     });
   }
   next();
@@ -111,7 +114,10 @@ router.post(
       if (req.user.role !== 'super_admin' && req.user._id !== userId) {
         return res.status(403).json({
           success: false,
-          message: 'Nu ai permisiunea de a crea un cont de loialitate pentru acest utilizator.',
+          error: {
+            message: 'Nu ai permisiunea de a crea un cont de loialitate pentru acest utilizator.',
+            code: 'FORBIDDEN',
+          },
         });
       }
 
@@ -128,7 +134,10 @@ router.post(
       if (err.message && err.message.includes('există deja')) {
         return res.status(409).json({
           success: false,
-          message: err.message,
+          error: {
+            message: err.message,
+            code: 'CONFLICT',
+          },
         });
       }
       next(err);
@@ -167,7 +176,10 @@ router.get(
       if (req.user.role !== 'super_admin' && req.user._id !== userId) {
         return res.status(403).json({
           success: false,
-          message: 'Nu ai permisiunea de a vizualiza acest cont de loialitate.',
+          error: {
+            message: 'Nu ai permisiunea de a vizualiza acest cont de loialitate.',
+            code: 'FORBIDDEN',
+          },
         });
       }
 
@@ -190,7 +202,10 @@ router.get(
       if (err.message && err.message.includes('nu a fost găsit')) {
         return res.status(404).json({
           success: false,
-          message: err.message,
+          error: {
+            message: err.message,
+            code: 'NOT_FOUND',
+          },
         });
       }
       next(err);
@@ -244,7 +259,10 @@ router.post(
         if (String(req.user.tenantId) !== String(req.body.tenantId || req.user.tenantId)) {
           return res.status(403).json({
             success: false,
-            message: 'Nu ai acces la acest tenant.',
+            error: {
+              message: 'Nu ai acces la acest tenant.',
+              code: 'FORBIDDEN',
+            },
           });
         }
       }
@@ -269,13 +287,19 @@ router.post(
       if (err.message && err.message.includes('nu a fost găsit')) {
         return res.status(404).json({
           success: false,
-          message: err.message + ' Creează mai întâi un cont de loialitate.',
+          error: {
+            message: err.message + ' Creează mai întâi un cont de loialitate.',
+            code: 'NOT_FOUND',
+          },
         });
       }
       if (err.message && err.message.includes('prea mică')) {
         return res.status(400).json({
           success: false,
-          message: err.message,
+          error: {
+            message: err.message,
+            code: 'BAD_REQUEST',
+          },
         });
       }
       next(err);
@@ -313,7 +337,10 @@ router.get(
       if (req.user.role !== 'super_admin' && req.user._id !== userId) {
         return res.status(403).json({
           success: false,
-          message: 'Nu ai permisiunea de a vizualiza aceste informații.',
+          error: {
+            message: 'Nu ai permisiunea de a vizualiza aceste informații.',
+            code: 'FORBIDDEN',
+          },
         });
       }
 
@@ -362,7 +389,10 @@ router.get(
       if (req.user.role !== 'super_admin' && req.user._id !== userId) {
         return res.status(403).json({
           success: false,
-          message: 'Nu ai permisiunea de a vizualiza cupoanele acestui utilizator.',
+          error: {
+            message: 'Nu ai permisiunea de a vizualiza cupoanele acestui utilizator.',
+            code: 'FORBIDDEN',
+          },
         });
       }
 
@@ -411,7 +441,10 @@ router.get(
       if (req.user.role !== 'super_admin' && req.user._id !== userId) {
         return res.status(403).json({
           success: false,
-          message: 'Nu ai permisiunea de a vizualiza cupoanele acestui utilizator.',
+          error: {
+            message: 'Nu ai permisiunea de a vizualiza cupoanele acestui utilizator.',
+            code: 'FORBIDDEN',
+          },
         });
       }
 
@@ -472,7 +505,10 @@ router.post(
       if (req.user.role !== 'super_admin' && req.user._id !== userId) {
         return res.status(403).json({
           success: false,
-          message: 'Nu ai permisiunea de a genera cupoane pentru acest utilizator.',
+          error: {
+            message: 'Nu ai permisiunea de a genera cupoane pentru acest utilizator.',
+            code: 'FORBIDDEN',
+          },
         });
       }
 
@@ -500,19 +536,28 @@ router.post(
       if (err.message && err.message.includes('Puncte insuficiente')) {
         return res.status(400).json({
           success: false,
-          message: err.message,
+          error: {
+            message: err.message,
+            code: 'BAD_REQUEST',
+          },
         });
       }
       if (err.message && err.message.includes('numărul maxim de cupoane active')) {
         return res.status(400).json({
           success: false,
-          message: err.message,
+          error: {
+            message: err.message,
+            code: 'BAD_REQUEST',
+          },
         });
       }
       if (err.message && err.message.includes('nu a fost găsit')) {
         return res.status(404).json({
           success: false,
-          message: err.message + ' Creează mai întâi un cont de loialitate.',
+          error: {
+            message: err.message + ' Creează mai întâi un cont de loialitate.',
+            code: 'NOT_FOUND',
+          },
         });
       }
       next(err);
@@ -568,7 +613,10 @@ router.post(
       if (req.user.role !== 'super_admin' && req.user._id !== userId) {
         return res.status(403).json({
           success: false,
-          message: 'Nu ai permisiunea de a folosi cupoane pentru acest utilizator.',
+          error: {
+            message: 'Nu ai permisiunea de a folosi cupoane pentru acest utilizator.',
+            code: 'FORBIDDEN',
+          },
         });
       }
 
@@ -604,7 +652,10 @@ router.post(
           err.message && err.message.includes('a fost anulat')) {
         return res.status(400).json({
           success: false,
-          message: err.message,
+          error: {
+            message: err.message,
+            code: 'BAD_REQUEST',
+          },
         });
       }
       next(err);
@@ -651,7 +702,10 @@ router.post(
       if (req.user.role !== 'super_admin' && req.user._id !== userId) {
         return res.status(403).json({
           success: false,
-          message: 'Nu ai permisiunea de a anula cupoane pentru acest utilizator.',
+          error: {
+            message: 'Nu ai permisiunea de a anula cupoane pentru acest utilizator.',
+            code: 'FORBIDDEN',
+          },
         });
       }
 
@@ -676,7 +730,10 @@ router.post(
           err.message && err.message.includes('a expirat deja')) {
         return res.status(400).json({
           success: false,
-          message: err.message,
+          error: {
+            message: err.message,
+            code: 'BAD_REQUEST',
+          },
         });
       }
       next(err);
@@ -778,7 +835,10 @@ router.post(
       if (req.user.role !== 'super_admin' && req.user._id !== userId) {
         return res.status(403).json({
           success: false,
-          message: 'Nu ai permisiunea de a curăța cupoanele acestui utilizator.',
+          error: {
+            message: 'Nu ai permisiunea de a curăța cupoanele acestui utilizator.',
+            code: 'FORBIDDEN',
+          },
         });
       }
 
@@ -847,7 +907,10 @@ router.post(
           err.message && err.message.includes('Cuponul')) {
         return res.status(400).json({
           success: false,
-          message: err.message,
+          error: {
+            message: err.message,
+            code: 'BAD_REQUEST',
+          },
         });
       }
       next(err);

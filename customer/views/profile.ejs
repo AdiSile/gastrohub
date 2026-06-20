@@ -1,0 +1,513 @@
+<%
+  // ============================================================
+  // customer/views/profile.ejs
+  // Pagină profil client — vizualizare și editare date personale
+  // Folosește layout.ejs ca wrapper
+  // ============================================================
+
+  const user = locals.user || {};
+  const customer = locals.customer || user || {};
+%>
+
+<style>
+  /* ============================================================
+     PROFILE PAGE STYLES
+     ============================================================ */
+  .profile-page .page-intro {
+    margin-bottom: 24px;
+  }
+
+  .profile-page .page-intro h1 {
+    font-size: 24px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .profile-page .page-intro h1 i {
+    color: var(--color-primary);
+  }
+
+  .profile-page .page-intro p {
+    color: var(--color-text-muted);
+    margin-top: 4px;
+    font-size: 14px;
+  }
+
+  .profile-layout {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  .profile-sidebar-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 28px 20px;
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .profile-avatar {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36px;
+    font-weight: 700;
+    color: #fff;
+    margin: 0 auto 16px;
+    box-shadow: 0 4px 16px rgba(13, 110, 253, 0.3);
+  }
+
+  .profile-sidebar-card .profile-name {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+
+  .profile-sidebar-card .profile-email {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    margin-bottom: 16px;
+    word-break: break-all;
+  }
+
+  .profile-sidebar-card .profile-meta {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .profile-sidebar-card .profile-meta span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: center;
+  }
+
+  .profile-form-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .profile-form-card h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .profile-form-card h3 i {
+    color: var(--color-primary);
+  }
+
+  .form-row-duo {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .form-section-divider {
+    margin: 28px 0 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .form-section-divider h4 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--color-text-muted);
+  }
+
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .success-message {
+    background: #e8f5e9;
+    color: #2e7d32;
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  @media (max-width: 768px) {
+    .profile-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .form-row-duo {
+      grid-template-columns: 1fr;
+    }
+
+    .profile-sidebar-card {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 16px;
+      text-align: left;
+      padding: 20px;
+    }
+
+    .profile-avatar {
+      width: 60px;
+      height: 60px;
+      font-size: 24px;
+      margin: 0;
+    }
+
+    .profile-sidebar-card .profile-meta {
+      display: none;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .profile-page .page-intro h1 {
+      font-size: 20px;
+    }
+
+    .profile-form-card {
+      padding: 20px;
+    }
+  }
+</style>
+
+<!-- ============================================================
+     PROFILE PAGE
+     ============================================================ -->
+<div class="profile-page" data-page="profile" data-customer-id="<%= customer._id || '' %>" data-tenant-id="<%= customer.tenantId || '' %>">
+
+  <!-- Page intro -->
+  <div class="page-intro">
+    <h1>
+      <i class="fas fa-user"></i>
+      Profilul meu
+    </h1>
+    <p>Gestionează informațiile contului tău.</p>
+  </div>
+
+  <!-- Success message (hidden by default) -->
+  <div id="profileSuccess" class="success-message" style="display:none;">
+    <i class="fas fa-check-circle"></i>
+    <span id="profileSuccessMsg">Profilul a fost actualizat cu succes.</span>
+  </div>
+
+  <!-- Flash -->
+  <% if (locals.flash && flash.message) { %>
+    <div class="alert" style="margin-bottom:20px;padding:12px 16px;border-radius:8px;background:<%= flash.type === 'success' ? '#e8f5e9' : '#fce4ec' %>;color:<%= flash.type === 'success' ? '#2e7d32' : '#c62828' %>;">
+      <i class="fas fa-<%= flash.type === 'success' ? 'check-circle' : 'exclamation-circle' %>"></i>
+      <%= flash.message %>
+    </div>
+  <% } %>
+
+  <div class="profile-layout">
+    <!-- Sidebar -->
+    <div class="profile-sidebar-card">
+      <div class="profile-avatar" id="sidebarAvatar">
+        <%= customer.nume ? customer.nume.charAt(0).toUpperCase() : (customer.prenume ? customer.prenume.charAt(0).toUpperCase() : '?') %>
+      </div>
+      <div>
+        <div class="profile-name" id="sidebarName">
+          <%= customer.prenume || '' %> <%= customer.nume || '' %>
+        </div>
+        <div class="profile-email" id="sidebarEmail">
+          <%= customer.email || '' %>
+        </div>
+      </div>
+      <div class="profile-meta">
+        <% if (customer.telefon) { %>
+          <span><i class="fas fa-phone"></i> <%= customer.telefon %></span>
+        <% } %>
+        <% if (customer.createdAt) { %>
+          <span><i class="fas fa-calendar"></i> Client din <%= new Date(customer.createdAt).toLocaleDateString('ro-RO', { year: 'numeric', month: 'long' }) %></span>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- Form -->
+    <div class="profile-form-card">
+      <h3><i class="fas fa-user-edit"></i> Editează informațiile</h3>
+
+      <form id="profileForm" novalidate>
+        <!-- Nume și Prenume -->
+        <div class="form-row-duo">
+          <div class="form-group">
+            <label for="prenume">Prenume <span style="color:var(--color-danger);">*</span></label>
+            <input type="text" id="prenume" name="prenume" value="<%= customer.prenume || '' %>" placeholder="Prenumele tău" required />
+            <div class="form-error" id="prenumeError"></div>
+          </div>
+          <div class="form-group">
+            <label for="nume">Nume <span style="color:var(--color-danger);">*</span></label>
+            <input type="text" id="nume" name="nume" value="<%= customer.nume || '' %>" placeholder="Numele tău" required />
+            <div class="form-error" id="numeError"></div>
+          </div>
+        </div>
+
+        <!-- Email & Telefon -->
+        <div class="form-row-duo">
+          <div class="form-group">
+            <label for="email">Email <span style="color:var(--color-danger);">*</span></label>
+            <input type="email" id="email" name="email" value="<%= customer.email || '' %>" placeholder="nume@exemplu.com" required />
+            <div class="form-error" id="emailError"></div>
+          </div>
+          <div class="form-group">
+            <label for="telefon">Telefon</label>
+            <input type="tel" id="telefon" name="telefon" value="<%= customer.telefon || '' %>" placeholder="07xx xxx xxx" />
+            <div class="form-hint">Format: 07xx xxx xxx</div>
+            <div class="form-error" id="telefonError"></div>
+          </div>
+        </div>
+
+        <!-- Schimbare parolă -->
+        <div class="form-section-divider">
+          <h4><i class="fas fa-lock"></i> Schimbă parola</h4>
+          <div class="form-group">
+            <label for="currentPassword">Parola actuală</label>
+            <input type="password" id="currentPassword" name="currentPassword" placeholder="Introdu parola actuală" autocomplete="current-password" />
+            <div class="form-hint">Lasă necompletat dacă nu dorești să schimbi parola.</div>
+            <div class="form-error" id="currentPasswordError"></div>
+          </div>
+          <div class="form-row-duo">
+            <div class="form-group">
+              <label for="newPassword">Parola nouă</label>
+              <input type="password" id="newPassword" name="newPassword" placeholder="Minim 8 caractere" autocomplete="new-password" />
+              <div class="form-error" id="newPasswordError"></div>
+            </div>
+            <div class="form-group">
+              <label for="confirmNewPassword">Confirmă parola nouă</label>
+              <input type="password" id="confirmNewPassword" name="confirmNewPassword" placeholder="Reintrodu parola" autocomplete="new-password" />
+              <div class="form-error" id="confirmNewPasswordError"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Acțiuni -->
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="resetProfileForm()">
+            <i class="fas fa-undo"></i> Resetează
+          </button>
+          <button type="submit" class="btn btn-primary" id="saveProfileBtn">
+            <i class="fas fa-save"></i> <span>Salvează modificările</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCRIPTS
+     ============================================================ -->
+<script>
+  (function() {
+    'use strict';
+
+    var customerId = '<%= customer._id || "" %>';
+    var tenantId = '<%= customer.tenantId || "" %>';
+    var isSubmitting = false;
+
+    // Original values for reset
+    var originalValues = {
+      prenume: '<%= customer.prenume || "" %>',
+      nume: '<%= customer.nume || "" %>',
+      email: '<%= customer.email || "" %>',
+      telefon: '<%= customer.telefon || "" %>',
+    };
+
+    // ============================================================
+    // DOM refs
+    // ============================================================
+    var form = document.getElementById('profileForm');
+    var prenumeEl = document.getElementById('prenume');
+    var numeEl = document.getElementById('nume');
+    var emailEl = document.getElementById('email');
+    var telefonEl = document.getElementById('telefon');
+    var currentPasswordEl = document.getElementById('currentPassword');
+    var newPasswordEl = document.getElementById('newPassword');
+    var confirmNewPasswordEl = document.getElementById('confirmNewPassword');
+    var saveBtn = document.getElementById('saveProfileBtn');
+    var successDiv = document.getElementById('profileSuccess');
+
+    var prenumeError = document.getElementById('prenumeError');
+    var numeError = document.getElementById('numeError');
+    var emailError = document.getElementById('emailError');
+    var telefonError = document.getElementById('telefonError');
+    var currentPasswordError = document.getElementById('currentPasswordError');
+    var newPasswordError = document.getElementById('newPasswordError');
+    var confirmNewPasswordError = document.getElementById('confirmNewPasswordError');
+
+    // ============================================================
+    // Clear errors on input
+    // ============================================================
+    [prenumeEl, numeEl, emailEl, telefonEl, currentPasswordEl, newPasswordEl, confirmNewPasswordEl].forEach(function(el) {
+      if (el) el.addEventListener('input', function() { clearAllErrors(); });
+    });
+
+    function clearAllErrors() {
+      [prenumeError, numeError, emailError, telefonError, currentPasswordError, newPasswordError, confirmNewPasswordError].forEach(function(err) {
+        if (err) err.textContent = '';
+      });
+    }
+
+    // ============================================================
+    // Validate
+    // ============================================================
+    function validateForm() {
+      var errors = [];
+      clearAllErrors();
+
+      var prenume = prenumeEl ? prenumeEl.value.trim() : '';
+      if (!prenume) { errors.push('Prenumele este obligatoriu.'); if (prenumeError) prenumeError.textContent = 'Câmp obligatoriu'; }
+      else if (prenume.length < 2) { errors.push('Prenumele trebuie să aibă minim 2 caractere.'); if (prenumeError) prenumeError.textContent = 'Minim 2 caractere'; }
+
+      var nume = numeEl ? numeEl.value.trim() : '';
+      if (!nume) { errors.push('Numele este obligatoriu.'); if (numeError) numeError.textContent = 'Câmp obligatoriu'; }
+      else if (nume.length < 2) { errors.push('Numele trebuie să aibă minim 2 caractere.'); if (numeError) numeError.textContent = 'Minim 2 caractere'; }
+
+      var email = emailEl ? emailEl.value.trim() : '';
+      if (!email) { errors.push('Emailul este obligatoriu.'); if (emailError) emailError.textContent = 'Câmp obligatoriu'; }
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errors.push('Email invalid.'); if (emailError) emailError.textContent = 'Email invalid'; }
+
+      var telefon = telefonEl ? telefonEl.value.trim() : '';
+      if (telefon && !/^(\+4|004)?0?7\d{8}$/.test(telefon.replace(/\s/g, ''))) {
+        errors.push('Telefon invalid.'); if (telefonError) telefonError.textContent = 'Format invalid (ex: 07xx xxx xxx)';
+      }
+
+      // Password change validation
+      var currentPwd = currentPasswordEl ? currentPasswordEl.value : '';
+      var newPwd = newPasswordEl ? newPasswordEl.value : '';
+      var confirmPwd = confirmNewPasswordEl ? confirmNewPasswordEl.value : '';
+
+      if (newPwd || confirmPwd) {
+        if (!currentPwd) { errors.push('Introdu parola actuală pentru a o schimba.'); if (currentPasswordError) currentPasswordError.textContent = 'Câmp obligatoriu'; }
+        if (newPwd && newPwd.length < 8) { errors.push('Parola nouă trebuie să aibă minim 8 caractere.'); if (newPasswordError) newPasswordError.textContent = 'Minim 8 caractere'; }
+        if (newPwd !== confirmPwd) { errors.push('Parolele noi nu coincid.'); if (confirmNewPasswordError) confirmNewPasswordError.textContent = 'Parolele nu coincid'; }
+        if (newPwd && currentPwd && newPwd === currentPwd) { errors.push('Parola nouă trebuie să fie diferită de cea actuală.'); if (newPasswordError) newPasswordError.textContent = 'Trebuie să fie diferită'; }
+      }
+
+      return errors;
+    }
+
+    // ============================================================
+    // Submit
+    // ============================================================
+    if (form) {
+      form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        if (isSubmitting) return;
+
+        var errors = validateForm();
+        if (errors.length > 0) {
+          errors.forEach(function(err) { showToast(err, 'error'); });
+          return;
+        }
+
+        isSubmitting = true;
+        saveBtn.disabled = true;
+        saveBtn.querySelector('span').textContent = 'Se salvează…';
+
+        var payload = {
+          tenantId: tenantId,
+          prenume: prenumeEl.value.trim(),
+          nume: numeEl.value.trim(),
+          email: emailEl.value.trim(),
+          telefon: telefonEl ? telefonEl.value.trim() || undefined : undefined,
+        };
+
+        // Include password change if requested
+        var newPwd = newPasswordEl ? newPasswordEl.value : '';
+        if (newPwd) {
+          payload.currentPassword = currentPasswordEl ? currentPasswordEl.value : '';
+          payload.newPassword = newPwd;
+        }
+
+        try {
+          var data = await apiFetch('/api/customers/' + customerId, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+          });
+
+          if (data && data.success) {
+            // Update sidebar
+            document.getElementById('sidebarName').textContent = payload.prenume + ' ' + payload.nume;
+            document.getElementById('sidebarEmail').textContent = payload.email;
+            document.getElementById('sidebarAvatar').textContent = payload.prenume.charAt(0).toUpperCase();
+
+            // Update original values
+            originalValues.prenume = payload.prenume;
+            originalValues.nume = payload.nume;
+            originalValues.email = payload.email;
+            originalValues.telefon = payload.telefon || '';
+
+            // Clear password fields
+            if (currentPasswordEl) currentPasswordEl.value = '';
+            if (newPasswordEl) newPasswordEl.value = '';
+            if (confirmNewPasswordEl) confirmNewPasswordEl.value = '';
+
+            // Show success
+            if (successDiv) successDiv.style.display = 'flex';
+            showToast('Profilul a fost actualizat cu succes!', 'success');
+            setTimeout(function() {
+              if (successDiv) successDiv.style.display = 'none';
+            }, 4000);
+          }
+        } catch (err) {
+          showToast('Eroare la actualizarea profilului.', 'error');
+        } finally {
+          isSubmitting = false;
+          saveBtn.disabled = false;
+          saveBtn.querySelector('span').textContent = 'Salvează modificările';
+        }
+      });
+    }
+
+    // ============================================================
+    // Reset
+    // ============================================================
+    window.resetProfileForm = function() {
+      if (prenumeEl) prenumeEl.value = originalValues.prenume;
+      if (numeEl) numeEl.value = originalValues.nume;
+      if (emailEl) emailEl.value = originalValues.email;
+      if (telefonEl) telefonEl.value = originalValues.telefon;
+      if (currentPasswordEl) currentPasswordEl.value = '';
+      if (newPasswordEl) newPasswordEl.value = '';
+      if (confirmNewPasswordEl) confirmNewPasswordEl.value = '';
+      clearAllErrors();
+      if (successDiv) successDiv.style.display = 'none';
+      showToast('Formularul a fost resetat.', 'info');
+    };
+
+  })();
+</script>
