@@ -1,24 +1,3 @@
-**Modificări în `createUser`:**
-1. Se extrag `name` și `phone` din `userData`
-2. `name` – opțional, dacă e string nevid se trimite la INSERT, altfel `null`
-3. `phone` – opțional, validat prin noua funcție `isValidPhone` (acceptă 7-20 caractere: cifre, spații, `+`, `-`, paranteze)
-4. INSERT-ul include acum coloanele `name` și `phone`
-5. S-a adăugat funcția `isValidPhone` (exportată)
-6. JSDoc-ul a fost actualizat pentru a documenta noii parametri
-7. Comentariul header listează acum `name` și `phone` printre câmpurile suportate
-
----
-
-### config/db.js
-
-**Modificări în schema `users`:**
-1. `CREATE TABLE` include acum coloanele: `phone TEXT`, `restaurante TEXT DEFAULT '[]'`, `updated_at TEXT`
-2. S-a adăugat funcția `_applyMigrations()` care rulează `ALTER TABLE ADD COLUMN` pentru bazele de date existente (cu `try/catch` pentru a ignora erorile de coloană deja existentă)
-3. Migrările se aplică după `CREATE TABLE IF NOT EXISTS`, asigurând compatibilitatea atât cu baze noi cât și cu cele vechi
-
----
-
-### models/userModel.js
 'use strict';
 
 // ---------------------------------------------------------------------------
